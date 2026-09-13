@@ -43,25 +43,25 @@ async function main() {
 
   const passwordHash = await bcrypt.hash("password123", 10);
   await prisma.user.upsert({
-    where: { email: "admin@graceland.test" },
+    where: { email: "admin@gracelandschool.ng" },
     update: {},
     create: {
       schoolId: school.id,
       role: "SCHOOL_ADMIN",
       name: "Nneka Eze",
-      email: "admin@graceland.test",
+      email: "admin@gracelandschool.ng",
       passwordHash,
     },
   });
 
   const teacher = await prisma.user.upsert({
-    where: { email: "teacher@graceland.test" },
+    where: { email: "teacher@gracelandschool.ng" },
     update: {},
     create: {
       schoolId: school.id,
       role: "TEACHER",
       name: "Femi Akinola",
-      email: "teacher@graceland.test",
+      email: "teacher@gracelandschool.ng",
       passwordHash,
     },
   });

@@ -66,7 +66,7 @@ export default async function ResultsPage() {
                   <td className="px-4 py-4 text-body text-text-secondary">{b.templateName}</td>
                   <td className="px-4 py-4 text-body text-text-secondary">{b.teacherName}</td>
                   <td className="px-4 py-4 text-body text-text-secondary">
-                    {b.submittedAt ? new Date(b.submittedAt).toLocaleDateString() : "—"}
+                    {b.submittedAt ? new Date(b.submittedAt).toLocaleDateString("en-GB") : "—"}
                   </td>
                   <td className="px-4 py-4 text-body text-text-secondary">{b.count}</td>
                   <td className="px-4 py-4 pr-5 text-right">

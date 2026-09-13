@@ -103,7 +103,7 @@ export function ReviewClient({
             </span>
             <span className="inline-flex items-center gap-1.5">
               <CalendarDays size={14} strokeWidth={1.8} className="text-text-muted" />
-              {term} {submittedAt && `· Submitted ${new Date(submittedAt).toLocaleDateString()}`}
+              {term} {submittedAt && `· Submitted ${new Date(submittedAt).toLocaleDateString("en-GB")}`}
             </span>
           </div>
         </div>

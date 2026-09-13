@@ -114,7 +114,7 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
                   <span className="min-w-0 flex-1">
                     <strong className="block text-body font-medium text-text-primary">{r.term ?? r.templateName}</strong>
                     <span className="mt-1 block text-caption text-text-muted">
-                      {r.publishedAt ? `Published ${new Date(r.publishedAt).toLocaleDateString()}` : "Published"}
+                      {r.publishedAt ? `Published ${new Date(r.publishedAt).toLocaleDateString("en-GB")}` : "Published"}
                     </span>
                   </span>
                   <ChevronDown
