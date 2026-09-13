@@ -1,0 +1,62 @@
+/*
+  Schoolwise — Design Tokens
+  Reconciled from the 13 UI mockup screens (Owner, School Admin, Teacher,
+  Parent/Student). Use these instead of any hard-coded hex values found
+  in the original mockup HTML — the mockups were generated independently
+  and drifted on grays; this file is the single source of truth.
+*/
+
+:root {
+  /* Brand */
+  --color-primary: #185FA5;        /* primary actions, links, active nav */
+  --color-primary-hover: #104D8A;  /* button/link hover state */
+  --color-primary-bg: #E9F1F8;     /* light blue tint for selected/info states */
+
+  /* Semantic status colors */
+  --color-success: #0F6E56;        /* active subscription, approved, published */
+  --color-success-bg: #E9F5EF;
+
+  --color-warning: #BA7517;        /* pending approval, trial, needs attention */
+  --color-warning-bg: #FBF1DC;
+
+  --color-danger: #A32D2D;         /* suspended, rejected, overdue, destructive actions */
+  --color-danger-bg: #FBECEB;
+
+  /* Neutrals */
+  --color-bg-page: #F7F7F5;        /* page background */
+  --color-bg-card: #FFFFFF;        /* card / panel background */
+  --color-bg-sidebar: #F2F5F7;     /* sidebar nav background */
+
+  --color-border: #DCE4E8;         /* default hairline border */
+  --color-border-strong: #B6C0C7;  /* emphasized divider */
+
+  --color-text-primary: #172C3D;   /* headings, primary body text */
+  --color-text-secondary: #5A6C79; /* supporting text, labels */
+  --color-text-muted: #8B98A1;     /* placeholders, timestamps, hints */
+  --color-text-on-dark: #FFFFFF;   /* text on filled buttons/badges */
+
+  /* Typography — unified across ALL roles (mockups had split stacks) */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+
+  --font-size-caption: 12px;
+  --font-size-body: 14px;
+  --font-size-subtitle: 16px;
+  --font-size-heading: 18px;
+  --font-size-title: 22px;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;       /* headings and emphasis — never bolder than this */
+
+  /* Layout */
+  --radius-sm: 8px;                /* buttons, inputs, small controls */
+  --radius-md: 12px;               /* cards, panels, modals */
+
+  --gap-xs: 4px;
+  --gap-sm: 8px;
+  --gap-md: 12px;
+  --gap-lg: 16px;
+  --gap-xl: 24px;
+
+  --sidebar-width: 240px;
+  --topbar-height: 64px;
+}

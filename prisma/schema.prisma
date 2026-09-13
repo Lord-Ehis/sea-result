@@ -1,0 +1,420 @@
+// Sophie Educational Assistant (SEA) — Result Management
+// Multi-tenancy: shared database, `schoolId` acts as the tenant_id column
+// on every tenant-scoped table (School is the tenant root).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  PLATFORM_OWNER
+  SCHOOL_ADMIN
+  TEACHER
+  PARENT
+}
+
+enum SchoolStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING_DELETION
+}
+
+enum BillingCycle {
+  PER_TERM
+  FULL_SESSION
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum ResultStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  PUBLISHED
+}
+
+enum DeletionRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum NotificationChannel {
+  SMS
+  EMAIL
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum NotificationEvent {
+  RESULT_PUBLISHED
+  PAYMENT_RECEIVED
+  ACCOUNT_CREATED
+  PASSWORD_RESET
+}
+
+enum ProviderKind {
+  PAYSTACK
+  SMS_TERMII
+  SMS_AFRICAS_TALKING
+  EMAIL_RESEND
+  EMAIL_POSTMARK
+}
+
+// ---------------------------------------------------------------------------
+// Tenant root
+// ---------------------------------------------------------------------------
+
+model School {
+  id                 String       @id @default(cuid())
+  name               String
+  slug               String       @unique
+  status             SchoolStatus @default(ACTIVE)
+  customDomain       String?      @unique
+  resultFormatConfig Json?
+  allowParentAccounts Boolean     @default(true)
+  allowResultLookup   Boolean     @default(true)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  campuses         Campus[]
+  users            User[]
+  students         Student[]
+  classes          Class[]
+  resultTemplates  ResultTemplate[]
+  results          Result[]
+  subscriptions    Subscription[]
+  payments         Payment[]
+  notifications    Notification[]
+  deletionRequests DeletionRequest[]
+
+  @@map("schools")
+}
+
+// ---------------------------------------------------------------------------
+// Campuses
+// ---------------------------------------------------------------------------
+
+model Campus {
+  id        String   @id @default(cuid())
+  schoolId  String
+  name      String
+  address   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  school   School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  students Student[]
+  classes  Class[]
+
+  @@index([schoolId])
+  @@map("campuses")
+}
+
+// ---------------------------------------------------------------------------
+// Users (role-based)
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  // Nullable — Platform Owner accounts are not scoped to a school.
+  schoolId     String?
+  role         Role
+  name         String
+  email        String   @unique
+  phone        String?
+  passwordHash String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  school School? @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  // Teacher: classes assigned to this teacher
+  teachingAssignments TeacherClassAssignment[]
+
+  // Parent: children linked to this account
+  childLinks ParentStudentLink[]
+
+  submittedResults Result[] @relation("SubmittedBy")
+  approvedResults  Result[] @relation("ApprovedBy")
+
+  deletionRequestsMade     DeletionRequest[] @relation("RequestedBy")
+  deletionRequestsResolved DeletionRequest[] @relation("ResolvedBy")
+
+  notifications Notification[]
+
+  @@index([schoolId])
+  @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// Classes & assignments
+// ---------------------------------------------------------------------------
+
+model Class {
+  id         String   @id @default(cuid())
+  schoolId   String
+  campusId   String
+  name       String // e.g. "JSS 1A", "SSS 2 Commerce"
+  level      String? // e.g. "JSS 1", "SSS 2"
+  session    String // academic session, e.g. "2025/2026"
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  school      School                    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  campus      Campus                    @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  students    Student[]
+  teachers    TeacherClassAssignment[]
+  resultTemplates ResultTemplate[]
+
+  @@index([schoolId])
+  @@index([campusId])
+  @@map("classes")
+}
+
+model TeacherClassAssignment {
+  id        String   @id @default(cuid())
+  teacherId String
+  classId   String
+  createdAt DateTime @default(now())
+
+  teacher User  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  class   Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, classId])
+  @@map("teacher_class_assignments")
+}
+
+// ---------------------------------------------------------------------------
+// Students & parent links
+// ---------------------------------------------------------------------------
+
+model Student {
+  id          String   @id @default(cuid())
+  schoolId    String
+  campusId    String
+  classId     String?
+  studentCode String // unique per school, used for no-login result lookup
+  firstName   String
+  lastName    String
+  dateOfBirth DateTime?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  school      School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  campus      Campus              @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  class       Class?              @relation(fields: [classId], references: [id])
+  parentLinks ParentStudentLink[]
+  results     Result[]
+  notifications Notification[]
+
+  @@unique([schoolId, studentCode])
+  @@index([schoolId])
+  @@index([campusId])
+  @@map("students")
+}
+
+// A parent/student account can link multiple children; a student can
+// have more than one linked guardian.
+model ParentStudentLink {
+  id            String   @id @default(cuid())
+  parentUserId  String
+  studentId     String
+  createdAt     DateTime @default(now())
+
+  parent  User    @relation(fields: [parentUserId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([parentUserId, studentId])
+  @@map("parent_student_links")
+}
+
+// ---------------------------------------------------------------------------
+// Result templates & results
+// ---------------------------------------------------------------------------
+
+model ResultTemplate {
+  id        String   @id @default(cuid())
+  schoolId  String
+  classId   String?
+  name      String
+  // Field definitions are school-configurable (subjects, grading scale,
+  // comment fields, etc.) — not a single fixed format across schools.
+  fields    Json
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  school  School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  class   Class?   @relation(fields: [classId], references: [id])
+  results Result[]
+
+  @@index([schoolId])
+  @@map("result_templates")
+}
+
+model Result {
+  id         String       @id @default(cuid())
+  schoolId   String
+  studentId  String
+  templateId String
+  term       String // e.g. "Term 2"
+  session    String // e.g. "2025/2026"
+  // Subject/score data, shaped to match the ResultTemplate's fields.
+  data       Json
+  status     ResultStatus @default(DRAFT)
+
+  submittedByUserId String?
+  approvedByUserId  String?
+  submittedAt       DateTime?
+  approvedAt        DateTime?
+  publishedAt       DateTime?
+  rejectionNote     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  school      School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student     Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  template    ResultTemplate @relation(fields: [templateId], references: [id])
+  submittedBy User?          @relation("SubmittedBy", fields: [submittedByUserId], references: [id])
+  approvedBy  User?          @relation("ApprovedBy", fields: [approvedByUserId], references: [id])
+
+  @@unique([studentId, templateId, term, session])
+  @@index([schoolId])
+  @@index([status])
+  @@map("results")
+}
+
+// ---------------------------------------------------------------------------
+// Billing
+// ---------------------------------------------------------------------------
+
+model Subscription {
+  id          String             @id @default(cuid())
+  schoolId    String
+  billingCycle BillingCycle
+  term        String? // set when billingCycle = PER_TERM
+  session     String
+  amount      Decimal            @db.Decimal(12, 2)
+  discountNote String?
+  status      SubscriptionStatus @default(ACTIVE)
+  startDate   DateTime
+  endDate     DateTime
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  school   School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  payments Payment[]
+
+  @@index([schoolId])
+  @@map("subscriptions")
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  schoolId          String
+  subscriptionId    String?
+  paystackReference String        @unique
+  amount            Decimal       @db.Decimal(12, 2)
+  currency          String        @default("NGN")
+  status            PaymentStatus @default(PENDING)
+  paidAt            DateTime?
+  createdAt         DateTime      @default(now())
+
+  school       School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  @@index([schoolId])
+  @@map("payments")
+}
+
+// ---------------------------------------------------------------------------
+// Deletion requests (School Admin request + Platform Owner approval)
+// ---------------------------------------------------------------------------
+
+model DeletionRequest {
+  id         String                @id @default(cuid())
+  schoolId   String
+  requestedByUserId String
+  resolvedByUserId  String?
+  reason     String
+  status     DeletionRequestStatus @default(PENDING)
+  requestedAt DateTime             @default(now())
+  resolvedAt  DateTime?
+  resolutionNote String?
+
+  school      School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  requestedBy User   @relation("RequestedBy", fields: [requestedByUserId], references: [id])
+  resolvedBy  User?  @relation("ResolvedBy", fields: [resolvedByUserId], references: [id])
+
+  @@index([schoolId])
+  @@map("deletion_requests")
+}
+
+// ---------------------------------------------------------------------------
+// Notifications (SMS/email log)
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id        String              @id @default(cuid())
+  schoolId  String
+  studentId String?
+  userId    String?
+  channel   NotificationChannel
+  event     NotificationEvent
+  recipient String // phone number or email address
+  message   String
+  status    NotificationStatus  @default(PENDING)
+  sentAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  school  School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student Student? @relation(fields: [studentId], references: [id])
+  user    User?    @relation(fields: [userId], references: [id])
+
+  @@index([schoolId])
+  @@map("notifications")
+}
+
+// ---------------------------------------------------------------------------
+// Platform-wide provider settings (Platform Owner managed)
+// ---------------------------------------------------------------------------
+
+model ProviderSetting {
+  id        String       @id @default(cuid())
+  provider  ProviderKind @unique
+  // Secret keys/config — encrypt at the application layer before storing.
+  config    Json
+  isActive  Boolean      @default(true)
+  updatedAt DateTime     @updatedAt
+
+  @@map("provider_settings")
+}
