@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
+import { iconRegistry } from "./icon-registry";
 import type { NavItem } from "./types";
 
 type SidebarProps = {
@@ -45,7 +46,7 @@ export function Sidebar({ navItems, workspaceName, workspaceMeta, collapsed }: S
       <nav className={clsx("grid gap-1", collapsed ? "px-3 pt-[22px]" : "px-3")} aria-label="Main navigation">
         {navItems.map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-          const Icon = item.icon;
+          const Icon = iconRegistry[item.icon];
           return (
             <Link
               key={item.href}

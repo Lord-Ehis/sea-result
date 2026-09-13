@@ -1,8 +1,22 @@
-import type { LucideIcon } from "lucide-react";
+export type IconName =
+  | "LayoutGrid"
+  | "Building2"
+  | "Users"
+  | "FileText"
+  | "FileCheck"
+  | "CreditCard"
+  | "UserCog"
+  | "Trash2"
+  | "Bell"
+  | "Globe"
+  | "Settings"
+  | "BarChart3"
+  | "GraduationCap"
+  | "UserPlus";
 
 export type NavItem = {
   label: string;
   href: string;
-  icon: LucideIcon;
+  icon: IconName;
   count?: number;
 };
