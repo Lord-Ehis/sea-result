@@ -223,6 +223,10 @@ model Student {
   firstName   String
   lastName    String
   dateOfBirth DateTime?
+  // Plain contact details for notifications — not a linked parent account.
+  // See ParentStudentLink for actual parent/student login access.
+  guardianName  String?
+  guardianPhone String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -264,6 +268,7 @@ model ResultTemplate {
   schoolId  String
   classId   String?
   name      String
+  term      String? // e.g. "Term 2, 2025/2026"
   // Field definitions are school-configurable (subjects, grading scale,
   // comment fields, etc.) — not a single fixed format across schools.
   fields    Json

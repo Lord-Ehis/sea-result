@@ -1,12 +1,32 @@
-import { FileText } from "lucide-react";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { TemplateBuilderClient } from "./TemplateBuilderClient";
+import type { TemplateField } from "./actions";
 
-export default function ResultTemplatesPage() {
+export default async function ResultTemplatesPage() {
+  const session = await auth();
+  const schoolId = session!.user.schoolId!;
+
+  const [templates, classes] = await Promise.all([
+    prisma.resultTemplate.findMany({
+      where: { schoolId },
+      include: { class: true },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.class.findMany({ where: { schoolId }, orderBy: { name: "asc" } }),
+  ]);
+
   return (
-    <>
-      <PageHeader eyebrow="School workspace" title="Result templates" intro="Configure the report format used for each class." />
-      <EmptyState icon={FileText} title="No templates yet" description="Create a result template to start entering results for a class." />
-    </>
+    <TemplateBuilderClient
+      initialTemplates={templates.map((t) => ({
+        id: t.id,
+        name: t.name,
+        classId: t.classId,
+        className: t.class?.name ?? null,
+        term: t.term,
+        fields: Array.isArray(t.fields) ? (t.fields as unknown as TemplateField[]) : [],
+      }))}
+      classes={classes.map((c) => ({ id: c.id, name: c.name }))}
+    />
   );
 }
