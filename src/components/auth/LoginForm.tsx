@@ -2,7 +2,14 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { signIn, getSession } from "next-auth/react";
+
+const DASHBOARD_BY_ROLE: Record<string, string> = {
+  PLATFORM_OWNER: "/owner/schools",
+  SCHOOL_ADMIN: "/admin/dashboard",
+  TEACHER: "/teacher/classes",
+  PARENT: "/parent/dashboard",
+};
 
 export function LoginForm() {
   const router = useRouter();
@@ -22,14 +29,21 @@ export function LoginForm() {
       redirect: false,
     });
 
-    setLoading(false);
-
     if (result?.error) {
+      setLoading(false);
       setError("Incorrect email or password.");
       return;
     }
 
-    router.push(searchParams.get("callbackUrl") ?? "/");
+    const callbackUrl = searchParams.get("callbackUrl");
+    if (callbackUrl) {
+      router.push(callbackUrl);
+      return;
+    }
+
+    const session = await getSession();
+    setLoading(false);
+    router.push(DASHBOARD_BY_ROLE[session?.user.role ?? ""] ?? "/");
   }
 
   return (
