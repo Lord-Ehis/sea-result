@@ -11,6 +11,7 @@
   --color-primary: #185FA5;        /* primary actions, links, active nav */
   --color-primary-hover: #104D8A;  /* button/link hover state */
   --color-primary-bg: #E9F1F8;     /* light blue tint for selected/info states */
+  --color-deep: #0D3557;           /* marketing/landing page — dark navy accents */
 
   /* Semantic status colors */
   --color-success: #0F6E56;        /* active subscription, approved, published */

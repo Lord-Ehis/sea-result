@@ -6,6 +6,7 @@
   --color-primary: var(--color-primary);
   --color-primary-hover: var(--color-primary-hover);
   --color-primary-bg: var(--color-primary-bg);
+  --color-deep: var(--color-deep);
 
   /* Semantic status colors */
   --color-success: var(--color-success);
