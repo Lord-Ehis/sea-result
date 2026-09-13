@@ -54,6 +54,24 @@ async function main() {
     },
   });
 
+  const teacher = await prisma.user.upsert({
+    where: { email: "teacher@graceland.test" },
+    update: {},
+    create: {
+      schoolId: school.id,
+      role: "TEACHER",
+      name: "Femi Akinola",
+      email: "teacher@graceland.test",
+      passwordHash,
+    },
+  });
+
+  await prisma.teacherClassAssignment.upsert({
+    where: { teacherId_classId: { teacherId: teacher.id, classId: klass.id } },
+    update: {},
+    create: { teacherId: teacher.id, classId: klass.id },
+  });
+
   const students = [
     { studentCode: "GI-2025-001", firstName: "Chidera", lastName: "Nwosu", guardianName: "Ifeoma Nwosu", guardianPhone: "+234 800 000 0101" },
     { studentCode: "GI-2025-014", firstName: "Tobiloba", lastName: "Adeyemi", guardianName: "Kemi Adeyemi", guardianPhone: "+234 800 000 0102" },
