@@ -114,6 +114,12 @@ export function LookupForm({ schoolName, slug }: { schoolName: string; slug: str
         )}
 
         <p className="mt-6 text-center text-caption text-text-muted">Your school will share the student code with you.</p>
+        <p className="mt-2 text-center text-caption text-text-muted">
+          Want to save this for every term?{" "}
+          <Link href={`/signup/parent/${slug}`} className="font-medium text-primary hover:text-primary-hover">
+            Create a parent account
+          </Link>
+        </p>
         <p className="mt-2 text-center text-caption">
           <Link href="/lookup" className="font-medium text-primary hover:text-primary-hover">
             Not your school?
