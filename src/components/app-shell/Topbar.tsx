@@ -1,6 +1,8 @@
 "use client";
 
-import { Bell, Menu } from "lucide-react";
+import { useState } from "react";
+import { signOut } from "next-auth/react";
+import { Bell, Menu, LogOut, ChevronDown } from "lucide-react";
 
 type TopbarProps = {
   pageTitle: string;
@@ -19,6 +21,7 @@ export function Topbar({
   userRoleLabel,
   onToggleSidebar,
 }: TopbarProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const initials = userName
     .split(" ")
     .map((part) => part[0])
@@ -62,12 +65,47 @@ export function Topbar({
           <Bell size={19} strokeWidth={1.8} />
           <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full border-2 border-white bg-danger" />
         </button>
-        <span className="grid h-[34px] w-[34px] place-items-center rounded-full bg-success-bg text-[11px] font-medium text-success">
-          {initials}
-        </span>
-        <div className="whitespace-nowrap text-xs leading-[1.3] text-text-primary">
-          {userName}
-          <small className="block text-[11px] text-text-muted">{userRoleLabel}</small>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-expanded={menuOpen}
+            aria-haspopup="menu"
+            className="flex items-center gap-2 rounded-md p-1 hover:bg-bg-page"
+          >
+            <span className="grid h-[34px] w-[34px] place-items-center rounded-full bg-success-bg text-[11px] font-medium text-success">
+              {initials}
+            </span>
+            <div className="whitespace-nowrap text-left text-xs leading-[1.3] text-text-primary">
+              {userName}
+              <small className="block text-[11px] text-text-muted">{userRoleLabel}</small>
+            </div>
+            <ChevronDown size={15} strokeWidth={1.8} className="text-text-muted" />
+          </button>
+          {menuOpen && (
+            <>
+              <button
+                type="button"
+                aria-label="Close menu"
+                onClick={() => setMenuOpen(false)}
+                className="fixed inset-0 z-10 cursor-default"
+              />
+              <div
+                role="menu"
+                className="absolute right-0 top-[calc(100%+8px)] z-20 w-44 overflow-hidden rounded-md border border-border bg-bg-card py-1.5 shadow-lg"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => signOut({ callbackUrl: "/" })}
+                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-caption text-text-secondary hover:bg-bg-page"
+                >
+                  <LogOut size={15} strokeWidth={1.8} />
+                  Sign out
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </header>
