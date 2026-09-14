@@ -169,8 +169,29 @@ model User {
 
   notifications Notification[]
 
+  passwordResetTokens PasswordResetToken[]
+
   @@index([schoolId])
   @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// Password reset / set-password tokens (forgot-password and invite flows
+// share this — an invite just pre-creates a token for a fresh account).
+// ---------------------------------------------------------------------------
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 // ---------------------------------------------------------------------------

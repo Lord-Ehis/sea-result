@@ -7,6 +7,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { createAndSendNotification } from "@/lib/notifications";
+import { createPasswordResetToken } from "@/lib/password-reset";
 
 async function requireSchoolAdmin() {
   const session = await auth();
@@ -16,8 +17,13 @@ async function requireSchoolAdmin() {
   return session.user.schoolId;
 }
 
-function generateTempPassword() {
-  return crypto.randomBytes(9).toString("base64url"); // 12 chars, URL-safe
+/**
+ * New accounts get an unusable random password — nobody is meant to sign
+ * in with it. The invite email carries a set-password link instead
+ * (src/lib/password-reset.ts), the same mechanism forgot-password uses.
+ */
+function generateUnusablePassword() {
+  return crypto.randomBytes(24).toString("base64url");
 }
 
 const inviteSchema = z.object({
@@ -34,8 +40,7 @@ export async function inviteTeacher(input: { name: string; email: string; classI
   if (existing) throw new Error("An account with this email already exists.");
 
   const school = await prisma.school.findUniqueOrThrow({ where: { id: schoolId } });
-  const tempPassword = generateTempPassword();
-  const passwordHash = await bcrypt.hash(tempPassword, 10);
+  const passwordHash = await bcrypt.hash(generateUnusablePassword(), 10);
 
   const teacher = await prisma.user.create({
     data: {
@@ -50,7 +55,10 @@ export async function inviteTeacher(input: { name: string; email: string; classI
     },
   });
 
+  const token = await createPasswordResetToken(teacher.id);
   const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
+  const link = `${baseUrl}/reset-password?token=${token}`;
+
   await createAndSendNotification({
     schoolId,
     userId: teacher.id,
@@ -58,7 +66,7 @@ export async function inviteTeacher(input: { name: string; email: string; classI
     event: "ACCOUNT_CREATED",
     recipient: parsed.email,
     subject: `You've been added as a teacher at ${school.name}`,
-    message: `Hi ${parsed.name},\n\nYou've been added as a teacher on Sophie Educational Assistant for ${school.name}.\n\nSign in at ${baseUrl}/login with:\nEmail: ${parsed.email}\nTemporary password: ${tempPassword}\n\nPlease keep this password safe.`,
+    message: `Hi ${parsed.name},\n\nYou've been added as a teacher on Sophie Educational Assistant for ${school.name}.\n\nSet your password to get started (this link expires in 1 hour):\n${link}\n\nYour sign-in email is ${parsed.email}.`,
   });
 
   revalidatePath("/admin/teachers");

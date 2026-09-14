@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ForgotPasswordForm } from "./ForgotPasswordForm";
 
 export default function ForgotPasswordPage() {
   return (
@@ -8,19 +9,7 @@ export default function ForgotPasswordPage() {
         <p className="m-0 mb-6 text-body text-text-muted">
           Enter the email on your account and we&apos;ll send a reset link.
         </p>
-        <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
-          Email
-          <input
-            type="email"
-            className="rounded-sm border border-border bg-bg-card px-3 py-2.5 text-body text-text-primary outline-none focus:border-primary"
-          />
-        </label>
-        <button
-          type="button"
-          className="mt-4 w-full rounded-sm bg-primary px-4 py-2.5 text-body font-medium text-white hover:bg-primary-hover"
-        >
-          Send reset link
-        </button>
+        <ForgotPasswordForm />
         <p className="mt-6 text-caption text-text-muted">
           <Link href="/login" className="font-medium text-primary hover:text-primary-hover">
             Back to sign in
