@@ -268,6 +268,9 @@ export function StudentsClient({ campuses, classes, students }: StudentsClientPr
             <Field label="Parent/guardian phone">
               <input name="guardianPhone" placeholder="+234 800 000 0000" className={inputClass} />
             </Field>
+            <Field label="Parent/guardian email">
+              <input name="guardianEmail" type="email" placeholder="parent@example.com" className={inputClass} />
+            </Field>
           </div>
           {error && <p className="mx-6 mt-4 rounded-md bg-danger-bg px-3 py-2 text-caption text-danger">{error}</p>}
           <div className="flex justify-end gap-2 px-6 py-5">

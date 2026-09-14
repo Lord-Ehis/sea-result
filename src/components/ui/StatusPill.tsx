@@ -1,11 +1,12 @@
 type StatusPillProps = {
   label: string;
-  tone: "success" | "warning" | "neutral";
+  tone: "success" | "warning" | "danger" | "neutral";
 };
 
 const toneClasses: Record<StatusPillProps["tone"], string> = {
   success: "bg-success-bg text-success",
   warning: "bg-warning-bg text-warning",
+  danger: "bg-danger-bg text-danger",
   neutral: "bg-bg-sidebar text-text-secondary",
 };
 

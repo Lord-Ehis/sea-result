@@ -264,7 +264,7 @@ export function BillingClient({
                     <td className="px-4 py-4">
                       <StatusPill
                         label={p.status === "SUCCESS" ? "Paid" : p.status === "PENDING" ? "Pending" : "Failed"}
-                        tone={p.status === "SUCCESS" ? "success" : p.status === "PENDING" ? "warning" : "neutral"}
+                        tone={p.status === "SUCCESS" ? "success" : p.status === "PENDING" ? "warning" : "danger"}
                       />
                     </td>
                     <td className="px-4 py-4">

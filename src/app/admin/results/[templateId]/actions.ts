@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { createAndSendNotification } from "@/lib/notifications";
 
 async function requireSchoolAdmin() {
   const session = await auth();
@@ -31,30 +32,50 @@ export async function publishBatch(templateId: string) {
   if (rows.length === 0) throw new Error("Nothing to publish.");
 
   const now = new Date();
-  await prisma.$transaction([
-    prisma.result.updateMany({
-      where: { id: { in: rows.map((r) => r.id) } },
-      data: { status: "PUBLISHED", approvedByUserId: userId, approvedAt: now, publishedAt: now },
-    }),
-    ...rows
-      .filter((r) => r.student.guardianPhone)
-      .map((r) =>
-        prisma.notification.create({
-          data: {
+  await prisma.result.updateMany({
+    where: { id: { in: rows.map((r) => r.id) } },
+    data: { status: "PUBLISHED", approvedByUserId: userId, approvedAt: now, publishedAt: now },
+  });
+
+  // Sent after the DB update commits — these are network calls and don't
+  // belong inside the transaction. Each notification records its own
+  // SENT/FAILED outcome, so one bad recipient doesn't block the rest.
+  await Promise.all(
+    rows.flatMap((r) => {
+      const studentName = `${r.student.firstName} ${r.student.lastName}`;
+      const sends: Promise<string>[] = [];
+      if (r.student.guardianPhone) {
+        sends.push(
+          createAndSendNotification({
             schoolId,
             studentId: r.studentId,
             channel: "SMS",
             event: "RESULT_PUBLISHED",
-            recipient: r.student.guardianPhone!,
-            message: `${r.student.firstName} ${r.student.lastName}'s result has been published. Log in or use the result lookup to view it.`,
-            status: "PENDING",
-          },
-        }),
-      ),
-  ]);
+            recipient: r.student.guardianPhone,
+            message: `${studentName}'s result has been published. Log in or use the result lookup to view it.`,
+          }),
+        );
+      }
+      if (r.student.guardianEmail) {
+        sends.push(
+          createAndSendNotification({
+            schoolId,
+            studentId: r.studentId,
+            channel: "EMAIL",
+            event: "RESULT_PUBLISHED",
+            recipient: r.student.guardianEmail,
+            subject: `${studentName}'s result has been published`,
+            message: `${studentName}'s result has been published. Log in to your parent account or use the result lookup to view it.`,
+          }),
+        );
+      }
+      return sends;
+    }),
+  );
 
   revalidatePath("/admin/results");
   revalidatePath(`/admin/results/${templateId}`);
+  revalidatePath("/admin/notifications");
 }
 
 export async function sendBackBatch(templateId: string, note: string) {

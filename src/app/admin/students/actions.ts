@@ -41,6 +41,7 @@ const createStudentSchema = z.object({
   newClassName: z.string().trim().optional(),
   guardianName: z.string().trim().optional(),
   guardianPhone: z.string().trim().optional(),
+  guardianEmail: z.string().trim().email("Enter a valid email address").optional(),
 });
 
 export async function createStudent(formData: FormData) {
@@ -54,6 +55,7 @@ export async function createStudent(formData: FormData) {
     newClassName: formData.get("newClassName") || undefined,
     guardianName: formData.get("guardianName") || undefined,
     guardianPhone: formData.get("guardianPhone") || undefined,
+    guardianEmail: formData.get("guardianEmail") || undefined,
   });
 
   const campus = await prisma.campus.findFirst({
@@ -89,6 +91,7 @@ export async function createStudent(formData: FormData) {
       lastName: parsed.lastName,
       guardianName: parsed.guardianName,
       guardianPhone: parsed.guardianPhone,
+      guardianEmail: parsed.guardianEmail,
     },
   });
 
