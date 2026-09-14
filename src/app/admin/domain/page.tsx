@@ -1,12 +1,23 @@
-import { Globe } from "lucide-react";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { DomainClient } from "./DomainClient";
 
-export default function CustomDomainPage() {
+export default async function CustomDomainPage() {
+  const session = await auth();
+  const schoolId = session!.user.schoolId!;
+  const school = await prisma.school.findUnique({ where: { id: schoolId } });
+
+  const headerList = await headers();
+  const host = headerList.get("host") ?? "sea-result.vercel.app";
+  const protocol = host.includes("localhost") ? "http" : "https";
+  const defaultUrl = `${protocol}://${host}/lookup/${school!.slug}`;
+
   return (
-    <>
-      <PageHeader eyebrow="School workspace" title="Custom domain" intro="Point your own domain at your SEA result portal." />
-      <EmptyState icon={Globe} title="No domain connected" description="Add a domain and verify DNS records to go live on your own URL." />
-    </>
+    <DomainClient
+      customDomain={school!.customDomain}
+      verified={school!.customDomainVerified}
+      defaultUrl={defaultUrl}
+    />
   );
 }

@@ -94,6 +94,7 @@ model School {
   slug               String       @unique
   status             SchoolStatus @default(ACTIVE)
   customDomain       String?      @unique
+  customDomainVerified Boolean    @default(false)
   resultFormatConfig Json?
   allowParentAccounts Boolean     @default(true)
   allowResultLookup   Boolean     @default(true)
