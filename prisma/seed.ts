@@ -42,6 +42,19 @@ async function main() {
   });
 
   const passwordHash = await bcrypt.hash("password123", 10);
+
+  await prisma.user.upsert({
+    where: { email: "owner@sea-result.app" },
+    update: {},
+    create: {
+      schoolId: null,
+      role: "PLATFORM_OWNER",
+      name: "SEA Platform Owner",
+      email: "owner@sea-result.app",
+      passwordHash,
+    },
+  });
+
   await prisma.user.upsert({
     where: { email: "admin@gracelandschool.ng" },
     update: {},
