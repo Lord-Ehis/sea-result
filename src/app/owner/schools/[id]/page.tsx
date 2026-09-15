@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { prisma } from "@/lib/prisma";
 import { SchoolStatusToggle } from "./SchoolStatusToggle";
+import { DeletionRequestPanel } from "./DeletionRequestPanel";
 
 const naira = (n: number) => `₦${n.toLocaleString()}`;
 
@@ -23,6 +24,7 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ i
       users: { where: { role: "SCHOOL_ADMIN" }, orderBy: { createdAt: "asc" } },
       subscriptions: { orderBy: { createdAt: "desc" } },
       payments: { orderBy: { createdAt: "desc" } },
+      deletionRequests: { orderBy: { requestedAt: "desc" }, take: 1, include: { requestedBy: true, resolvedBy: true } },
       _count: { select: { students: true } },
     },
   });
@@ -61,6 +63,22 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ i
         </div>
         <SchoolStatusToggle schoolId={school.id} status={school.status} />
       </div>
+
+      {school.deletionRequests[0] && (
+        <DeletionRequestPanel
+          request={{
+            id: school.deletionRequests[0].id,
+            status: school.deletionRequests[0].status,
+            reason: school.deletionRequests[0].reason,
+            requestedAt: school.deletionRequests[0].requestedAt.toISOString(),
+            requestedByName: school.deletionRequests[0].requestedBy.name,
+            requestedByEmail: school.deletionRequests[0].requestedBy.email,
+            resolvedAt: school.deletionRequests[0].resolvedAt?.toISOString() ?? null,
+            resolutionNote: school.deletionRequests[0].resolutionNote,
+            resolvedByName: school.deletionRequests[0].resolvedBy?.name ?? null,
+          }}
+        />
+      )}
 
       <section className="mb-7 grid grid-cols-2 gap-4 lg:grid-cols-4" aria-label="School metrics">
         {[

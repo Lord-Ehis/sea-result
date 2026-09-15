@@ -8,8 +8,9 @@ export function SchoolStatusToggle({ schoolId, status }: { schoolId: string; sta
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  if (status === "PENDING_DELETION") return null;
-
+  // Suspended and pending-deletion schools both get "Reactivate" — approving
+  // a deletion request doesn't touch status, so this stays the only way back
+  // to ACTIVE if the platform team decides not to proceed with removal.
   const isActive = status === "ACTIVE";
 
   function handleToggle() {
