@@ -32,7 +32,10 @@ export default async function ResultEntryPage({ params }: { params: Promise<{ id
 
   const template =
     (await prisma.resultTemplate.findFirst({ where: { schoolId, classId: klass.id, isActive: true } })) ??
-    (await prisma.resultTemplate.findFirst({ where: { schoolId, classId: null, isActive: true } }));
+    (klass.level
+      ? await prisma.resultTemplate.findFirst({ where: { schoolId, classId: null, level: klass.level, isActive: true } })
+      : null) ??
+    (await prisma.resultTemplate.findFirst({ where: { schoolId, classId: null, level: null, isActive: true } }));
 
   if (!template || !template.term) {
     return (

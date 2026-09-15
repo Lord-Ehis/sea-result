@@ -43,7 +43,10 @@ export default async function MyClassesPage() {
     assignments.map(async ({ class: klass }) => {
       const template =
         (await prisma.resultTemplate.findFirst({ where: { schoolId, classId: klass.id, isActive: true } })) ??
-        (await prisma.resultTemplate.findFirst({ where: { schoolId, classId: null, isActive: true } }));
+        (klass.level
+          ? await prisma.resultTemplate.findFirst({ where: { schoolId, classId: null, level: klass.level, isActive: true } })
+          : null) ??
+        (await prisma.resultTemplate.findFirst({ where: { schoolId, classId: null, level: null, isActive: true } }));
 
       let status: ClassStatus = "Not started";
       let completed = 0;

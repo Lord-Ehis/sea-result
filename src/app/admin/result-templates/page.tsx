@@ -16,6 +16,8 @@ export default async function ResultTemplatesPage() {
     prisma.class.findMany({ where: { schoolId }, orderBy: { name: "asc" } }),
   ]);
 
+  const levels = Array.from(new Set(classes.map((c) => c.level).filter((l): l is string => !!l))).sort();
+
   return (
     <TemplateBuilderClient
       initialTemplates={templates.map((t) => ({
@@ -23,10 +25,12 @@ export default async function ResultTemplatesPage() {
         name: t.name,
         classId: t.classId,
         className: t.class?.name ?? null,
+        level: t.level,
         term: t.term,
         fields: Array.isArray(t.fields) ? (t.fields as unknown as TemplateField[]) : [],
       }))}
       classes={classes.map((c) => ({ id: c.id, name: c.name }))}
+      levels={levels}
     />
   );
 }

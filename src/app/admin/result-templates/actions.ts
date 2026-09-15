@@ -38,6 +38,7 @@ const saveTemplateSchema = z.object({
   id: z.string().min(1),
   name: z.string().trim().min(1, "Template name is required"),
   classId: z.string().optional(),
+  level: z.string().trim().optional(),
   term: z.string().trim().optional(),
   fields: z.array(fieldSchema),
 });
@@ -46,6 +47,7 @@ export async function saveTemplate(input: {
   id: string;
   name: string;
   classId?: string;
+  level?: string;
   term?: string;
   fields: TemplateField[];
 }) {
@@ -56,7 +58,10 @@ export async function saveTemplate(input: {
     where: { id: parsed.id, schoolId },
     data: {
       name: parsed.name,
+      // A specific class always wins in the fallback lookup, so the two
+      // are mutually exclusive here rather than both being set.
       classId: parsed.classId || null,
+      level: parsed.classId ? null : parsed.level || null,
       term: parsed.term || null,
       fields: parsed.fields,
     },

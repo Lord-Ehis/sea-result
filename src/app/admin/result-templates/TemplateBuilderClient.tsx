@@ -11,9 +11,17 @@ type Template = {
   name: string;
   classId: string | null;
   className: string | null;
+  level: string | null;
   term: string | null;
   fields: TemplateField[];
 };
+type Scope = "ALL" | "LEVEL" | "CLASS";
+
+function scopeOf(t: Template): Scope {
+  if (t.classId) return "CLASS";
+  if (t.level) return "LEVEL";
+  return "ALL";
+}
 
 const FIELD_TYPES: TemplateField["type"][] = ["Number", "Text", "Dropdown", "Rating scale"];
 
@@ -66,9 +74,11 @@ function previewValue(field: TemplateField) {
 export function TemplateBuilderClient({
   initialTemplates,
   classes,
+  levels,
 }: {
   initialTemplates: Template[];
   classes: ClassOption[];
+  levels: string[];
 }) {
   const [templates, setTemplates] = useState(initialTemplates);
   const [selectedId, setSelectedId] = useState<string | null>(initialTemplates[0]?.id ?? null);
@@ -91,7 +101,7 @@ export function TemplateBuilderClient({
   function handleNewTemplate() {
     startTransition(async () => {
       const id = await createTemplate("Untitled template");
-      const created: Template = { id, name: "Untitled template", classId: null, className: null, term: null, fields: [] };
+      const created: Template = { id, name: "Untitled template", classId: null, className: null, level: null, term: null, fields: [] };
       setTemplates((prev) => [...prev, created]);
       setSelectedId(id);
     });
@@ -107,6 +117,7 @@ export function TemplateBuilderClient({
           id: selected.id,
           name: selected.name,
           classId: selected.classId ?? undefined,
+          level: selected.level ?? undefined,
           term: selected.term ?? undefined,
           fields: selected.fields,
         });
@@ -194,7 +205,7 @@ export function TemplateBuilderClient({
                 <span>
                   <strong className="block text-caption font-medium leading-tight">{t.name}</strong>
                   <small className="mt-1 block text-[10px] text-text-muted">
-                    {t.className ?? "No class"} · {t.fields.length} fields
+                    {t.className ?? (t.level ? `Level: ${t.level}` : "All classes")} · {t.fields.length} fields
                   </small>
                 </span>
               </button>
@@ -217,32 +228,13 @@ export function TemplateBuilderClient({
                 <h2 className="m-0 text-heading font-medium text-text-primary">Template editor</h2>
                 <p className="mt-1.5 text-caption text-text-muted">Drag fields to reorder or edit their type.</p>
               </div>
-              <div className="grid grid-cols-1 gap-3 border-b border-border px-5 py-5 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 border-b border-border px-5 py-5 sm:grid-cols-2">
                 <Field label="Template name">
                   <input
                     value={selected.name}
                     onChange={(e) => updateSelected({ name: e.target.value })}
                     className={inputClass}
                   />
-                </Field>
-                <Field label="Applies to class">
-                  <select
-                    value={selected.classId ?? ""}
-                    onChange={(e) =>
-                      updateSelected({
-                        classId: e.target.value || null,
-                        className: classes.find((c) => c.id === e.target.value)?.name ?? null,
-                      })
-                    }
-                    className={inputClass}
-                  >
-                    <option value="">All classes</option>
-                    {classes.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
                 </Field>
                 <Field label="Term">
                   <input
@@ -252,6 +244,69 @@ export function TemplateBuilderClient({
                     className={inputClass}
                   />
                 </Field>
+              </div>
+              <div className="grid gap-2 border-b border-border px-5 py-5">
+                <span className="text-[10px] text-text-muted">Applies to</span>
+                <div className="inline-flex w-fit rounded-md border border-border bg-bg-page p-1">
+                  {(
+                    [
+                      ["ALL", "All classes"],
+                      ["LEVEL", "A level"],
+                      ["CLASS", "A specific class"],
+                    ] as const
+                  ).map(([scope, label]) => (
+                    <button
+                      key={scope}
+                      type="button"
+                      onClick={() =>
+                        updateSelected(
+                          scope === "ALL"
+                            ? { classId: null, className: null, level: null }
+                            : scope === "LEVEL"
+                              ? { classId: null, className: null, level: selected.level ?? levels[0] ?? "" }
+                              : { level: null, classId: selected.classId ?? classes[0]?.id ?? null, className: classes[0]?.name ?? null },
+                        )
+                      }
+                      className={`h-7 rounded-sm px-3 text-caption font-medium ${
+                        scopeOf(selected) === scope ? "bg-bg-card text-primary shadow-sm" : "text-text-secondary"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {scopeOf(selected) === "LEVEL" && (
+                  <select
+                    value={selected.level ?? ""}
+                    onChange={(e) => updateSelected({ level: e.target.value })}
+                    className={`${inputClass} mt-1 max-w-[220px]`}
+                  >
+                    {levels.length === 0 && <option value="">No levels set up yet</option>}
+                    {levels.map((l) => (
+                      <option key={l} value={l}>
+                        {l}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {scopeOf(selected) === "CLASS" && (
+                  <select
+                    value={selected.classId ?? ""}
+                    onChange={(e) =>
+                      updateSelected({
+                        classId: e.target.value || null,
+                        className: classes.find((c) => c.id === e.target.value)?.name ?? null,
+                      })
+                    }
+                    className={`${inputClass} mt-1 max-w-[220px]`}
+                  >
+                    {classes.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
               <div className="px-5 py-5">
                 <div className="mb-3.5 flex items-start justify-between gap-2">
@@ -369,7 +424,7 @@ export function TemplateBuilderClient({
                   <div className="py-3.5 text-center">
                     <strong className="block text-caption font-medium">Student result sheet</strong>
                     <span className="mt-1 block text-[8px] text-[#8e9ca5]">
-                      {selected.className ?? "All classes"} · {selected.term || "Term not set"}
+                      {selected.className ?? (selected.level ? `Level: ${selected.level}` : "All classes")} · {selected.term || "Term not set"}
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-2 rounded bg-[#f6f8f9] p-2 text-[8px]">

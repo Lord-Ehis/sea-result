@@ -290,6 +290,9 @@ model ResultTemplate {
   id        String   @id @default(cuid())
   schoolId  String
   classId   String?
+  // Targets every class under a level (e.g. "JSS 2") when classId is unset.
+  // Falls back further to every class in the school when both are unset.
+  level     String?
   name      String
   term      String? // e.g. "Term 2, 2025/2026"
   // Field definitions are school-configurable (subjects, grading scale,
