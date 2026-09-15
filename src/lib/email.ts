@@ -1,9 +1,21 @@
-export async function sendEmail(input: { to: string; subject: string; text: string }) {
+import { getProviderConfig } from "@/lib/provider-settings";
+
+type ResendConfig = { apiKey: string; from: string };
+
+async function getConfig(): Promise<ResendConfig> {
+  const dbConfig = await getProviderConfig<ResendConfig>("EMAIL_RESEND");
+  if (dbConfig?.apiKey && dbConfig?.from) return dbConfig;
+
   const apiKey = process.env.EMAIL_API_KEY;
   const from = process.env.EMAIL_FROM;
   if (!apiKey || !from) {
     throw new Error("Email provider is not configured (EMAIL_API_KEY/EMAIL_FROM missing).");
   }
+  return { apiKey, from };
+}
+
+export async function sendEmail(input: { to: string; subject: string; text: string }) {
+  const { apiKey, from } = await getConfig();
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",

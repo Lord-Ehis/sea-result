@@ -1,11 +1,17 @@
 import crypto from "crypto";
+import { getProviderConfig } from "@/lib/provider-settings";
 
 const PAYSTACK_BASE = "https://api.paystack.co";
 
-function secretKey() {
-  const key = process.env.PAYSTACK_SECRET_KEY;
-  if (!key) throw new Error("PAYSTACK_SECRET_KEY is not configured.");
-  return key;
+type PaystackConfig = { secretKey: string; publicKey?: string };
+
+async function getConfig(): Promise<PaystackConfig> {
+  const dbConfig = await getProviderConfig<PaystackConfig>("PAYSTACK");
+  if (dbConfig?.secretKey) return dbConfig;
+
+  const secretKey = process.env.PAYSTACK_SECRET_KEY;
+  if (!secretKey) throw new Error("PAYSTACK_SECRET_KEY is not configured.");
+  return { secretKey, publicKey: process.env.PAYSTACK_PUBLIC_KEY };
 }
 
 type InitializeResponse = {
@@ -21,10 +27,11 @@ export async function initializeTransaction(input: {
   callbackUrl: string;
   metadata?: Record<string, unknown>;
 }) {
+  const { secretKey } = await getConfig();
   const res = await fetch(`${PAYSTACK_BASE}/transaction/initialize`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${secretKey()}`,
+      Authorization: `Bearer ${secretKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -58,8 +65,9 @@ type VerifyResponse = {
 };
 
 export async function verifyTransaction(reference: string) {
+  const { secretKey } = await getConfig();
   const res = await fetch(`${PAYSTACK_BASE}/transaction/verify/${encodeURIComponent(reference)}`, {
-    headers: { Authorization: `Bearer ${secretKey()}` },
+    headers: { Authorization: `Bearer ${secretKey}` },
     cache: "no-store",
   });
   const json = (await res.json()) as VerifyResponse;
@@ -69,8 +77,9 @@ export async function verifyTransaction(reference: string) {
   return json.data;
 }
 
-export function verifyWebhookSignature(rawBody: string, signature: string | null) {
+export async function verifyWebhookSignature(rawBody: string, signature: string | null) {
   if (!signature) return false;
-  const hash = crypto.createHmac("sha512", secretKey()).update(rawBody).digest("hex");
+  const { secretKey } = await getConfig();
+  const hash = crypto.createHmac("sha512", secretKey).update(rawBody).digest("hex");
   return hash === signature;
 }
