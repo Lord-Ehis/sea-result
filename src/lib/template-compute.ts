@@ -51,6 +51,17 @@ export function computeOwnFields(fields: TemplateField[], data: Record<string, s
 }
 
 /**
+ * Sums or averages a set of numeric values gathered across terms for one
+ * student (see publishBatch, which assembles `values` from this student's
+ * own prior published Result rows plus their newly-computed current term).
+ */
+export function aggregateCumulative(aggregate: "sum" | "average", values: number[]): string {
+  if (values.length === 0) return "";
+  const total = values.reduce((sum, v) => sum + v, 0);
+  return aggregate === "sum" ? String(total) : (total / values.length).toFixed(2);
+}
+
+/**
  * Fills in every position-kind field by ranking students against each
  * other on their (already own-computed) source field. Competition
  * ranking: tied values share a rank, the next distinct value skips ahead

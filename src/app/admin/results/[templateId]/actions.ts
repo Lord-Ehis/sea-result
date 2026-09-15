@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { createAndSendNotification } from "@/lib/notifications";
-import { computeOwnFields, computePositions } from "@/lib/template-compute";
+import { computeOwnFields, computePositions, aggregateCumulative } from "@/lib/template-compute";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
 
 async function requireSchoolAdmin() {
@@ -40,7 +40,38 @@ export async function publishBatch(templateId: string) {
 
   const fields = Array.isArray(template?.fields) ? (template.fields as unknown as TemplateField[]) : [];
   const ownComputed = rows.map((r) => computeOwnFields(fields, (r.data as Record<string, string>) ?? {}));
-  const finalData = computePositions(fields, ownComputed);
+
+  // Cumulative fields need each student's own prior published rows for this
+  // same template — only meaningful if the school reuses one template
+  // across a session's terms rather than creating a new one each time.
+  const cumulativeFields = fields.filter((f) => f.type === "Computed" && f.formula?.kind === "cumulative");
+  let afterCumulative = ownComputed;
+  if (cumulativeFields.length > 0) {
+    const priorRows = await prisma.result.findMany({
+      where: { templateId, status: "PUBLISHED", studentId: { in: rows.map((r) => r.studentId) } },
+    });
+
+    afterCumulative = rows.map((r, i) => {
+      const data = { ...ownComputed[i] };
+      const priorForStudent = priorRows.filter((p) => p.studentId === r.studentId && p.session === r.session);
+      for (const field of cumulativeFields) {
+        const formula = field.formula;
+        if (formula?.kind !== "cumulative") continue;
+        const values = [
+          ...priorForStudent.map((p) => Number((p.data as Record<string, string>)?.[formula.of])),
+          Number(ownComputed[i][formula.of]),
+        ].filter((v) => Number.isFinite(v));
+        data[field.id] = aggregateCumulative(formula.aggregate, values);
+      }
+      return data;
+    });
+
+    // Lets a grade-kind field whose `of` points at a cumulative field
+    // compute now that the cumulative value actually exists.
+    afterCumulative = afterCumulative.map((d) => computeOwnFields(fields, d));
+  }
+
+  const finalData = computePositions(fields, afterCumulative);
 
   const now = new Date();
   await prisma.$transaction(

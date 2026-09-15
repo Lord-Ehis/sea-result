@@ -30,11 +30,13 @@ const FORMULA_LABEL: Record<ComputedFormula["kind"], string> = {
   average: "Average",
   grade: "Grade",
   position: "Position",
+  cumulative: "Cumulative (across terms)",
 };
 
 function defaultFormula(kind: ComputedFormula["kind"]): ComputedFormula {
   if (kind === "grade") return { kind, of: "", bands: [] };
   if (kind === "position") return { kind, of: "" };
+  if (kind === "cumulative") return { kind, of: "", aggregate: "sum" };
   return { kind, of: [] };
 }
 
@@ -280,6 +282,10 @@ export function TemplateBuilderClient({
                   />
                 </Field>
               </div>
+              <p className="mx-5 mt-3 text-[10px] leading-relaxed text-text-muted">
+                Starting a new term? Update this same template&apos;s Term rather than creating a new one — that&apos;s
+                what lets a Cumulative field (see field types below) build up history across the session.
+              </p>
               <div className="grid gap-2 border-b border-border px-5 py-5">
                 <span className="text-[10px] text-text-muted">Applies to</span>
                 <div className="inline-flex w-fit rounded-md border border-border bg-bg-page p-1">
@@ -539,7 +545,7 @@ function FormulaConfig({
       <label className="grid gap-1.5 text-[10px] text-text-muted">
         Formula
         <select value={formula.kind} onChange={(e) => changeKind(e.target.value as ComputedFormula["kind"])} className={`${selectClass} max-w-[180px]`}>
-          {(["sum", "average", "grade", "position"] as const).map((kind) => (
+          {(["sum", "average", "grade", "position", "cumulative"] as const).map((kind) => (
             <option key={kind} value={kind}>
               {FORMULA_LABEL[kind]}
             </option>
@@ -670,6 +676,41 @@ function FormulaConfig({
             ))}
           </select>
         </label>
+      )}
+
+      {formula.kind === "cumulative" && (
+        <>
+          <label className="grid gap-1.5 text-[10px] text-text-muted">
+            Accumulate
+            <select
+              value={formula.of}
+              onChange={(e) => onChange({ ...formula, of: e.target.value })}
+              className={`${selectClass} max-w-[180px]`}
+            >
+              <option value="">Select a field…</option>
+              {otherFields.map((of) => (
+                <option key={of.id} value={of.id}>
+                  {of.name || "Untitled field"}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1.5 text-[10px] text-text-muted">
+            As
+            <select
+              value={formula.aggregate}
+              onChange={(e) => onChange({ ...formula, aggregate: e.target.value as "sum" | "average" })}
+              className={`${selectClass} max-w-[180px]`}
+            >
+              <option value="sum">Total across terms</option>
+              <option value="average">Average across terms</option>
+            </select>
+          </label>
+          <p className="m-0 text-[10px] leading-relaxed text-text-muted">
+            Adds up this field&apos;s value from every term published so far this session, using this same template — reuse
+            it across terms (just update Term below) rather than creating a new one each time.
+          </p>
+        </>
       )}
     </div>
   );

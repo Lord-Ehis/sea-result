@@ -21,6 +21,13 @@ type StudentRow = {
 const DROPDOWN_OPTIONS = ["Excellent", "Very Good", "Good", "Fair", "Poor"];
 const RATING_OPTIONS = ["1", "2", "3", "4", "5"];
 
+// Position needs the whole class's batch; cumulative needs prior terms'
+// published history. Neither is available during live entry — both only
+// get a value once the batch is actually published.
+function computedAtPublish(field: TemplateField) {
+  return field.formula?.kind === "position" || field.formula?.kind === "cumulative";
+}
+
 export function ResultEntryClient({
   classId,
   className,
@@ -64,9 +71,7 @@ export function ResultEntryClient({
     return map;
   }, [students, fields, entries]);
 
-  // Position fields only get a value at publish time — they shouldn't
-  // block "complete" status, unlike every other field kind.
-  const requiredFields = useMemo(() => fields.filter((f) => f.formula?.kind !== "position"), [fields]);
+  const requiredFields = useMemo(() => fields.filter((f) => !computedAtPublish(f)), [fields]);
   const completedCount = useMemo(
     () => students.filter((s) => requiredFields.every((f) => (computedByStudent.get(s.id)?.[f.id] ?? "").trim() !== "")).length,
     [students, requiredFields, computedByStudent],
@@ -178,12 +183,11 @@ export function ResultEntryClient({
                         "h-[34px] w-full min-w-[110px] rounded-md border border-border bg-bg-card px-2 text-caption text-text-primary disabled:bg-bg-page disabled:text-text-muted",
                     };
                     if (f.type === "Computed") {
-                      const isPosition = f.formula?.kind === "position";
                       const computedValue = computedByStudent.get(s.id)?.[f.id] ?? "";
                       return (
                         <td key={f.id} className="px-3 py-2">
                           <div className="flex h-[34px] w-full min-w-[110px] items-center rounded-md border border-dashed border-border bg-bg-page px-2 text-caption text-text-secondary">
-                            {isPosition ? <span className="italic text-text-muted">At publish</span> : computedValue || "—"}
+                            {computedAtPublish(f) ? <span className="italic text-text-muted">At publish</span> : computedValue || "—"}
                           </div>
                         </td>
                       );

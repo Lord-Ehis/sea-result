@@ -11,6 +11,12 @@ import { computeOwnFields } from "@/lib/template-compute";
 
 type StudentRow = { resultId: string; name: string; studentCode: string; data: Record<string, string> };
 
+// Position needs the whole class's batch; cumulative needs prior terms'
+// published history. Neither is available before publish.
+function computedAtPublish(field: TemplateField) {
+  return field.formula?.kind === "position" || field.formula?.kind === "cumulative";
+}
+
 export function ReviewClient({
   templateId,
   className,
@@ -38,9 +44,7 @@ export function ReviewClient({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  // Position fields are legitimately blank until publish — don't count
-  // them as missing data needing a correction.
-  const requiredFields = useMemo(() => fields.filter((f) => f.formula?.kind !== "position"), [fields]);
+  const requiredFields = useMemo(() => fields.filter((f) => !computedAtPublish(f)), [fields]);
   const emptyCount = useMemo(
     () => students.reduce((n, s) => n + requiredFields.filter((f) => !(entries[s.resultId]?.[f.id] ?? "").trim()).length, 0),
     [students, requiredFields, entries],
@@ -179,11 +183,10 @@ export function ReviewClient({
                     const value = entries[s.resultId]?.[f.id] ?? "";
                     const blank = !value.trim();
                     if (f.type === "Computed") {
-                      const isPosition = f.formula?.kind === "position";
                       return (
                         <td key={f.id} className="px-3 py-2">
                           <div className="flex h-[34px] w-full min-w-[110px] items-center rounded-md border border-dashed border-border bg-bg-page px-2 text-caption text-text-secondary">
-                            {isPosition ? <span className="italic text-text-muted">At publish</span> : value || "—"}
+                            {computedAtPublish(f) ? <span className="italic text-text-muted">At publish</span> : value || "—"}
                           </div>
                         </td>
                       );
