@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { initializeSubscriptionPayment } from "./actions";
+import { defaultSessionLabel, defaultTermLabel } from "@/lib/academic-term";
 
 type Subscription = {
   billingCycle: "PER_TERM" | "FULL_SESSION";
@@ -30,12 +31,6 @@ type Payment = {
 
 const naira = (n: number) => `₦${n.toLocaleString()}`;
 
-function defaultSessionLabel() {
-  const now = new Date();
-  const startYear = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
-  return `${startYear}/${startYear + 1}`;
-}
-
 export function BillingClient({
   schoolName,
   subscription,
@@ -51,7 +46,7 @@ export function BillingClient({
   const paymentStatus = searchParams.get("payment");
 
   const [modal, setModal] = useState<"PER_TERM" | "FULL_SESSION" | null>(null);
-  const [term, setTerm] = useState("");
+  const [term, setTerm] = useState(defaultTermLabel());
   const [sessionLabel, setSessionLabel] = useState(defaultSessionLabel());
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -69,7 +64,7 @@ export function BillingClient({
 
   function openModal(cycle: "PER_TERM" | "FULL_SESSION") {
     setError(null);
-    setTerm("");
+    setTerm(defaultTermLabel());
     setSessionLabel(defaultSessionLabel());
     setModal(cycle);
   }

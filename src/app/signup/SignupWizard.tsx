@@ -5,6 +5,7 @@ import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { Building2, CreditCard, UserPlus, Check, ArrowLeft, ArrowRight } from "lucide-react";
 import { checkSlugAvailable, createSchoolSignup } from "./actions";
+import { defaultSessionLabel, defaultTermLabel } from "@/lib/academic-term";
 
 const STEPS = [
   { key: 1, label: "School", icon: Building2 },
@@ -22,12 +23,6 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-function defaultSessionLabel() {
-  const now = new Date();
-  const startYear = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
-  return `${startYear}/${startYear + 1}`;
-}
-
 type Pricing = { perTermPrice: number; termPrice: number; sessionPrice: number };
 
 export function SignupWizard({ pricing }: { pricing: Pricing }) {
@@ -40,7 +35,7 @@ export function SignupWizard({ pricing }: { pricing: Pricing }) {
   const [slugStatus, setSlugStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle");
 
   const [billingCycle, setBillingCycle] = useState<"PER_TERM" | "FULL_SESSION">("PER_TERM");
-  const [term, setTerm] = useState("");
+  const [term, setTerm] = useState(defaultTermLabel());
   const [sessionLabel, setSessionLabel] = useState(defaultSessionLabel());
 
   const [adminName, setAdminName] = useState("");
