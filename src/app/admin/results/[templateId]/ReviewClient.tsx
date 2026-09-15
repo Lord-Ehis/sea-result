@@ -7,6 +7,7 @@ import { ArrowLeft, Check, Users, CalendarDays } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { updateResultValue, publishBatch, sendBackBatch } from "./actions";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
+import { computeOwnFields } from "@/lib/template-compute";
 
 type StudentRow = { resultId: string; name: string; studentCode: string; data: Record<string, string> };
 
@@ -37,9 +38,12 @@ export function ReviewClient({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  // Position fields are legitimately blank until publish — don't count
+  // them as missing data needing a correction.
+  const requiredFields = useMemo(() => fields.filter((f) => f.formula?.kind !== "position"), [fields]);
   const emptyCount = useMemo(
-    () => students.reduce((n, s) => n + fields.filter((f) => !(entries[s.resultId]?.[f.id] ?? "").trim()).length, 0),
-    [students, fields, entries],
+    () => students.reduce((n, s) => n + requiredFields.filter((f) => !(entries[s.resultId]?.[f.id] ?? "").trim()).length, 0),
+    [students, requiredFields, entries],
   );
 
   function handleFieldChange(resultId: string, fieldId: string, value: string) {
@@ -50,6 +54,9 @@ export function ReviewClient({
     startTransition(async () => {
       try {
         await updateResultValue(resultId, fieldId, value);
+        // Mirrors the server's own recompute so Total/Grade reflect the
+        // edit immediately, without waiting on a full page reload.
+        setEntries((prev) => ({ ...prev, [resultId]: computeOwnFields(fields, { ...prev[resultId], [fieldId]: value }) }));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not save correction.");
       }
@@ -171,6 +178,16 @@ export function ReviewClient({
                   {fields.map((f) => {
                     const value = entries[s.resultId]?.[f.id] ?? "";
                     const blank = !value.trim();
+                    if (f.type === "Computed") {
+                      const isPosition = f.formula?.kind === "position";
+                      return (
+                        <td key={f.id} className="px-3 py-2">
+                          <div className="flex h-[34px] w-full min-w-[110px] items-center rounded-md border border-dashed border-border bg-bg-page px-2 text-caption text-text-secondary">
+                            {isPosition ? <span className="italic text-text-muted">At publish</span> : value || "—"}
+                          </div>
+                        </td>
+                      );
+                    }
                     return (
                       <td key={f.id} className="px-3 py-2">
                         <input

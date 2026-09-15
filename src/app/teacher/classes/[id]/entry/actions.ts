@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { computeOwnFields } from "@/lib/template-compute";
+import type { TemplateField } from "@/app/admin/result-templates/actions";
 
 async function requireTeacherForClass(classId: string) {
   const session = await auth();
@@ -26,7 +28,11 @@ export async function saveClassResults(input: {
 }) {
   const user = await requireTeacherForClass(input.classId);
 
+  const template = await prisma.resultTemplate.findFirst({ where: { id: input.templateId, schoolId: user.schoolId } });
+  const fields = Array.isArray(template?.fields) ? (template.fields as unknown as TemplateField[]) : [];
+
   for (const entry of input.entries) {
+    const data = computeOwnFields(fields, entry.data);
     await prisma.result.upsert({
       where: {
         studentId_templateId_term_session: {
@@ -37,7 +43,7 @@ export async function saveClassResults(input: {
         },
       },
       update: {
-        data: entry.data,
+        data,
         status: input.submit ? "SUBMITTED" : "DRAFT",
         submittedByUserId: user.id,
         submittedAt: input.submit ? new Date() : undefined,
@@ -49,7 +55,7 @@ export async function saveClassResults(input: {
         templateId: input.templateId,
         term: input.term,
         session: input.session,
-        data: entry.data,
+        data,
         status: input.submit ? "SUBMITTED" : "DRAFT",
         submittedByUserId: user.id,
         submittedAt: input.submit ? new Date() : null,

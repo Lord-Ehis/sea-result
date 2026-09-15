@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { FileText, GripVertical, ChevronUp, ChevronDown, X, Plus, Check } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { createTemplate, saveTemplate, type TemplateField } from "./actions";
+import { createTemplate, saveTemplate, type TemplateField, type ComputedFormula, type GradeBand } from "./actions";
 
 type ClassOption = { id: string; name: string };
 type Template = {
@@ -23,10 +23,31 @@ function scopeOf(t: Template): Scope {
   return "ALL";
 }
 
-const FIELD_TYPES: TemplateField["type"][] = ["Number", "Text", "Dropdown", "Rating scale"];
+const FIELD_TYPES: TemplateField["type"][] = ["Number", "Text", "Dropdown", "Rating scale", "Computed"];
+
+const FORMULA_LABEL: Record<ComputedFormula["kind"], string> = {
+  sum: "Total (sum)",
+  average: "Average",
+  grade: "Grade",
+  position: "Position",
+};
+
+function defaultFormula(kind: ComputedFormula["kind"]): ComputedFormula {
+  if (kind === "grade") return { kind, of: "", bands: [] };
+  if (kind === "position") return { kind, of: "" };
+  return { kind, of: [] };
+}
 
 function previewValue(field: TemplateField) {
   const n = field.name.toLowerCase();
+  if (field.type === "Computed") {
+    const formula = field.formula;
+    return (
+      <span className="text-[9px] italic text-[#8a99a2]">
+        Auto-calculated{formula ? ` — ${FORMULA_LABEL[formula.kind].toLowerCase()}` : ""}
+      </span>
+    );
+  }
   if (field.type === "Number") {
     if (n.includes("subject")) {
       return (
@@ -96,6 +117,20 @@ export function TemplateBuilderClient({
 
   function updateFields(fields: TemplateField[]) {
     updateSelected({ fields });
+  }
+
+  function updateFieldType(fieldId: string, type: TemplateField["type"]) {
+    if (!selected) return;
+    updateFields(
+      selected.fields.map((x) =>
+        x.id === fieldId ? { ...x, type, formula: type === "Computed" ? (x.formula ?? defaultFormula("sum")) : undefined } : x,
+      ),
+    );
+  }
+
+  function updateFieldFormula(fieldId: string, formula: ComputedFormula) {
+    if (!selected) return;
+    updateFields(selected.fields.map((x) => (x.id === fieldId ? { ...x, formula } : x)));
   }
 
   function handleNewTemplate() {
@@ -331,8 +366,9 @@ export function TemplateBuilderClient({
                       onDragStart={() => setDragId(f.id)}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={() => handleDrop(f.id)}
-                      className="grid grid-cols-[24px_1fr_112px_auto] items-center gap-2 rounded-md border border-border bg-bg-card p-2"
+                      className="rounded-md border border-border bg-bg-card"
                     >
+                    <div className="grid grid-cols-[24px_1fr_112px_auto] items-center gap-2 p-2">
                       <span className="grid cursor-grab place-items-center text-text-muted">
                         <GripVertical size={16} strokeWidth={1.8} />
                       </span>
@@ -346,13 +382,7 @@ export function TemplateBuilderClient({
                       />
                       <select
                         value={f.type}
-                        onChange={(e) =>
-                          updateFields(
-                            selected.fields.map((x) =>
-                              x.id === f.id ? { ...x, type: e.target.value as TemplateField["type"] } : x,
-                            ),
-                          )
-                        }
+                        onChange={(e) => updateFieldType(f.id, e.target.value as TemplateField["type"])}
                         className="h-[30px] rounded-md border border-border bg-bg-page px-1.5 text-[10px] text-text-secondary"
                       >
                         {FIELD_TYPES.map((type) => (
@@ -389,6 +419,14 @@ export function TemplateBuilderClient({
                           <X size={14} strokeWidth={1.8} />
                         </button>
                       </span>
+                    </div>
+                    {f.type === "Computed" && (
+                      <FormulaConfig
+                        field={f}
+                        otherFields={selected.fields.filter((x) => x.id !== f.id)}
+                        onChange={(formula) => updateFieldFormula(f.id, formula)}
+                      />
+                    )}
                     </div>
                   ))}
                 </div>
@@ -476,5 +514,163 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {label}
       {children}
     </label>
+  );
+}
+
+const selectClass = "h-[30px] rounded-md border border-border bg-bg-card px-2 text-[10px] text-text-primary";
+
+function FormulaConfig({
+  field,
+  otherFields,
+  onChange,
+}: {
+  field: TemplateField;
+  otherFields: TemplateField[];
+  onChange: (formula: ComputedFormula) => void;
+}) {
+  const formula = field.formula ?? defaultFormula("sum");
+
+  function changeKind(kind: ComputedFormula["kind"]) {
+    onChange(defaultFormula(kind));
+  }
+
+  return (
+    <div className="grid gap-3 border-t border-border bg-bg-page px-3 py-3">
+      <label className="grid gap-1.5 text-[10px] text-text-muted">
+        Formula
+        <select value={formula.kind} onChange={(e) => changeKind(e.target.value as ComputedFormula["kind"])} className={`${selectClass} max-w-[180px]`}>
+          {(["sum", "average", "grade", "position"] as const).map((kind) => (
+            <option key={kind} value={kind}>
+              {FORMULA_LABEL[kind]}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {(formula.kind === "sum" || formula.kind === "average") && (
+        <div className="grid gap-1.5">
+          <span className="text-[10px] text-text-muted">{formula.kind === "sum" ? "Sum of" : "Average of"}</span>
+          {otherFields.length === 0 ? (
+            <p className="m-0 text-[10px] text-text-muted">Add other fields first.</p>
+          ) : (
+            <div className="grid max-h-[140px] gap-1 overflow-y-auto rounded-md border border-border bg-bg-card p-1.5">
+              {otherFields.map((of) => (
+                <label key={of.id} className="flex cursor-pointer items-center gap-2 rounded-md p-1.5 text-[10px] text-text-secondary hover:bg-bg-page">
+                  <input
+                    type="checkbox"
+                    checked={formula.of.includes(of.id)}
+                    onChange={(e) =>
+                      onChange({
+                        ...formula,
+                        of: e.target.checked ? [...formula.of, of.id] : formula.of.filter((id) => id !== of.id),
+                      })
+                    }
+                    className="h-3.5 w-3.5 accent-primary"
+                  />
+                  {of.name || "Untitled field"}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {formula.kind === "grade" && (
+        <>
+          <label className="grid gap-1.5 text-[10px] text-text-muted">
+            Grade of
+            <select
+              value={formula.of}
+              onChange={(e) => onChange({ ...formula, of: e.target.value })}
+              className={`${selectClass} max-w-[180px]`}
+            >
+              <option value="">Select a field…</option>
+              {otherFields.map((of) => (
+                <option key={of.id} value={of.id}>
+                  {of.name || "Untitled field"}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="grid gap-1.5">
+            <span className="text-[10px] text-text-muted">Grade bands</span>
+            <div className="grid gap-1.5">
+              {formula.bands.map((band, i) => (
+                <div key={i} className="grid grid-cols-[64px_64px_1fr_auto] items-center gap-1.5">
+                  <input
+                    type="number"
+                    value={band.min}
+                    onChange={(e) => {
+                      const bands = [...formula.bands];
+                      bands[i] = { ...band, min: Number(e.target.value) };
+                      onChange({ ...formula, bands });
+                    }}
+                    placeholder="Min"
+                    className="h-[30px] rounded-md border border-border bg-bg-card px-2 text-[10px] text-text-primary"
+                  />
+                  <input
+                    type="number"
+                    value={band.max}
+                    onChange={(e) => {
+                      const bands = [...formula.bands];
+                      bands[i] = { ...band, max: Number(e.target.value) };
+                      onChange({ ...formula, bands });
+                    }}
+                    placeholder="Max"
+                    className="h-[30px] rounded-md border border-border bg-bg-card px-2 text-[10px] text-text-primary"
+                  />
+                  <input
+                    value={band.label}
+                    onChange={(e) => {
+                      const bands = [...formula.bands];
+                      bands[i] = { ...band, label: e.target.value };
+                      onChange({ ...formula, bands });
+                    }}
+                    placeholder="Label (e.g. A)"
+                    className="h-[30px] rounded-md border border-border bg-bg-card px-2 text-[10px] text-text-primary"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => onChange({ ...formula, bands: formula.bands.filter((_, bi) => bi !== i) })}
+                    aria-label={`Remove band ${i + 1}`}
+                    className="grid h-[30px] w-[30px] place-items-center rounded text-text-muted hover:bg-danger-bg hover:text-danger"
+                  >
+                    <X size={13} strokeWidth={1.8} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const empty: GradeBand = { min: 0, max: 0, label: "" };
+                onChange({ ...formula, bands: [...formula.bands, empty] });
+              }}
+              className="h-7 w-fit rounded-md border border-dashed border-border px-2.5 text-[10px] font-medium text-primary hover:bg-primary-bg"
+            >
+              + Add band
+            </button>
+          </div>
+        </>
+      )}
+
+      {formula.kind === "position" && (
+        <label className="grid gap-1.5 text-[10px] text-text-muted">
+          Position by
+          <select
+            value={formula.of}
+            onChange={(e) => onChange({ ...formula, of: e.target.value })}
+            className={`${selectClass} max-w-[180px]`}
+          >
+            <option value="">Select a field…</option>
+            {otherFields.map((of) => (
+              <option key={of.id} value={of.id}>
+                {of.name || "Untitled field"}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+    </div>
   );
 }

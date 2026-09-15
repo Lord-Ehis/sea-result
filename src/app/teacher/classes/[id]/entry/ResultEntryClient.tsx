@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { saveClassResults } from "./actions";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
+import { computeOwnFields } from "@/lib/template-compute";
 
 type StudentRow = {
   id: string;
@@ -57,11 +58,20 @@ export function ResultEntryClient({
   const locked = overallStatus === "Submitted";
   const rejectionNote = students.find((s) => s.rejectionNote)?.rejectionNote;
 
+  const computedByStudent = useMemo(() => {
+    const map = new Map<string, Record<string, string>>();
+    for (const s of students) map.set(s.id, computeOwnFields(fields, entries[s.id] ?? {}));
+    return map;
+  }, [students, fields, entries]);
+
+  // Position fields only get a value at publish time — they shouldn't
+  // block "complete" status, unlike every other field kind.
+  const requiredFields = useMemo(() => fields.filter((f) => f.formula?.kind !== "position"), [fields]);
   const completedCount = useMemo(
-    () => students.filter((s) => fields.every((f) => (entries[s.id]?.[f.id] ?? "").trim() !== "")).length,
-    [students, fields, entries],
+    () => students.filter((s) => requiredFields.every((f) => (computedByStudent.get(s.id)?.[f.id] ?? "").trim() !== "")).length,
+    [students, requiredFields, computedByStudent],
   );
-  const allComplete = fields.length > 0 && completedCount === students.length;
+  const allComplete = requiredFields.length > 0 && completedCount === students.length;
 
   function setValue(studentId: string, fieldId: string, value: string) {
     setEntries((prev) => ({ ...prev, [studentId]: { ...prev[studentId], [fieldId]: value } }));
@@ -167,6 +177,17 @@ export function ResultEntryClient({
                       className:
                         "h-[34px] w-full min-w-[110px] rounded-md border border-border bg-bg-card px-2 text-caption text-text-primary disabled:bg-bg-page disabled:text-text-muted",
                     };
+                    if (f.type === "Computed") {
+                      const isPosition = f.formula?.kind === "position";
+                      const computedValue = computedByStudent.get(s.id)?.[f.id] ?? "";
+                      return (
+                        <td key={f.id} className="px-3 py-2">
+                          <div className="flex h-[34px] w-full min-w-[110px] items-center rounded-md border border-dashed border-border bg-bg-page px-2 text-caption text-text-secondary">
+                            {isPosition ? <span className="italic text-text-muted">At publish</span> : computedValue || "—"}
+                          </div>
+                        </td>
+                      );
+                    }
                     return (
                       <td key={f.id} className="px-3 py-2">
                         {f.type === "Number" ? (

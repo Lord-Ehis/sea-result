@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { createAndSendNotification } from "@/lib/notifications";
+import { computeOwnFields, computePositions } from "@/lib/template-compute";
+import type { TemplateField } from "@/app/admin/result-templates/actions";
 
 async function requireSchoolAdmin() {
   const session = await auth();
@@ -15,27 +17,40 @@ async function requireSchoolAdmin() {
 
 export async function updateResultValue(resultId: string, fieldId: string, value: string) {
   const { schoolId } = await requireSchoolAdmin();
-  const result = await prisma.result.findFirst({ where: { id: resultId, schoolId } });
+  const result = await prisma.result.findFirst({ where: { id: resultId, schoolId }, include: { template: true } });
   if (!result) throw new Error("Result not found.");
 
-  const data = { ...((result.data as Record<string, string>) ?? {}), [fieldId]: value };
+  const fields = Array.isArray(result.template.fields) ? (result.template.fields as unknown as TemplateField[]) : [];
+  const raw = { ...((result.data as Record<string, string>) ?? {}), [fieldId]: value };
+  const data = computeOwnFields(fields, raw);
   await prisma.result.update({ where: { id: resultId }, data: { data } });
 }
 
 export async function publishBatch(templateId: string) {
   const { schoolId, userId } = await requireSchoolAdmin();
 
-  const rows = await prisma.result.findMany({
-    where: { schoolId, templateId, status: "SUBMITTED" },
-    include: { student: true },
-  });
+  const [template, rows] = await Promise.all([
+    prisma.resultTemplate.findFirst({ where: { id: templateId, schoolId } }),
+    prisma.result.findMany({
+      where: { schoolId, templateId, status: "SUBMITTED" },
+      include: { student: true },
+    }),
+  ]);
   if (rows.length === 0) throw new Error("Nothing to publish.");
 
+  const fields = Array.isArray(template?.fields) ? (template.fields as unknown as TemplateField[]) : [];
+  const ownComputed = rows.map((r) => computeOwnFields(fields, (r.data as Record<string, string>) ?? {}));
+  const finalData = computePositions(fields, ownComputed);
+
   const now = new Date();
-  await prisma.result.updateMany({
-    where: { id: { in: rows.map((r) => r.id) } },
-    data: { status: "PUBLISHED", approvedByUserId: userId, approvedAt: now, publishedAt: now },
-  });
+  await prisma.$transaction(
+    rows.map((r, i) =>
+      prisma.result.update({
+        where: { id: r.id },
+        data: { data: finalData[i], status: "PUBLISHED", approvedByUserId: userId, approvedAt: now, publishedAt: now },
+      }),
+    ),
+  );
 
   // Sent after the DB update commits — these are network calls and don't
   // belong inside the transaction. Each notification records its own

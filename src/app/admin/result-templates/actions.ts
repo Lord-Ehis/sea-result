@@ -5,10 +5,17 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+export type GradeBand = { min: number; max: number; label: string };
+export type ComputedFormula =
+  | { kind: "sum"; of: string[] }
+  | { kind: "average"; of: string[] }
+  | { kind: "grade"; of: string; bands: GradeBand[] }
+  | { kind: "position"; of: string };
 export type TemplateField = {
   id: string;
   name: string;
-  type: "Number" | "Text" | "Dropdown" | "Rating scale";
+  type: "Number" | "Text" | "Dropdown" | "Rating scale" | "Computed";
+  formula?: ComputedFormula;
 };
 
 async function requireSchoolAdmin() {
@@ -28,10 +35,19 @@ export async function createTemplate(name: string) {
   return template.id;
 }
 
+const gradeBandSchema = z.object({ min: z.number(), max: z.number(), label: z.string() });
+const formulaSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("sum"), of: z.array(z.string()) }),
+  z.object({ kind: z.literal("average"), of: z.array(z.string()) }),
+  z.object({ kind: z.literal("grade"), of: z.string(), bands: z.array(gradeBandSchema) }),
+  z.object({ kind: z.literal("position"), of: z.string() }),
+]);
+
 const fieldSchema = z.object({
   id: z.string(),
   name: z.string(),
-  type: z.enum(["Number", "Text", "Dropdown", "Rating scale"]),
+  type: z.enum(["Number", "Text", "Dropdown", "Rating scale", "Computed"]),
+  formula: formulaSchema.optional(),
 });
 
 const saveTemplateSchema = z.object({
