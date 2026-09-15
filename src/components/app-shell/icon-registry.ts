@@ -13,6 +13,7 @@ import {
   BarChart3,
   GraduationCap,
   UserPlus,
+  Layers,
   type LucideIcon,
 } from "lucide-react";
 import type { IconName } from "./types";
@@ -36,4 +37,5 @@ export const iconRegistry: Record<IconName, LucideIcon> = {
   BarChart3,
   GraduationCap,
   UserPlus,
+  Layers,
 };

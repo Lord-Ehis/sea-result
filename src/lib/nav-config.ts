@@ -9,6 +9,7 @@ export const ownerNavItems: NavItem[] = [
 export const schoolAdminNavItems: NavItem[] = [
   { label: "Dashboard", href: "/admin/dashboard", icon: "LayoutGrid" },
   { label: "Students", href: "/admin/students", icon: "Users" },
+  { label: "Classes", href: "/admin/classes", icon: "Layers" },
   { label: "Result templates", href: "/admin/result-templates", icon: "FileText" },
   { label: "Results", href: "/admin/results", icon: "FileCheck" },
   { label: "Billing", href: "/admin/billing", icon: "CreditCard" },

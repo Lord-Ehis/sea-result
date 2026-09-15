@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { defaultSessionLabel } from "@/lib/academic-term";
 
 async function requireSchoolAdmin() {
   const session = await auth();
@@ -70,7 +71,7 @@ export async function createStudent(formData: FormData) {
         schoolId,
         campusId: campus.id,
         name: parsed.newClassName,
-        session: "2025/2026",
+        session: defaultSessionLabel(),
       },
     });
     classId = newClass.id;
