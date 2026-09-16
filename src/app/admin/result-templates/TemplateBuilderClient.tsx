@@ -3,7 +3,9 @@
 import { useMemo, useState, useTransition } from "react";
 import { FileText, GripVertical, ChevronUp, ChevronDown, X, Plus, Check } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { createTemplate, saveTemplate, type TemplateField, type ComputedFormula, type GradeBand } from "./actions";
+import { createTemplate, saveTemplate, type TemplateField, type ComputedFormula, type GridConfig } from "./actions";
+import { GradeBandsEditor } from "./GradeBandsEditor";
+import { GridFieldConfig } from "./GridFieldConfig";
 
 type ClassOption = { id: string; name: string };
 type Template = {
@@ -23,7 +25,7 @@ function scopeOf(t: Template): Scope {
   return "ALL";
 }
 
-const FIELD_TYPES: TemplateField["type"][] = ["Number", "Text", "Dropdown", "Rating scale", "Computed"];
+const FIELD_TYPES: TemplateField["type"][] = ["Number", "Text", "Dropdown", "Rating scale", "Computed", "Grid"];
 
 const FORMULA_LABEL: Record<ComputedFormula["kind"], string> = {
   sum: "Total (sum)",
@@ -31,6 +33,9 @@ const FORMULA_LABEL: Record<ComputedFormula["kind"], string> = {
   grade: "Grade",
   position: "Position",
   cumulative: "Cumulative (across terms)",
+  // Never chosen via the builder's own formula dropdown — only synthesized
+  // internally for a Grid field's per-subject Remarks column.
+  remarksLookup: "Remarks lookup",
   promotion: "Promotion status",
 };
 
@@ -38,6 +43,7 @@ function defaultFormula(kind: ComputedFormula["kind"]): ComputedFormula {
   if (kind === "grade") return { kind, of: "", bands: [] };
   if (kind === "position") return { kind, of: "" };
   if (kind === "cumulative") return { kind, of: "", aggregate: "sum" };
+  if (kind === "remarksLookup") return { kind, of: "", map: [] };
   if (kind === "promotion") {
     return {
       kind,
@@ -53,8 +59,62 @@ function defaultFormula(kind: ComputedFormula["kind"]): ComputedFormula {
   return { kind, of: [] };
 }
 
+function defaultGridConfig(): GridConfig {
+  return {
+    subjects: [],
+    rawColumns: [
+      { id: crypto.randomUUID(), name: "1st CA", maxMark: 10 },
+      { id: crypto.randomUUID(), name: "2nd CA", maxMark: 10 },
+      { id: crypto.randomUUID(), name: "3rd CA", maxMark: 10 },
+      { id: crypto.randomUUID(), name: "Exam", maxMark: 70 },
+    ],
+    gradeBands: [],
+    remarksMap: [],
+    includeCumulative: false,
+  };
+}
+
 function previewValue(field: TemplateField) {
   const n = field.name.toLowerCase();
+  if (field.type === "Grid") {
+    const grid = field.grid;
+    if (!grid || grid.subjects.length === 0 || grid.rawColumns.length === 0) {
+      return <span className="text-[9px] italic text-[#8a99a2]">Configure subjects and score columns below.</span>;
+    }
+    const sampleSubjects = grid.subjects.slice(0, 3);
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-[8px]">
+          <thead>
+            <tr className="text-left text-[#8b9aa3]">
+              <th className="py-1 pr-2 font-normal">Subject</th>
+              {grid.rawColumns.map((c) => (
+                <th key={c.id} className="py-1 pr-2 text-right font-normal">
+                  {c.name || "—"}
+                </th>
+              ))}
+              <th className="py-1 pr-2 text-right font-normal">Total</th>
+              <th className="py-1 text-right font-normal">Grade</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sampleSubjects.map((s, si) => (
+              <tr key={s.id} className="border-t border-[#e9edef]">
+                <td className="py-1.5 pr-2 text-[#637781]">{s.name || "Untitled subject"}</td>
+                {grid.rawColumns.map((c, ci) => (
+                  <td key={c.id} className="py-1.5 pr-2 text-right font-medium text-[#354b58]">
+                    {7 + ((si + ci) % 3)}
+                  </td>
+                ))}
+                <td className="py-1.5 pr-2 text-right font-medium text-[#354b58]">{80 + si * 4}</td>
+                <td className="py-1.5 text-right font-medium text-[#354b58]">{grid.gradeBands[0]?.label || "A"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
   if (field.type === "Computed") {
     const formula = field.formula;
     return (
@@ -138,7 +198,14 @@ export function TemplateBuilderClient({
     if (!selected) return;
     updateFields(
       selected.fields.map((x) =>
-        x.id === fieldId ? { ...x, type, formula: type === "Computed" ? (x.formula ?? defaultFormula("sum")) : undefined } : x,
+        x.id === fieldId
+          ? {
+              ...x,
+              type,
+              formula: type === "Computed" ? (x.formula ?? defaultFormula("sum")) : undefined,
+              grid: type === "Grid" ? (x.grid ?? defaultGridConfig()) : undefined,
+            }
+          : x,
       ),
     );
   }
@@ -146,6 +213,11 @@ export function TemplateBuilderClient({
   function updateFieldFormula(fieldId: string, formula: ComputedFormula) {
     if (!selected) return;
     updateFields(selected.fields.map((x) => (x.id === fieldId ? { ...x, formula } : x)));
+  }
+
+  function updateFieldGrid(fieldId: string, grid: GridConfig) {
+    if (!selected) return;
+    updateFields(selected.fields.map((x) => (x.id === fieldId ? { ...x, grid } : x)));
   }
 
   function handleNewTemplate() {
@@ -405,7 +477,11 @@ export function TemplateBuilderClient({
                         className="h-[30px] rounded-md border border-border bg-bg-page px-1.5 text-[10px] text-text-secondary"
                       >
                         {FIELD_TYPES.map((type) => (
-                          <option key={type} value={type}>
+                          <option
+                            key={type}
+                            value={type}
+                            disabled={type === "Grid" && f.type !== "Grid" && selected.fields.some((x) => x.type === "Grid")}
+                          >
                             {type}
                           </option>
                         ))}
@@ -445,6 +521,9 @@ export function TemplateBuilderClient({
                         otherFields={selected.fields.filter((x) => x.id !== f.id)}
                         onChange={(formula) => updateFieldFormula(f.id, formula)}
                       />
+                    )}
+                    {f.type === "Grid" && (
+                      <GridFieldConfig grid={f.grid ?? defaultGridConfig()} onChange={(grid) => updateFieldGrid(f.id, grid)} />
                     )}
                     </div>
                   ))}
@@ -611,65 +690,7 @@ function FormulaConfig({
               ))}
             </select>
           </label>
-          <div className="grid gap-1.5">
-            <span className="text-[10px] text-text-muted">Grade bands</span>
-            <div className="grid gap-1.5">
-              {formula.bands.map((band, i) => (
-                <div key={i} className="grid grid-cols-[64px_64px_1fr_auto] items-center gap-1.5">
-                  <input
-                    type="number"
-                    value={band.min}
-                    onChange={(e) => {
-                      const bands = [...formula.bands];
-                      bands[i] = { ...band, min: Number(e.target.value) };
-                      onChange({ ...formula, bands });
-                    }}
-                    placeholder="Min"
-                    className="h-[30px] rounded-md border border-border bg-bg-card px-2 text-[10px] text-text-primary"
-                  />
-                  <input
-                    type="number"
-                    value={band.max}
-                    onChange={(e) => {
-                      const bands = [...formula.bands];
-                      bands[i] = { ...band, max: Number(e.target.value) };
-                      onChange({ ...formula, bands });
-                    }}
-                    placeholder="Max"
-                    className="h-[30px] rounded-md border border-border bg-bg-card px-2 text-[10px] text-text-primary"
-                  />
-                  <input
-                    value={band.label}
-                    onChange={(e) => {
-                      const bands = [...formula.bands];
-                      bands[i] = { ...band, label: e.target.value };
-                      onChange({ ...formula, bands });
-                    }}
-                    placeholder="Label (e.g. A)"
-                    className="h-[30px] rounded-md border border-border bg-bg-card px-2 text-[10px] text-text-primary"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => onChange({ ...formula, bands: formula.bands.filter((_, bi) => bi !== i) })}
-                    aria-label={`Remove band ${i + 1}`}
-                    className="grid h-[30px] w-[30px] place-items-center rounded text-text-muted hover:bg-danger-bg hover:text-danger"
-                  >
-                    <X size={13} strokeWidth={1.8} />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                const empty: GradeBand = { min: 0, max: 0, label: "" };
-                onChange({ ...formula, bands: [...formula.bands, empty] });
-              }}
-              className="h-7 w-fit rounded-md border border-dashed border-border px-2.5 text-[10px] font-medium text-primary hover:bg-primary-bg"
-            >
-              + Add band
-            </button>
-          </div>
+          <GradeBandsEditor bands={formula.bands} onChange={(bands) => onChange({ ...formula, bands })} />
         </>
       )}
 

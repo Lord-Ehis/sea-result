@@ -6,12 +6,25 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export type GradeBand = { min: number; max: number; label: string };
+export type GridSubject = { id: string; name: string };
+export type GridRawColumn = { id: string; name: string; maxMark: number };
+export type GridRemarksEntry = { grade: string; remarks: string };
+export type GridConfig = {
+  subjects: GridSubject[];
+  rawColumns: GridRawColumn[];
+  gradeBands: GradeBand[];
+  remarksMap: GridRemarksEntry[];
+  // Gates the Cumulative Result columns (First/Second/Third Term,
+  // Cumulative Total/Average/Grade/Remarks/Position) — a later round.
+  includeCumulative: boolean;
+};
 export type ComputedFormula =
   | { kind: "sum"; of: string[] }
   | { kind: "average"; of: string[] }
   | { kind: "grade"; of: string; bands: GradeBand[] }
   | { kind: "position"; of: string }
   | { kind: "cumulative"; of: string; aggregate: "sum" | "average" }
+  | { kind: "remarksLookup"; of: string; map: GridRemarksEntry[] }
   | {
       kind: "promotion";
       subjectFields: string[];
@@ -25,8 +38,13 @@ export type ComputedFormula =
 export type TemplateField = {
   id: string;
   name: string;
-  type: "Number" | "Text" | "Dropdown" | "Rating scale" | "Computed";
+  type: "Number" | "Text" | "Dropdown" | "Rating scale" | "Computed" | "Grid";
   formula?: ComputedFormula;
+  // Present iff type === "Grid" — a subjects × columns table (e.g. the
+  // Cognitive Domain section of a Nigerian report card), stored as one
+  // TemplateField so it slots into the existing flat-field list; its cell
+  // values live in Result.data under composite keys (see src/lib/grid-compute.ts).
+  grid?: GridConfig;
 };
 
 async function requireSchoolAdmin() {
@@ -47,12 +65,14 @@ export async function createTemplate(name: string) {
 }
 
 const gradeBandSchema = z.object({ min: z.number(), max: z.number(), label: z.string() });
+const gridRemarksEntrySchema = z.object({ grade: z.string(), remarks: z.string() });
 const formulaSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("sum"), of: z.array(z.string()) }),
   z.object({ kind: z.literal("average"), of: z.array(z.string()) }),
   z.object({ kind: z.literal("grade"), of: z.string(), bands: z.array(gradeBandSchema) }),
   z.object({ kind: z.literal("position"), of: z.string() }),
   z.object({ kind: z.literal("cumulative"), of: z.string(), aggregate: z.enum(["sum", "average"]) }),
+  z.object({ kind: z.literal("remarksLookup"), of: z.string(), map: z.array(gridRemarksEntrySchema) }),
   z.object({
     kind: z.literal("promotion"),
     subjectFields: z.array(z.string()),
@@ -65,11 +85,20 @@ const formulaSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
+const gridConfigSchema = z.object({
+  subjects: z.array(z.object({ id: z.string(), name: z.string() })),
+  rawColumns: z.array(z.object({ id: z.string(), name: z.string(), maxMark: z.number() })),
+  gradeBands: z.array(gradeBandSchema),
+  remarksMap: z.array(gridRemarksEntrySchema),
+  includeCumulative: z.boolean(),
+});
+
 const fieldSchema = z.object({
   id: z.string(),
   name: z.string(),
-  type: z.enum(["Number", "Text", "Dropdown", "Rating scale", "Computed"]),
+  type: z.enum(["Number", "Text", "Dropdown", "Rating scale", "Computed", "Grid"]),
   formula: formulaSchema.optional(),
+  grid: gridConfigSchema.optional(),
 });
 
 const saveTemplateSchema = z.object({
@@ -79,7 +108,10 @@ const saveTemplateSchema = z.object({
   level: z.string().trim().optional(),
   term: z.string().trim().optional(),
   fields: z.array(fieldSchema),
-});
+}).refine(
+  (input) => input.fields.filter((f) => f.type === "Grid").length <= 1,
+  { message: "Only one Grid field is supported per template.", path: ["fields"] },
+);
 
 export async function saveTemplate(input: {
   id: string;

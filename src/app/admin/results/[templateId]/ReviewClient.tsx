@@ -5,17 +5,14 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Check, Users, CalendarDays } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
+import { GridEntryTable } from "@/components/results/GridEntryTable";
 import { updateResultValue, publishBatch, sendBackBatch } from "./actions";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
 import { computeOwnFields } from "@/lib/template-compute";
+import { expandThisTermFields, gridRawKeys } from "@/lib/grid-compute";
+import { computedAtPublish } from "@/lib/result-field-display";
 
 type StudentRow = { resultId: string; name: string; studentCode: string; data: Record<string, string> };
-
-// Position needs the whole class's batch; cumulative needs prior terms'
-// published history. Neither is available before publish.
-function computedAtPublish(field: TemplateField) {
-  return field.formula?.kind === "position" || field.formula?.kind === "cumulative";
-}
 
 export function ReviewClient({
   templateId,
@@ -42,25 +39,33 @@ export function ReviewClient({
   const [noteError, setNoteError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedResultId, setSelectedResultId] = useState<string | null>(students[0]?.resultId ?? null);
   const [pending, startTransition] = useTransition();
 
-  const requiredFields = useMemo(() => fields.filter((f) => !computedAtPublish(f)), [fields]);
+  const gridField = useMemo(() => fields.find((f) => f.type === "Grid" && f.grid), [fields]);
+  const flatFields = useMemo(() => fields.filter((f) => f.type !== "Grid"), [fields]);
+  const expandedFields = useMemo(() => expandThisTermFields(fields), [fields]);
+
+  const requiredKeys = useMemo(
+    () => [...flatFields.filter((f) => !computedAtPublish(f)).map((f) => f.id), ...(gridField ? gridRawKeys(gridField) : [])],
+    [flatFields, gridField],
+  );
   const emptyCount = useMemo(
-    () => students.reduce((n, s) => n + requiredFields.filter((f) => !(entries[s.resultId]?.[f.id] ?? "").trim()).length, 0),
-    [students, requiredFields, entries],
+    () => students.reduce((n, s) => n + requiredKeys.filter((k) => !(entries[s.resultId]?.[k] ?? "").trim()).length, 0),
+    [students, requiredKeys, entries],
   );
 
-  function handleFieldChange(resultId: string, fieldId: string, value: string) {
-    setEntries((prev) => ({ ...prev, [resultId]: { ...prev[resultId], [fieldId]: value } }));
+  function handleFieldChange(resultId: string, key: string, value: string) {
+    setEntries((prev) => ({ ...prev, [resultId]: { ...prev[resultId], [key]: value } }));
   }
 
-  function handleFieldBlur(resultId: string, fieldId: string, value: string) {
+  function handleFieldBlur(resultId: string, key: string, value: string) {
     startTransition(async () => {
       try {
-        await updateResultValue(resultId, fieldId, value);
+        await updateResultValue(resultId, key, value);
         // Mirrors the server's own recompute so Total/Grade reflect the
         // edit immediately, without waiting on a full page reload.
-        setEntries((prev) => ({ ...prev, [resultId]: computeOwnFields(fields, { ...prev[resultId], [fieldId]: value }) }));
+        setEntries((prev) => ({ ...prev, [resultId]: computeOwnFields(expandedFields, { ...prev[resultId], [key]: value }) }));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not save correction.");
       }
@@ -96,6 +101,13 @@ export function ReviewClient({
       }
     });
   }
+
+  const selectedStudent = students.find((s) => s.resultId === selectedResultId) ?? null;
+  const selectedBlankKeys = useMemo(() => {
+    if (!selectedStudent) return new Set<string>();
+    const data = entries[selectedStudent.resultId] ?? {};
+    return new Set(requiredKeys.filter((k) => !(data[k] ?? "").trim()));
+  }, [selectedStudent, entries, requiredKeys]);
 
   return (
     <>
@@ -155,60 +167,136 @@ export function ReviewClient({
         </span>
       </div>
 
-      <section className="overflow-hidden rounded-md border border-border bg-bg-card">
-        <div className="border-b border-border px-5 py-5">
-          <h2 className="m-0 text-heading font-medium text-text-primary">Student scores</h2>
-          <p className="mt-1.5 text-caption text-text-muted">{students.length} students submitted</p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left" style={{ minWidth: 260 + fields.length * 150 }}>
-            <thead className="bg-[#fafbfb]">
-              <tr>
-                <th className="border-b border-border px-5 py-3.5 text-[10px] font-medium uppercase tracking-wide text-text-muted">Student</th>
-                {fields.map((f) => (
-                  <th key={f.id} className="border-b border-border px-3 py-3.5 text-[10px] font-medium uppercase tracking-wide text-text-muted">
-                    {f.name}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {students.map((s) => (
-                <tr key={s.resultId} className="border-b border-[#f0f2f3] last:border-0">
-                  <td className="px-5 py-3">
-                    <strong className="block text-body font-medium text-text-primary">{s.name}</strong>
-                    <span className="text-caption text-text-muted">{s.studentCode}</span>
-                  </td>
-                  {fields.map((f) => {
-                    const value = entries[s.resultId]?.[f.id] ?? "";
-                    const blank = !value.trim();
-                    if (f.type === "Computed") {
+      {gridField ? (
+        <section className="overflow-hidden rounded-md border border-border bg-bg-card">
+          <div className="border-b border-border px-5 py-5">
+            <h2 className="m-0 text-heading font-medium text-text-primary">Student scores</h2>
+            <p className="mt-1.5 text-caption text-text-muted">{students.length} students submitted</p>
+          </div>
+          <div className="grid gap-0 lg:grid-cols-[220px_1fr]">
+            <div className="max-h-[560px] overflow-y-auto border-b border-border lg:border-b-0 lg:border-r">
+              {students.map((s) => {
+                const data = entries[s.resultId] ?? {};
+                const blankCount = requiredKeys.filter((k) => !(data[k] ?? "").trim()).length;
+                return (
+                  <button
+                    key={s.resultId}
+                    type="button"
+                    onClick={() => setSelectedResultId(s.resultId)}
+                    className={`flex w-full items-center justify-between gap-2 px-4 py-3 text-left ${
+                      s.resultId === selectedResultId ? "bg-primary-bg text-primary" : "text-text-secondary hover:bg-bg-page"
+                    }`}
+                  >
+                    <span className="min-w-0">
+                      <strong className="block truncate text-caption font-medium">{s.name}</strong>
+                      <span className="block truncate text-[10px] text-text-muted">{s.studentCode}</span>
+                    </span>
+                    <span className={`h-1.5 w-1.5 flex-none rounded-full ${blankCount === 0 ? "bg-success" : "bg-warning"}`} />
+                  </button>
+                );
+              })}
+            </div>
+            <div className="p-5">
+              {selectedStudent && (
+                <>
+                  {flatFields.length > 0 && (
+                    <div className="mb-5 grid gap-3 sm:grid-cols-2">
+                      {flatFields.map((f) => {
+                        const value = entries[selectedStudent.resultId]?.[f.id] ?? "";
+                        const blank = !value.trim();
+                        return (
+                          <label key={f.id} className="grid gap-1.5 text-[10px] text-text-muted">
+                            {f.name}
+                            {f.type === "Computed" ? (
+                              <div className="flex h-[34px] w-full min-w-[110px] items-center rounded-md border border-dashed border-border bg-bg-page px-2 text-caption text-text-secondary">
+                                {computedAtPublish(f) ? <span className="italic text-text-muted">At publish</span> : value || "—"}
+                              </div>
+                            ) : (
+                              <input
+                                type="text"
+                                value={value}
+                                onChange={(e) => handleFieldChange(selectedStudent.resultId, f.id, e.target.value)}
+                                onBlur={(e) => handleFieldBlur(selectedStudent.resultId, f.id, e.target.value)}
+                                className={`h-[34px] w-full min-w-[110px] rounded-md border px-2 text-caption text-text-primary ${blank ? "border-warning/50 bg-warning-bg" : "border-border bg-bg-card"}`}
+                              />
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <GridEntryTable
+                    field={gridField}
+                    data={entries[selectedStudent.resultId] ?? {}}
+                    computed={entries[selectedStudent.resultId] ?? {}}
+                    onChange={(key, value) => {
+                      handleFieldChange(selectedStudent.resultId, key, value);
+                      handleFieldBlur(selectedStudent.resultId, key, value);
+                    }}
+                    locked={pending}
+                    blankKeys={selectedBlankKeys}
+                  />
+                </>
+              )}
+            </div>
+          </div>
+        </section>
+      ) : (
+        <section className="overflow-hidden rounded-md border border-border bg-bg-card">
+          <div className="border-b border-border px-5 py-5">
+            <h2 className="m-0 text-heading font-medium text-text-primary">Student scores</h2>
+            <p className="mt-1.5 text-caption text-text-muted">{students.length} students submitted</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-left" style={{ minWidth: 260 + fields.length * 150 }}>
+              <thead className="bg-[#fafbfb]">
+                <tr>
+                  <th className="border-b border-border px-5 py-3.5 text-[10px] font-medium uppercase tracking-wide text-text-muted">Student</th>
+                  {fields.map((f) => (
+                    <th key={f.id} className="border-b border-border px-3 py-3.5 text-[10px] font-medium uppercase tracking-wide text-text-muted">
+                      {f.name}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {students.map((s) => (
+                  <tr key={s.resultId} className="border-b border-[#f0f2f3] last:border-0">
+                    <td className="px-5 py-3">
+                      <strong className="block text-body font-medium text-text-primary">{s.name}</strong>
+                      <span className="text-caption text-text-muted">{s.studentCode}</span>
+                    </td>
+                    {fields.map((f) => {
+                      const value = entries[s.resultId]?.[f.id] ?? "";
+                      const blank = !value.trim();
+                      if (f.type === "Computed") {
+                        return (
+                          <td key={f.id} className="px-3 py-2">
+                            <div className="flex h-[34px] w-full min-w-[110px] items-center rounded-md border border-dashed border-border bg-bg-page px-2 text-caption text-text-secondary">
+                              {computedAtPublish(f) ? <span className="italic text-text-muted">At publish</span> : value || "—"}
+                            </div>
+                          </td>
+                        );
+                      }
                       return (
                         <td key={f.id} className="px-3 py-2">
-                          <div className="flex h-[34px] w-full min-w-[110px] items-center rounded-md border border-dashed border-border bg-bg-page px-2 text-caption text-text-secondary">
-                            {computedAtPublish(f) ? <span className="italic text-text-muted">At publish</span> : value || "—"}
-                          </div>
+                          <input
+                            type="text"
+                            value={value}
+                            onChange={(e) => handleFieldChange(s.resultId, f.id, e.target.value)}
+                            onBlur={(e) => handleFieldBlur(s.resultId, f.id, e.target.value)}
+                            className={`h-[34px] w-full min-w-[110px] rounded-md border px-2 text-caption text-text-primary ${blank ? "border-warning/50 bg-warning-bg" : "border-border bg-bg-card"}`}
+                          />
                         </td>
                       );
-                    }
-                    return (
-                      <td key={f.id} className="px-3 py-2">
-                        <input
-                          type="text"
-                          value={value}
-                          onChange={(e) => handleFieldChange(s.resultId, f.id, e.target.value)}
-                          onBlur={(e) => handleFieldBlur(s.resultId, f.id, e.target.value)}
-                          className={`h-[34px] w-full min-w-[110px] rounded-md border px-2 text-caption text-text-primary ${blank ? "border-warning/50 bg-warning-bg" : "border-border bg-bg-card"}`}
-                        />
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       <section className="mt-5 rounded-md border border-border bg-bg-card p-5">
         <h2 className="m-0 text-body font-medium text-text-primary">Admin notes</h2>

@@ -52,6 +52,8 @@ export function computeOwnFields(fields: TemplateField[], data: Record<string, s
       const meetsOffered = offered.length >= formula.minOffered;
       const meetsPassed = passed.length >= formula.minPassed;
       result[field.id] = compulsoryOk && overallOk && meetsOffered && meetsPassed ? "Passed" : "Failed";
+    } else if (formula.kind === "remarksLookup") {
+      result[field.id] = formula.map.find((m) => m.grade === result[formula.of])?.remarks ?? "";
     }
   }
 

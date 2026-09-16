@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { computeOwnFields } from "@/lib/template-compute";
+import { expandThisTermFields } from "@/lib/grid-compute";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
 
 async function requireTeacherForClass(classId: string) {
@@ -30,9 +31,10 @@ export async function saveClassResults(input: {
 
   const template = await prisma.resultTemplate.findFirst({ where: { id: input.templateId, schoolId: user.schoolId } });
   const fields = Array.isArray(template?.fields) ? (template.fields as unknown as TemplateField[]) : [];
+  const expandedFields = expandThisTermFields(fields);
 
   for (const entry of input.entries) {
-    const data = computeOwnFields(fields, entry.data);
+    const data = computeOwnFields(expandedFields, entry.data);
     await prisma.result.upsert({
       where: {
         studentId_templateId_term_session: {

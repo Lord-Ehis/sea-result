@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { createAndSendNotification } from "@/lib/notifications";
 import { computeOwnFields, computePositions, aggregateCumulative } from "@/lib/template-compute";
+import { expandThisTermFields } from "@/lib/grid-compute";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
 
 async function requireSchoolAdmin() {
@@ -22,7 +23,7 @@ export async function updateResultValue(resultId: string, fieldId: string, value
 
   const fields = Array.isArray(result.template.fields) ? (result.template.fields as unknown as TemplateField[]) : [];
   const raw = { ...((result.data as Record<string, string>) ?? {}), [fieldId]: value };
-  const data = computeOwnFields(fields, raw);
+  const data = computeOwnFields(expandThisTermFields(fields), raw);
   await prisma.result.update({ where: { id: resultId }, data: { data } });
 }
 
@@ -39,12 +40,18 @@ export async function publishBatch(templateId: string) {
   if (rows.length === 0) throw new Error("Nothing to publish.");
 
   const fields = Array.isArray(template?.fields) ? (template.fields as unknown as TemplateField[]) : [];
-  const ownComputed = rows.map((r) => computeOwnFields(fields, (r.data as Record<string, string>) ?? {}));
+  // Grid fields (a subjects × columns table) don't carry values directly —
+  // expand them into virtual per-subject fields first so the rest of this
+  // pipeline (which only knows about flat, single-value fields) can treat
+  // them the same as any other Computed field. For a template with no Grid
+  // field this is content-identical to `fields`.
+  const expandedFields = expandThisTermFields(fields);
+  const ownComputed = rows.map((r) => computeOwnFields(expandedFields, (r.data as Record<string, string>) ?? {}));
 
   // Cumulative fields need each student's own prior published rows for this
   // same template — only meaningful if the school reuses one template
   // across a session's terms rather than creating a new one each time.
-  const cumulativeFields = fields.filter((f) => f.type === "Computed" && f.formula?.kind === "cumulative");
+  const cumulativeFields = expandedFields.filter((f) => f.type === "Computed" && f.formula?.kind === "cumulative");
   let afterCumulative = ownComputed;
   if (cumulativeFields.length > 0) {
     const priorRows = await prisma.result.findMany({
@@ -68,10 +75,10 @@ export async function publishBatch(templateId: string) {
 
     // Lets a grade-kind field whose `of` points at a cumulative field
     // compute now that the cumulative value actually exists.
-    afterCumulative = afterCumulative.map((d) => computeOwnFields(fields, d));
+    afterCumulative = afterCumulative.map((d) => computeOwnFields(expandedFields, d));
   }
 
-  const finalData = computePositions(fields, afterCumulative);
+  const finalData = computePositions(expandedFields, afterCumulative);
 
   const now = new Date();
   await prisma.$transaction(

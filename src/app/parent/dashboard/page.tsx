@@ -50,10 +50,15 @@ export default async function ParentDashboardPage() {
           templateName: r.template.name,
           term: r.term,
           publishedAt: r.publishedAt?.toISOString() ?? null,
-          fields: (Array.isArray(r.template.fields) ? (r.template.fields as unknown as TemplateField[]) : []).map((f) => ({
-            name: f.name,
-            value: (r.data as Record<string, string>)?.[f.id] ?? "—",
-          })),
+          // Grid fields have no single data[field.id] value (their cells
+          // live under composite keys) — excluded here until the grid gets
+          // its own read-only display, a later round.
+          fields: (Array.isArray(r.template.fields) ? (r.template.fields as unknown as TemplateField[]) : [])
+            .filter((f) => f.type !== "Grid")
+            .map((f) => ({
+              name: f.name,
+              value: (r.data as Record<string, string>)?.[f.id] ?? "—",
+            })),
         })),
       };
     }),
