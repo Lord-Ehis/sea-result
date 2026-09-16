@@ -1,14 +1,27 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { lookupStudentResult, type LookupResult } from "./actions";
+import { ComparisonReport } from "@/components/results/ComparisonReport";
 
 export function LookupForm({ schoolName, slug }: { schoolName: string; slug: string }) {
   const [studentCode, setStudentCode] = useState("");
   const [fullName, setFullName] = useState("");
   const [result, setResult] = useState<LookupResult | null>(null);
+  const [comparingTemplateId, setComparingTemplateId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // Groups every published result by template, preserving the query's own
+  // publishedAt-desc order within each group (newest term first).
+  const groups = useMemo(() => {
+    const map = new Map<string, NonNullable<LookupResult["results"]>>();
+    for (const r of result?.results ?? []) {
+      if (!map.has(r.templateId)) map.set(r.templateId, []);
+      map.get(r.templateId)!.push(r);
+    }
+    return Array.from(map.values());
+  }, [result]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -83,23 +96,43 @@ export function LookupForm({ schoolName, slug }: { schoolName: string; slug: str
             <p className="m-0 rounded-md bg-success-bg px-3.5 py-3 text-caption text-success">
               Showing results for <strong>{result.studentName}</strong>.
             </p>
-            {result.results && result.results.length > 0 ? (
-              result.results.map((r, i) => (
-                <div key={i} className="rounded-md border border-border bg-bg-page p-4">
-                  <div className="mb-3 flex items-baseline justify-between gap-2">
-                    <strong className="text-body font-medium text-text-primary">{r.templateName}</strong>
-                    <span className="text-caption text-text-muted">{r.term ?? "Term not set"}</span>
-                  </div>
-                  <div className="grid gap-2">
-                    {r.fields.map((f) => (
-                      <div key={f.name} className="flex items-center justify-between gap-3 rounded-md border border-border bg-bg-card px-3 py-2.5">
-                        <span className="text-caption text-text-muted">{f.name}</span>
-                        <span className="text-body font-medium text-text-primary">{f.value}</span>
+            {groups.length > 0 ? (
+              groups.map((group, gi) => {
+                const templateId = group[0].templateId;
+                const comparing = comparingTemplateId === templateId;
+                return (
+                  <div key={gi} className="grid gap-3">
+                    {group.map((r, i) => (
+                      <div key={i} className="rounded-md border border-border bg-bg-page p-4">
+                        <div className="mb-3 flex items-baseline justify-between gap-2">
+                          <strong className="text-body font-medium text-text-primary">{r.templateName}</strong>
+                          <span className="text-caption text-text-muted">{r.term ?? "Term not set"}</span>
+                        </div>
+                        <div className="grid gap-2">
+                          {r.fields.map((f) => (
+                            <div key={f.name} className="flex items-center justify-between gap-3 rounded-md border border-border bg-bg-card px-3 py-2.5">
+                              <span className="text-caption text-text-muted">{f.name}</span>
+                              <span className="text-body font-medium text-text-primary">{f.value}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     ))}
+                    {group.length > 1 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setComparingTemplateId(comparing ? null : templateId)}
+                          className="h-9 rounded-md border border-border bg-bg-card text-caption font-medium text-primary hover:bg-primary-bg"
+                        >
+                          {comparing ? "Hide term comparison" : "Compare all terms"}
+                        </button>
+                        {comparing && <ComparisonReport terms={[...group].reverse()} />}
+                      </>
+                    )}
                   </div>
-                </div>
-              ))
+                );
+              })
             ) : (
               <p className="m-0 text-caption text-text-muted">No published results yet for this student.</p>
             )}

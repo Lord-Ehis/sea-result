@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { FileText, Plus, ChevronDown } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ComparisonReport } from "@/components/results/ComparisonReport";
 
 type ResultEntry = {
+  templateId: string;
   templateName: string;
   term: string | null;
   publishedAt: string | null;
@@ -23,12 +25,25 @@ type Child = {
 export function ParentDashboardClient({ students }: { students: Child[] }) {
   const [selectedId, setSelectedId] = useState(students[0].id);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [comparingTemplateId, setComparingTemplateId] = useState<string | null>(null);
   const selected = students.find((c) => c.id === selectedId)!;
   const recent = selected.results[0];
+
+  // Groups this child's results by template, preserving the query's own
+  // publishedAt-desc order within each group (newest term first).
+  const groups = useMemo(() => {
+    const map = new Map<string, ResultEntry[]>();
+    for (const r of selected.results) {
+      if (!map.has(r.templateId)) map.set(r.templateId, []);
+      map.get(r.templateId)!.push(r);
+    }
+    return Array.from(map.values()).filter((g) => g.length > 1);
+  }, [selected]);
 
   function selectChild(id: string) {
     setSelectedId(id);
     setExpandedIndex(null);
+    setComparingTemplateId(null);
   }
 
   return (
@@ -136,6 +151,27 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
               </div>
             ))}
           </section>
+
+          {groups.length > 0 && (
+            <div className="mt-4 grid gap-3">
+              {groups.map((group, gi) => {
+                const templateId = group[0].templateId;
+                const comparing = comparingTemplateId === templateId;
+                return (
+                  <div key={gi} className="grid gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setComparingTemplateId(comparing ? null : templateId)}
+                      className="h-9 w-fit rounded-md border border-border bg-bg-card px-3.5 text-caption font-medium text-primary hover:bg-primary-bg"
+                    >
+                      {comparing ? "Hide term comparison" : `Compare all terms · ${group[0].templateName}`}
+                    </button>
+                    {comparing && <ComparisonReport terms={[...group].reverse()} />}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </>
       )}
       <p className="mt-4 text-caption text-text-muted">Results are published by the school after teacher and admin review.</p>

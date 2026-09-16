@@ -14,6 +14,7 @@ export type LookupResult = {
   found: boolean;
   studentName?: string;
   results?: {
+    templateId: string;
     templateName: string;
     term: string | null;
     fields: { name: string; value: string }[];
@@ -50,6 +51,7 @@ export async function lookupStudentResult(input: { slug: string; studentCode: st
     found: true,
     studentName: `${student.firstName} ${student.lastName}`,
     results: publishedResults.map((r) => ({
+      templateId: r.templateId,
       templateName: r.template.name,
       term: r.term,
       fields: (Array.isArray(r.template.fields) ? (r.template.fields as unknown as TemplateField[]) : []).map((f) => ({

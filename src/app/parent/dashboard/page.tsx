@@ -46,6 +46,7 @@ export default async function ParentDashboardPage() {
         className: student.class?.name ?? "No class",
         campusName: student.campus.name,
         results: results.map((r) => ({
+          templateId: r.templateId,
           templateName: r.template.name,
           term: r.term,
           publishedAt: r.publishedAt?.toISOString() ?? null,
