@@ -44,6 +44,14 @@ export function computeOwnFields(fields: TemplateField[], data: Record<string, s
       const value = toNumber(result[formula.of]);
       const band = formula.bands.find((b) => value >= b.min && value <= b.max);
       result[field.id] = band?.label ?? "";
+    } else if (formula.kind === "promotion") {
+      const offered = formula.subjectFields.filter((id) => (result[id] ?? "").trim() !== "");
+      const passed = offered.filter((id) => toNumber(result[id]) >= formula.passMark);
+      const compulsoryOk = formula.compulsoryFields.every((id) => toNumber(result[id]) >= formula.passMark);
+      const overallOk = toNumber(result[formula.overallField]) >= formula.promotionScore;
+      const meetsOffered = offered.length >= formula.minOffered;
+      const meetsPassed = passed.length >= formula.minPassed;
+      result[field.id] = compulsoryOk && overallOk && meetsOffered && meetsPassed ? "Passed" : "Failed";
     }
   }
 

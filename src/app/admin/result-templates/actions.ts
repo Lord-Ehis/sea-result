@@ -11,7 +11,17 @@ export type ComputedFormula =
   | { kind: "average"; of: string[] }
   | { kind: "grade"; of: string; bands: GradeBand[] }
   | { kind: "position"; of: string }
-  | { kind: "cumulative"; of: string; aggregate: "sum" | "average" };
+  | { kind: "cumulative"; of: string; aggregate: "sum" | "average" }
+  | {
+      kind: "promotion";
+      subjectFields: string[];
+      compulsoryFields: string[];
+      passMark: number;
+      minOffered: number;
+      minPassed: number;
+      overallField: string;
+      promotionScore: number;
+    };
 export type TemplateField = {
   id: string;
   name: string;
@@ -43,6 +53,16 @@ const formulaSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("grade"), of: z.string(), bands: z.array(gradeBandSchema) }),
   z.object({ kind: z.literal("position"), of: z.string() }),
   z.object({ kind: z.literal("cumulative"), of: z.string(), aggregate: z.enum(["sum", "average"]) }),
+  z.object({
+    kind: z.literal("promotion"),
+    subjectFields: z.array(z.string()),
+    compulsoryFields: z.array(z.string()),
+    passMark: z.number(),
+    minOffered: z.number(),
+    minPassed: z.number(),
+    overallField: z.string(),
+    promotionScore: z.number(),
+  }),
 ]);
 
 const fieldSchema = z.object({

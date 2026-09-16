@@ -31,12 +31,25 @@ const FORMULA_LABEL: Record<ComputedFormula["kind"], string> = {
   grade: "Grade",
   position: "Position",
   cumulative: "Cumulative (across terms)",
+  promotion: "Promotion status",
 };
 
 function defaultFormula(kind: ComputedFormula["kind"]): ComputedFormula {
   if (kind === "grade") return { kind, of: "", bands: [] };
   if (kind === "position") return { kind, of: "" };
   if (kind === "cumulative") return { kind, of: "", aggregate: "sum" };
+  if (kind === "promotion") {
+    return {
+      kind,
+      subjectFields: [],
+      compulsoryFields: [],
+      passMark: 40,
+      minOffered: 1,
+      minPassed: 1,
+      overallField: "",
+      promotionScore: 40,
+    };
+  }
   return { kind, of: [] };
 }
 
@@ -545,7 +558,7 @@ function FormulaConfig({
       <label className="grid gap-1.5 text-[10px] text-text-muted">
         Formula
         <select value={formula.kind} onChange={(e) => changeKind(e.target.value as ComputedFormula["kind"])} className={`${selectClass} max-w-[180px]`}>
-          {(["sum", "average", "grade", "position", "cumulative"] as const).map((kind) => (
+          {(["sum", "average", "grade", "position", "cumulative", "promotion"] as const).map((kind) => (
             <option key={kind} value={kind}>
               {FORMULA_LABEL[kind]}
             </option>
@@ -709,6 +722,131 @@ function FormulaConfig({
           <p className="m-0 text-[10px] leading-relaxed text-text-muted">
             Adds up this field&apos;s value from every term published so far this session, using this same template — reuse
             it across terms (just update Term below) rather than creating a new one each time.
+          </p>
+        </>
+      )}
+
+      {formula.kind === "promotion" && (
+        <>
+          <div className="grid gap-1.5">
+            <span className="text-[10px] text-text-muted">Subjects</span>
+            {otherFields.length === 0 ? (
+              <p className="m-0 text-[10px] text-text-muted">Add other fields first.</p>
+            ) : (
+              <div className="grid max-h-[140px] gap-1 overflow-y-auto rounded-md border border-border bg-bg-card p-1.5">
+                {otherFields.map((of) => (
+                  <label key={of.id} className="flex cursor-pointer items-center gap-2 rounded-md p-1.5 text-[10px] text-text-secondary hover:bg-bg-page">
+                    <input
+                      type="checkbox"
+                      checked={formula.subjectFields.includes(of.id)}
+                      onChange={(e) =>
+                        onChange({
+                          ...formula,
+                          subjectFields: e.target.checked
+                            ? [...formula.subjectFields, of.id]
+                            : formula.subjectFields.filter((id) => id !== of.id),
+                          // Keep compulsory a subset of subjects.
+                          compulsoryFields: e.target.checked
+                            ? formula.compulsoryFields
+                            : formula.compulsoryFields.filter((id) => id !== of.id),
+                        })
+                      }
+                      className="h-3.5 w-3.5 accent-primary"
+                    />
+                    {of.name || "Untitled field"}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="grid gap-1.5">
+            <span className="text-[10px] text-text-muted">Compulsory subjects (must be passed individually)</span>
+            {formula.subjectFields.length === 0 ? (
+              <p className="m-0 text-[10px] text-text-muted">Pick subjects above first.</p>
+            ) : (
+              <div className="grid max-h-[140px] gap-1 overflow-y-auto rounded-md border border-border bg-bg-card p-1.5">
+                {otherFields
+                  .filter((of) => formula.subjectFields.includes(of.id))
+                  .map((of) => (
+                    <label key={of.id} className="flex cursor-pointer items-center gap-2 rounded-md p-1.5 text-[10px] text-text-secondary hover:bg-bg-page">
+                      <input
+                        type="checkbox"
+                        checked={formula.compulsoryFields.includes(of.id)}
+                        onChange={(e) =>
+                          onChange({
+                            ...formula,
+                            compulsoryFields: e.target.checked
+                              ? [...formula.compulsoryFields, of.id]
+                              : formula.compulsoryFields.filter((id) => id !== of.id),
+                          })
+                        }
+                        className="h-3.5 w-3.5 accent-primary"
+                      />
+                      {of.name || "Untitled field"}
+                    </label>
+                  ))}
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <label className="grid gap-1.5 text-[10px] text-text-muted">
+              Pass mark
+              <input
+                type="number"
+                value={formula.passMark}
+                onChange={(e) => onChange({ ...formula, passMark: Number(e.target.value) })}
+                className="h-[30px] rounded-md border border-border bg-bg-card px-2 text-[10px] text-text-primary"
+              />
+            </label>
+            <label className="grid gap-1.5 text-[10px] text-text-muted">
+              Promotion score
+              <input
+                type="number"
+                value={formula.promotionScore}
+                onChange={(e) => onChange({ ...formula, promotionScore: Number(e.target.value) })}
+                className="h-[30px] rounded-md border border-border bg-bg-card px-2 text-[10px] text-text-primary"
+              />
+            </label>
+            <label className="grid gap-1.5 text-[10px] text-text-muted">
+              Min. subjects offered
+              <input
+                type="number"
+                value={formula.minOffered}
+                onChange={(e) => onChange({ ...formula, minOffered: Number(e.target.value) })}
+                className="h-[30px] rounded-md border border-border bg-bg-card px-2 text-[10px] text-text-primary"
+              />
+            </label>
+            <label className="grid gap-1.5 text-[10px] text-text-muted">
+              Min. subjects passed
+              <input
+                type="number"
+                value={formula.minPassed}
+                onChange={(e) => onChange({ ...formula, minPassed: Number(e.target.value) })}
+                className="h-[30px] rounded-md border border-border bg-bg-card px-2 text-[10px] text-text-primary"
+              />
+            </label>
+          </div>
+
+          <label className="grid gap-1.5 text-[10px] text-text-muted">
+            Overall average field
+            <select
+              value={formula.overallField}
+              onChange={(e) => onChange({ ...formula, overallField: e.target.value })}
+              className={`${selectClass} max-w-[180px]`}
+            >
+              <option value="">Select a field…</option>
+              {otherFields.map((of) => (
+                <option key={of.id} value={of.id}>
+                  {of.name || "Untitled field"}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="m-0 text-[10px] leading-relaxed text-text-muted">
+            Passes only if every compulsory subject is individually above the pass mark, enough subjects are offered
+            and passed, and the overall average field meets the promotion score.
           </p>
         </>
       )}
