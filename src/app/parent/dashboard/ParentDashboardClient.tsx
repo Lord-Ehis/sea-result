@@ -5,6 +5,8 @@ import Link from "next/link";
 import { FileText, Plus, ChevronDown } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ComparisonReport } from "@/components/results/ComparisonReport";
+import { GridResultTable } from "@/components/results/GridResultTable";
+import type { GridResultData } from "@/lib/grid-compute";
 
 type ResultEntry = {
   templateId: string;
@@ -12,6 +14,7 @@ type ResultEntry = {
   term: string | null;
   publishedAt: string | null;
   fields: { name: string; value: string }[];
+  grids: GridResultData[];
 };
 
 type Child = {
@@ -37,7 +40,10 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
       if (!map.has(r.templateId)) map.set(r.templateId, []);
       map.get(r.templateId)!.push(r);
     }
-    return Array.from(map.values()).filter((g) => g.length > 1);
+    // Only templates with flat fields have anything for ComparisonReport to
+    // show — a Grid-only template (its grid isn't part of this comparison)
+    // would otherwise offer a "Compare all terms" button revealing nothing.
+    return Array.from(map.values()).filter((g) => g.length > 1 && g[0].fields.length > 0);
   }, [selected]);
 
   function selectChild(id: string) {
@@ -95,12 +101,19 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
             </div>
           </div>
           {recent ? (
-            <div className="grid gap-2">
-              {recent.fields.map((f) => (
-                <div key={f.name} className="flex items-center justify-between gap-3 rounded-md border border-border bg-bg-page px-3.5 py-2.5">
-                  <span className="text-caption text-text-muted">{f.name}</span>
-                  <span className="text-body font-medium text-text-primary">{f.value}</span>
+            <div className="grid gap-3">
+              {recent.fields.length > 0 && (
+                <div className="grid gap-2">
+                  {recent.fields.map((f) => (
+                    <div key={f.name} className="flex items-center justify-between gap-3 rounded-md border border-border bg-bg-page px-3.5 py-2.5">
+                      <span className="text-caption text-text-muted">{f.name}</span>
+                      <span className="text-body font-medium text-text-primary">{f.value}</span>
+                    </div>
+                  ))}
                 </div>
+              )}
+              {recent.grids.map((g, gi) => (
+                <GridResultTable key={gi} grid={g} />
               ))}
             </div>
           ) : (
@@ -139,12 +152,19 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
                   />
                 </button>
                 {expandedIndex === i && (
-                  <div className="grid gap-2 px-5 pb-4">
-                    {r.fields.map((f) => (
-                      <div key={f.name} className="flex items-center justify-between gap-3 rounded-md border border-border bg-bg-page px-3.5 py-2.5">
-                        <span className="text-caption text-text-muted">{f.name}</span>
-                        <span className="text-body font-medium text-text-primary">{f.value}</span>
+                  <div className="grid gap-3 px-5 pb-4">
+                    {r.fields.length > 0 && (
+                      <div className="grid gap-2">
+                        {r.fields.map((f) => (
+                          <div key={f.name} className="flex items-center justify-between gap-3 rounded-md border border-border bg-bg-page px-3.5 py-2.5">
+                            <span className="text-caption text-text-muted">{f.name}</span>
+                            <span className="text-body font-medium text-text-primary">{f.value}</span>
+                          </div>
+                        ))}
                       </div>
+                    )}
+                    {r.grids.map((g, gi) => (
+                      <GridResultTable key={gi} grid={g} />
                     ))}
                   </div>
                 )}

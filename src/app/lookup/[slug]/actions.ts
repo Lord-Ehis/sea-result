@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
+import { buildGridResultData, type GridResultData } from "@/lib/grid-compute";
 
 const lookupSchema = z.object({
   slug: z.string().trim().min(1),
@@ -18,6 +19,7 @@ export type LookupResult = {
     templateName: string;
     term: string | null;
     fields: { name: string; value: string }[];
+    grids: GridResultData[];
   }[];
 };
 
@@ -50,19 +52,20 @@ export async function lookupStudentResult(input: { slug: string; studentCode: st
   return {
     found: true,
     studentName: `${student.firstName} ${student.lastName}`,
-    results: publishedResults.map((r) => ({
-      templateId: r.templateId,
-      templateName: r.template.name,
-      term: r.term,
-      // Grid fields have no single data[field.id] value (their cells live
-      // under composite keys) — excluded here until the grid gets its own
-      // read-only display, a later round.
-      fields: (Array.isArray(r.template.fields) ? (r.template.fields as unknown as TemplateField[]) : [])
-        .filter((f) => f.type !== "Grid")
-        .map((f) => ({
-          name: f.name,
-          value: (r.data as Record<string, string>)?.[f.id] ?? "—",
-        })),
-    })),
+    results: publishedResults.map((r) => {
+      const templateFields = Array.isArray(r.template.fields) ? (r.template.fields as unknown as TemplateField[]) : [];
+      const data = (r.data as Record<string, string>) ?? {};
+      return {
+        templateId: r.templateId,
+        templateName: r.template.name,
+        term: r.term,
+        // Grid fields have no single data[field.id] value (their cells
+        // live under composite keys) — rendered separately via `grids`.
+        fields: templateFields
+          .filter((f) => f.type !== "Grid")
+          .map((f) => ({ name: f.name, value: data[f.id] ?? "—" })),
+        grids: buildGridResultData(templateFields, data),
+      };
+    }),
   };
 }

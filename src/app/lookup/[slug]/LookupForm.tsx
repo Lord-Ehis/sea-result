@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { lookupStudentResult, type LookupResult } from "./actions";
 import { ComparisonReport } from "@/components/results/ComparisonReport";
+import { GridResultTable } from "@/components/results/GridResultTable";
 
 export function LookupForm({ schoolName, slug }: { schoolName: string; slug: string }) {
   const [studentCode, setStudentCode] = useState("");
@@ -103,22 +104,27 @@ export function LookupForm({ schoolName, slug }: { schoolName: string; slug: str
                 return (
                   <div key={gi} className="grid gap-3">
                     {group.map((r, i) => (
-                      <div key={i} className="rounded-md border border-border bg-bg-page p-4">
-                        <div className="mb-3 flex items-baseline justify-between gap-2">
+                      <div key={i} className="grid gap-3 rounded-md border border-border bg-bg-page p-4">
+                        <div className="flex items-baseline justify-between gap-2">
                           <strong className="text-body font-medium text-text-primary">{r.templateName}</strong>
                           <span className="text-caption text-text-muted">{r.term ?? "Term not set"}</span>
                         </div>
-                        <div className="grid gap-2">
-                          {r.fields.map((f) => (
-                            <div key={f.name} className="flex items-center justify-between gap-3 rounded-md border border-border bg-bg-card px-3 py-2.5">
-                              <span className="text-caption text-text-muted">{f.name}</span>
-                              <span className="text-body font-medium text-text-primary">{f.value}</span>
-                            </div>
-                          ))}
-                        </div>
+                        {r.fields.length > 0 && (
+                          <div className="grid gap-2">
+                            {r.fields.map((f) => (
+                              <div key={f.name} className="flex items-center justify-between gap-3 rounded-md border border-border bg-bg-card px-3 py-2.5">
+                                <span className="text-caption text-text-muted">{f.name}</span>
+                                <span className="text-body font-medium text-text-primary">{f.value}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {r.grids.map((g, gi2) => (
+                          <GridResultTable key={gi2} grid={g} />
+                        ))}
                       </div>
                     ))}
-                    {group.length > 1 && (
+                    {group.length > 1 && group[0].fields.length > 0 && (
                       <>
                         <button
                           type="button"

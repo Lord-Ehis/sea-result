@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { createAndSendNotification } from "@/lib/notifications";
 import { computeOwnFields, computePositions, aggregateCumulative } from "@/lib/template-compute";
-import { expandThisTermFields } from "@/lib/grid-compute";
+import { expandThisTermFields, expandForPublish } from "@/lib/grid-compute";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
 
 async function requireSchoolAdmin() {
@@ -43,9 +43,10 @@ export async function publishBatch(templateId: string) {
   // Grid fields (a subjects × columns table) don't carry values directly —
   // expand them into virtual per-subject fields first so the rest of this
   // pipeline (which only knows about flat, single-value fields) can treat
-  // them the same as any other Computed field. For a template with no Grid
-  // field this is content-identical to `fields`.
-  const expandedFields = expandThisTermFields(fields);
+  // them the same as any other Computed field. Includes Subject Position
+  // (batch-wide, only meaningful at publish time). For a template with no
+  // Grid field this is content-identical to `fields`.
+  const expandedFields = expandForPublish(fields);
   const ownComputed = rows.map((r) => computeOwnFields(expandedFields, (r.data as Record<string, string>) ?? {}));
 
   // Cumulative fields need each student's own prior published rows for this
