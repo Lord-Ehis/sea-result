@@ -31,7 +31,8 @@ export function GridEntryTable({
   const colSpan = 1 + grid.rawColumns.length + 4 + (grid.includeCumulative ? 8 : 0);
 
   return (
-    <div className="overflow-x-auto rounded-md border border-border">
+    <>
+    <div className="hidden overflow-x-auto rounded-md border border-border lg:block">
       <table className="w-full border-collapse text-left" style={{ minWidth: 350 + grid.rawColumns.length * 90 + (grid.includeCumulative ? 630 : 0) }}>
         <thead className="bg-[#fafbfb]">
           <tr>
@@ -119,6 +120,85 @@ export function GridEntryTable({
         </tbody>
       </table>
     </div>
+
+    <div className="grid gap-3 p-4 lg:hidden">
+      {grid.subjects.length === 0 && (
+        <div className="rounded-md border border-border px-5 py-10 text-center text-body text-text-muted">
+          No subjects configured on this template yet.
+        </div>
+      )}
+      {grid.subjects.map((s) => {
+        const totalKey = gridKey(field.id, s.id, "termTotal");
+        const gradeKey = gridKey(field.id, s.id, "grade");
+        const remarksKey = gridKey(field.id, s.id, "remarks");
+        return (
+          <div key={s.id} className="rounded-md border border-border bg-bg-card p-4">
+            <strong className="block text-body font-medium text-text-primary">{s.name || "Untitled subject"}</strong>
+            <div className="mt-3 grid grid-cols-2 gap-3 border-t border-[#f0f2f3] pt-3">
+              {grid.rawColumns.map((c) => {
+                const key = gridKey(field.id, s.id, c.id);
+                const blank = blankKeys?.has(key) ?? false;
+                return (
+                  <label key={c.id} className="grid gap-1 text-[10px] text-text-muted">
+                    {c.name} / {c.maxMark}
+                    <input
+                      type="number"
+                      value={data[key] ?? ""}
+                      onChange={(e) => onChange(key, e.target.value)}
+                      disabled={locked}
+                      className={`h-[34px] w-full min-w-[68px] rounded-md border px-2 text-caption text-text-primary disabled:bg-bg-page disabled:text-text-muted ${
+                        blank ? "border-warning/50 bg-warning-bg" : "border-border bg-bg-card"
+                      }`}
+                    />
+                  </label>
+                );
+              })}
+            </div>
+            <dl className="mt-3 grid grid-cols-2 gap-3 border-t border-[#f0f2f3] pt-3 text-caption">
+              <div>
+                <dt className="text-[10px] text-text-muted">Total</dt>
+                <dd className="font-medium text-text-secondary">{computed[totalKey] || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] text-text-muted">Grade</dt>
+                <dd className="font-medium text-text-secondary">{computed[gradeKey] || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] text-text-muted">Position</dt>
+                <dd className="italic text-text-muted">At publish</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] text-text-muted">Remarks</dt>
+                <dd className="text-text-secondary">{computed[remarksKey] || "—"}</dd>
+              </div>
+            </dl>
+            {grid.includeCumulative && (
+              <div className="mt-3 rounded-md border border-dashed border-border bg-bg-page p-3">
+                <span className="text-[10px] text-text-muted">Cumulative (at publish)</span>
+                <dl className="mt-1.5 grid grid-cols-2 gap-2 text-[10px]">
+                  {[
+                    "First Term",
+                    "Second Term",
+                    "Third Term",
+                    "Cumulative Total",
+                    "Cumulative Avg",
+                    "Cumulative Grade",
+                    "Cumulative Position",
+                    "Cumulative Remarks",
+                  ].map((label) => (
+                    <div key={label}>
+                      <dt className="text-text-muted">{label}</dt>
+                      <dd className="italic text-text-muted">At publish</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+    </>
   );
 }
 
