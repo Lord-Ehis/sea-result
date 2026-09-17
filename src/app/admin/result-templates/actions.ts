@@ -45,6 +45,11 @@ export type TemplateField = {
   // TemplateField so it slots into the existing flat-field list; its cell
   // values live in Result.data under composite keys (see src/lib/grid-compute.ts).
   grid?: GridConfig;
+  // Only meaningful for type === "Rating scale". Undefined on older fields
+  // (created before this was configurable) — falls back to the original
+  // fixed 1-5 scale everywhere it's read, so already-published "3"s keep
+  // meaning "3 of 5" rather than being silently reinterpreted.
+  ratingOptions?: string[];
 };
 
 async function requireSchoolAdmin() {
@@ -99,6 +104,7 @@ const fieldSchema = z.object({
   type: z.enum(["Number", "Text", "Dropdown", "Rating scale", "Computed", "Grid"]),
   formula: formulaSchema.optional(),
   grid: gridConfigSchema.optional(),
+  ratingOptions: z.array(z.string()).optional(),
 });
 
 const saveTemplateSchema = z.object({

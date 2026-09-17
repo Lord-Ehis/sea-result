@@ -11,6 +11,7 @@ import type { TemplateField } from "@/app/admin/result-templates/actions";
 import { computeOwnFields } from "@/lib/template-compute";
 import { expandThisTermFields, gridRawKeys } from "@/lib/grid-compute";
 import { computedAtPublish } from "@/lib/result-field-display";
+import { DROPDOWN_OPTIONS, ratingOptionsFor } from "@/lib/field-options";
 
 type StudentRow = {
   id: string;
@@ -20,9 +21,6 @@ type StudentRow = {
   status: "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "PUBLISHED" | null;
   rejectionNote: string | null;
 };
-
-const DROPDOWN_OPTIONS = ["Excellent", "Very Good", "Good", "Fair", "Poor"];
-const RATING_OPTIONS = ["1", "2", "3", "4", "5"];
 
 const inputClass =
   "h-[34px] w-full min-w-[110px] rounded-md border border-border bg-bg-card px-2 text-caption text-text-primary disabled:bg-bg-page disabled:text-text-muted";
@@ -63,12 +61,13 @@ function FlatFieldControl({
     );
   }
   if (field.type === "Rating scale") {
+    const isLegacyNumericScale = !field.ratingOptions || field.ratingOptions.length === 0;
     return (
       <select value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled} className={inputClass}>
         <option value="">—</option>
-        {RATING_OPTIONS.map((opt) => (
+        {ratingOptionsFor(field).map((opt) => (
           <option key={opt} value={opt}>
-            {opt} / 5
+            {isLegacyNumericScale ? `${opt} / 5` : opt}
           </option>
         ))}
       </select>

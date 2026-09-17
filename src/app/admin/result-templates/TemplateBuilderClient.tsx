@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { createTemplate, saveTemplate, type TemplateField, type ComputedFormula, type GridConfig } from "./actions";
 import { GradeBandsEditor } from "./GradeBandsEditor";
 import { GridFieldConfig } from "./GridFieldConfig";
+import { DEFAULT_NEW_RATING_OPTIONS, ratingOptionsFor } from "@/lib/field-options";
 
 type ClassOption = { id: string; name: string };
 type Template = {
@@ -152,10 +153,19 @@ function previewValue(field: TemplateField) {
     return <span className="text-[9px] font-medium text-[#384c58]">{n.includes("grade") ? "Excellent" : "Achieved"}</span>;
   }
   if (field.type === "Rating scale") {
+    const options = ratingOptionsFor(field);
+    const selectedIndex = Math.max(0, options.length - 2); // a plausible mid/high sample choice
     return (
-      <span className="flex gap-1">
-        {[1, 1, 1, 1, 0].map((on, i) => (
-          <i key={i} className={`h-[5px] w-3 rounded-sm ${on ? "bg-primary" : "bg-[#dae9f3]"}`} />
+      <span className="flex flex-wrap gap-1">
+        {options.map((opt, i) => (
+          <span
+            key={opt}
+            className={`rounded-full px-1.5 py-0.5 text-[8px] font-medium ${
+              i === selectedIndex ? "bg-primary text-white" : "bg-[#eef2f4] text-[#8b9aa3]"
+            }`}
+          >
+            {opt}
+          </span>
         ))}
       </span>
     );
@@ -204,6 +214,7 @@ export function TemplateBuilderClient({
               type,
               formula: type === "Computed" ? (x.formula ?? defaultFormula("sum")) : undefined,
               grid: type === "Grid" ? (x.grid ?? defaultGridConfig()) : undefined,
+              ratingOptions: type === "Rating scale" ? (x.ratingOptions ?? DEFAULT_NEW_RATING_OPTIONS) : undefined,
             }
           : x,
       ),
@@ -218,6 +229,11 @@ export function TemplateBuilderClient({
   function updateFieldGrid(fieldId: string, grid: GridConfig) {
     if (!selected) return;
     updateFields(selected.fields.map((x) => (x.id === fieldId ? { ...x, grid } : x)));
+  }
+
+  function updateFieldRatingOptions(fieldId: string, ratingOptions: string[]) {
+    if (!selected) return;
+    updateFields(selected.fields.map((x) => (x.id === fieldId ? { ...x, ratingOptions } : x)));
   }
 
   function handleNewTemplate() {
@@ -525,6 +541,12 @@ export function TemplateBuilderClient({
                     {f.type === "Grid" && (
                       <GridFieldConfig grid={f.grid ?? defaultGridConfig()} onChange={(grid) => updateFieldGrid(f.id, grid)} />
                     )}
+                    {f.type === "Rating scale" && (
+                      <RatingOptionsEditor
+                        options={f.ratingOptions ?? DEFAULT_NEW_RATING_OPTIONS}
+                        onChange={(options) => updateFieldRatingOptions(f.id, options)}
+                      />
+                    )}
                     </div>
                   ))}
                 </div>
@@ -616,6 +638,73 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 const selectClass = "h-[30px] rounded-md border border-border bg-bg-card px-2 text-[10px] text-text-primary";
+
+function RatingOptionsEditor({ options, onChange }: { options: string[]; onChange: (options: string[]) => void }) {
+  function move(i: number, direction: -1 | 1) {
+    const j = i + direction;
+    if (j < 0 || j >= options.length) return;
+    const next = [...options];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  }
+
+  return (
+    <div className="grid gap-1.5 border-t border-border bg-bg-page px-3 py-3">
+      <span className="text-[10px] text-text-muted">Scale options, in order</span>
+      <div className="grid gap-1">
+        {options.map((opt, i) => (
+          <div key={i} className="grid grid-cols-[1fr_auto] items-center gap-1.5">
+            <input
+              value={opt}
+              onChange={(e) => {
+                const next = [...options];
+                next[i] = e.target.value;
+                onChange(next);
+              }}
+              placeholder="Option label"
+              className="h-[30px] min-w-0 rounded-md border border-border bg-bg-card px-2 text-[10px] text-text-primary"
+            />
+            <span className="flex items-center gap-0.5">
+              <button
+                type="button"
+                onClick={() => move(i, -1)}
+                disabled={i === 0}
+                aria-label={`Move ${opt || "option"} up`}
+                className="grid h-6 w-6 place-items-center rounded text-text-muted disabled:opacity-30"
+              >
+                <ChevronUp size={14} strokeWidth={1.8} />
+              </button>
+              <button
+                type="button"
+                onClick={() => move(i, 1)}
+                disabled={i === options.length - 1}
+                aria-label={`Move ${opt || "option"} down`}
+                className="grid h-6 w-6 place-items-center rounded text-text-muted disabled:opacity-30"
+              >
+                <ChevronDown size={14} strokeWidth={1.8} />
+              </button>
+              <button
+                type="button"
+                onClick={() => onChange(options.filter((_, oi) => oi !== i))}
+                aria-label={`Remove ${opt || "option"}`}
+                className="grid h-6 w-6 place-items-center rounded text-text-muted hover:bg-danger-bg hover:text-danger"
+              >
+                <X size={14} strokeWidth={1.8} />
+              </button>
+            </span>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange([...options, ""])}
+        className="h-7 w-fit rounded-md border border-dashed border-border px-2.5 text-[10px] font-medium text-primary hover:bg-primary-bg"
+      >
+        + Add option
+      </button>
+    </div>
+  );
+}
 
 function FormulaConfig({
   field,
