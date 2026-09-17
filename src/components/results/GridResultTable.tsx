@@ -6,7 +6,7 @@ export function GridResultTable({ grid }: { grid: GridResultData }) {
   return (
     <div className="grid gap-2">
       <strong className="text-body font-medium text-text-primary">{grid.fieldName}</strong>
-      <div className="overflow-x-auto rounded-md border border-border bg-bg-card">
+      <div className="hidden overflow-x-auto rounded-md border border-border bg-bg-card lg:block">
         <table className="w-full min-w-[520px] border-collapse text-left">
           <thead className="bg-[#fafbfb]">
             <tr>
@@ -31,6 +31,22 @@ export function GridResultTable({ grid }: { grid: GridResultData }) {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="grid gap-3 lg:hidden">
+        {grid.subjects.map((s) => (
+          <div key={s.id} className="rounded-md border border-border bg-bg-card p-4">
+            <strong className="block text-body font-medium text-text-primary">{s.name}</strong>
+            <dl className="mt-3 grid grid-cols-2 gap-3 border-t border-[#f0f2f3] pt-3 text-caption">
+              {grid.columns.map((c) => (
+                <div key={c.key}>
+                  <dt className="text-[10px] text-text-muted">{c.label}</dt>
+                  <dd className="font-medium text-text-secondary">{grid.cells[s.id]?.[c.key] || "—"}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        ))}
       </div>
     </div>
   );
