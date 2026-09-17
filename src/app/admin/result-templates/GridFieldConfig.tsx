@@ -175,10 +175,22 @@ export function GridFieldConfig({ grid, onChange }: { grid: GridConfig; onChange
         )}
       </div>
 
-      <label className="flex items-center gap-2 text-[10px] text-text-muted">
-        <input type="checkbox" checked={grid.includeCumulative} disabled className="h-3.5 w-3.5 accent-primary" />
-        Cumulative Result columns (coming in a future update)
-      </label>
+      <div className="grid gap-1.5">
+        <label className="flex items-center gap-2 text-[10px] text-text-secondary">
+          <input
+            type="checkbox"
+            checked={grid.includeCumulative}
+            onChange={(e) => onChange({ ...grid, includeCumulative: e.target.checked })}
+            className="h-3.5 w-3.5 accent-primary"
+          />
+          Include Cumulative Result columns
+        </label>
+        <p className="m-0 text-[10px] leading-relaxed text-text-muted">
+          Adds First/Second/Third Term, Cumulative Total, Cumulative Average, and their own Grade/Position/Remarks —
+          pulled from this same template&apos;s prior terms published so far this session, the same as a flat
+          Cumulative field. Reuse this template across terms (update Term above) rather than creating a new one.
+        </p>
+      </div>
     </div>
   );
 }

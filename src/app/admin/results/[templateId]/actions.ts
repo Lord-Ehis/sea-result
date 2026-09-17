@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { createAndSendNotification } from "@/lib/notifications";
 import { computeOwnFields, computePositions, aggregateCumulative } from "@/lib/template-compute";
-import { expandThisTermFields, expandForPublish } from "@/lib/grid-compute";
+import { expandThisTermFields, expandForPublish, fillGridCumulativeTermSlots } from "@/lib/grid-compute";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
 
 async function requireSchoolAdmin() {
@@ -44,9 +44,11 @@ export async function publishBatch(templateId: string) {
   // expand them into virtual per-subject fields first so the rest of this
   // pipeline (which only knows about flat, single-value fields) can treat
   // them the same as any other Computed field. Includes Subject Position
-  // (batch-wide, only meaningful at publish time). For a template with no
-  // Grid field this is content-identical to `fields`.
+  // and Cumulative Result fields (both batch/cross-term, only meaningful at
+  // publish time). For a template with no Grid field this is content-
+  // identical to `fields`.
   const expandedFields = expandForPublish(fields);
+  const gridFields = fields.filter((f) => f.type === "Grid" && f.grid && f.grid.includeCumulative);
   const ownComputed = rows.map((r) => computeOwnFields(expandedFields, (r.data as Record<string, string>) ?? {}));
 
   // Cumulative fields need each student's own prior published rows for this
@@ -73,6 +75,24 @@ export async function publishBatch(templateId: string) {
       }
       return data;
     });
+
+    // Grid fields also need individual historical Term Totals pulled into
+    // named First/Second/Third Term slots — a different shape than the
+    // aggregate sum/average above (see fillGridCumulativeTermSlots), so
+    // handled as its own pass rather than folded into the loop above.
+    if (gridFields.length > 0) {
+      afterCumulative = afterCumulative.map((data, i) => {
+        let next = data;
+        for (const gridField of gridFields) {
+          const priorForStudentAsc = priorRows
+            .filter((p) => p.studentId === rows[i].studentId && p.session === rows[i].session)
+            .sort((a, b) => (a.publishedAt?.getTime() ?? 0) - (b.publishedAt?.getTime() ?? 0))
+            .map((p) => (p.data as Record<string, string>) ?? {});
+          next = fillGridCumulativeTermSlots(gridField, next, priorForStudentAsc);
+        }
+        return next;
+      });
+    }
 
     // Lets a grade-kind field whose `of` points at a cumulative field
     // compute now that the cumulative value actually exists.

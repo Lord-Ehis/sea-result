@@ -86,11 +86,98 @@ export function expandGridPositionFields(field: TemplateField): TemplateField[] 
 }
 
 /**
+ * Per subject, only when the grid's "Include cumulative result" toggle is
+ * on: Cumulative Total/Average (the existing "cumulative" formula kind,
+ * same as a flat field's — publishBatch's existing prior-published-rows
+ * loop resolves these with no changes), Cumulative Grade/Remarks (of the
+ * average), and Cumulative Position (batch-wide rank by cumulative
+ * average). All publish-time only, like Subject Position.
+ */
+export function expandGridCumulativeFields(field: TemplateField): TemplateField[] {
+  if (field.type !== "Grid" || !field.grid || !field.grid.includeCumulative) return [];
+  const { subjects, gradeBands, remarksMap } = field.grid;
+
+  return subjects.flatMap((subject): TemplateField[] => {
+    const totalId = gridKey(field.id, subject.id, "termTotal");
+    const cumulativeTotalId = gridKey(field.id, subject.id, "cumulativeTotal");
+    const cumulativeAverageId = gridKey(field.id, subject.id, "cumulativeAverage");
+    const cumulativeGradeId = gridKey(field.id, subject.id, "cumulativeGrade");
+    return [
+      {
+        id: cumulativeTotalId,
+        name: `${subject.name} Cumulative Total`,
+        type: "Computed",
+        formula: { kind: "cumulative", of: totalId, aggregate: "sum" },
+      },
+      {
+        id: cumulativeAverageId,
+        name: `${subject.name} Cumulative Average`,
+        type: "Computed",
+        formula: { kind: "cumulative", of: totalId, aggregate: "average" },
+      },
+      {
+        id: cumulativeGradeId,
+        name: `${subject.name} Cumulative Grade`,
+        type: "Computed",
+        formula: { kind: "grade", of: cumulativeAverageId, bands: gradeBands },
+      },
+      {
+        id: gridKey(field.id, subject.id, "cumulativeRemarks"),
+        name: `${subject.name} Cumulative Remarks`,
+        type: "Computed",
+        formula: { kind: "remarksLookup", of: cumulativeGradeId, map: remarksMap },
+      },
+      {
+        id: gridKey(field.id, subject.id, "cumulativePosition"),
+        name: `${subject.name} Cumulative Position`,
+        type: "Computed",
+        formula: { kind: "position", of: cumulativeAverageId },
+      },
+    ];
+  });
+}
+
+/**
+ * Pulls this student's individual prior Term Totals (one per subject) into
+ * named First/Second/Third Term slots, right-aligned so the term just
+ * published always lands in its true chronological slot — e.g. publishing
+ * a 4th term in one session shows terms 2/3/4 rather than silently
+ * dropping the newest. Cumulative Total/Average already sum/average every
+ * term regardless of how many slots exist, so nothing is lost from the
+ * aggregate side even if a slot rolls off.
+ *
+ * A different shape than the aggregate cumulative fields above (pulling
+ * individual historical values, not folding them into one number), so
+ * this runs as its own pass in publishBatch rather than through
+ * computeOwnFields.
+ */
+export function fillGridCumulativeTermSlots(
+  field: TemplateField,
+  data: Record<string, string>,
+  priorRowsDataAsc: Record<string, string>[],
+): Record<string, string> {
+  if (field.type !== "Grid" || !field.grid || !field.grid.includeCumulative) return data;
+  const result = { ...data };
+  const slotKeys = ["firstTerm", "secondTerm", "thirdTerm"] as const;
+
+  for (const subject of field.grid.subjects) {
+    const totalKey = gridKey(field.id, subject.id, "termTotal");
+    const priorTotals = priorRowsDataAsc.map((d) => d[totalKey]).filter((v): v is string => v !== undefined);
+    const allTerms = [...priorTotals, result[totalKey]].filter((v): v is string => v !== undefined).slice(-3);
+    allTerms.forEach((value, i) => {
+      result[gridKey(field.id, subject.id, slotKeys[slotKeys.length - allTerms.length + i])] = value;
+    });
+  }
+
+  return result;
+}
+
+/**
  * A template's full field list expanded for publishBatch specifically:
  * this-term virtual fields plus Subject Position (batch-wide, so only
  * meaningful at publish time — never during live entry/review, unlike
- * expandThisTermFields). For a template with no Grid field this is
- * content-identical to `fields`.
+ * expandThisTermFields) and, when enabled, Cumulative Result fields. For a
+ * template with no Grid field this is content-identical to `fields`.
  */
 export function expandForPublish(fields: TemplateField[]): TemplateField[] {
   const gridFields = fields.filter((f) => f.type === "Grid" && f.grid);
@@ -98,19 +185,33 @@ export function expandForPublish(fields: TemplateField[]): TemplateField[] {
     ...fields.filter((f) => f.type !== "Grid"),
     ...gridFields.flatMap(expandGridThisTermFields),
     ...gridFields.flatMap(expandGridPositionFields),
+    ...gridFields.flatMap(expandGridCumulativeFields),
   ];
 }
 
-/** This-term display columns for a Grid field's read-only rendering (lookup/parent dashboard). */
+/** This-term (+ Cumulative Result, when enabled) display columns for a Grid field's read-only rendering. */
 export function gridDisplayColumns(field: TemplateField): { key: string; label: string }[] {
   if (field.type !== "Grid" || !field.grid) return [];
-  return [
+  const columns = [
     ...field.grid.rawColumns.map((c) => ({ key: c.id, label: c.name })),
     { key: "termTotal", label: "Total" },
     { key: "grade", label: "Grade" },
     { key: "subjectPosition", label: "Position" },
     { key: "remarks", label: "Remarks" },
   ];
+  if (field.grid.includeCumulative) {
+    columns.push(
+      { key: "firstTerm", label: "First Term" },
+      { key: "secondTerm", label: "Second Term" },
+      { key: "thirdTerm", label: "Third Term" },
+      { key: "cumulativeTotal", label: "Cumulative Total" },
+      { key: "cumulativeAverage", label: "Cumulative Average" },
+      { key: "cumulativeGrade", label: "Cumulative Grade" },
+      { key: "cumulativePosition", label: "Cumulative Position" },
+      { key: "cumulativeRemarks", label: "Cumulative Remarks" },
+    );
+  }
+  return columns;
 }
 
 export type GridResultData = {
