@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { registerParent } from "./actions";
+import { Logo } from "@/components/ui/Logo";
 
 export function ParentSignupForm({ schoolName, slug }: { schoolName: string; slug: string }) {
   const router = useRouter();
@@ -54,10 +55,10 @@ export function ParentSignupForm({ schoolName, slug }: { schoolName: string; slu
   return (
     <div className="grid min-h-screen place-items-center bg-bg-page px-4">
       <div className="w-full max-w-[440px] rounded-md border border-border bg-bg-card p-8">
-        <div className="mb-7 flex items-center gap-2.5">
-          <span className="grid h-9 w-9 place-items-center rounded-[10px] bg-primary text-[11px] font-medium text-white">SEA</span>
-          <span className="text-subtitle font-medium tracking-tight text-text-primary">Create a parent account</span>
+        <div className="mb-7">
+          <Logo height={42} />
         </div>
+        <h1 className="m-0 mb-1 text-heading font-medium text-text-primary">Create a parent account</h1>
         <p className="m-0 mb-6 text-body text-text-muted">
           For <strong>{schoolName}</strong>. Track results across every term for all your children in one place.
         </p>

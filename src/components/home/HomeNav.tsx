@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Menu, X, ArrowRight } from "lucide-react";
+import { Logo } from "@/components/ui/Logo";
 
 export function HomeNav() {
   const [open, setOpen] = useState(false);
@@ -11,13 +12,8 @@ export function HomeNav() {
     <header className="relative z-10 px-5 py-4 sm:px-8 md:px-12">
       <nav aria-label="Primary navigation" className="mx-auto flex h-[68px] max-w-[1320px] items-center justify-between gap-6">
         <Link href="/" className="flex min-w-0 items-center gap-3 text-text-primary no-underline">
-          <span className="grid h-[42px] w-[42px] flex-none place-items-center rounded-[11px] bg-primary text-[0.72rem] font-medium tracking-tight text-white">
-            SEA
-          </span>
-          <span className="text-[0.92rem] font-medium leading-tight tracking-tight">
-            Sophie Educational Assistant
-            <small className="mt-1 block text-[0.72rem] font-normal text-[#84949d]">Built for African schools</small>
-          </span>
+          <Logo variant="color" height={36} />
+          <span className="hidden text-[0.72rem] font-normal text-[#84949d] sm:block">Built for African schools</span>
         </Link>
 
         <div className="hidden items-center gap-2 sm:flex">

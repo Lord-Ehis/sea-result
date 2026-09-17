@@ -6,6 +6,7 @@ import { signIn } from "next-auth/react";
 import { Building2, CreditCard, UserPlus, Check, ArrowLeft, ArrowRight } from "lucide-react";
 import { checkSlugAvailable, createSchoolSignup } from "./actions";
 import { defaultSessionLabel, defaultTermLabel } from "@/lib/academic-term";
+import { Logo } from "@/components/ui/Logo";
 
 const STEPS = [
   { key: 1, label: "School", icon: Building2 },
@@ -125,9 +126,8 @@ export function SignupWizard({ pricing }: { pricing: Pricing }) {
   return (
     <div className="grid min-h-screen place-items-center bg-bg-page px-4 py-10">
       <div className="w-full max-w-[560px] rounded-md border border-border bg-bg-card p-8">
-        <div className="mb-7 flex items-center gap-2.5">
-          <span className="grid h-9 w-9 place-items-center rounded-[10px] bg-primary text-[11px] font-medium text-white">SEA</span>
-          <span className="text-subtitle font-medium tracking-tight text-text-primary">Sophie Educational Assistant</span>
+        <div className="mb-7">
+          <Logo height={42} />
         </div>
 
         <div className="mb-7 flex items-center gap-2">
