@@ -127,7 +127,7 @@ export function TeachersClient({ classes, teachers }: { classes: ClassOption[]; 
             {filtered.length} {filtered.length === 1 ? "teacher" : "teachers"}
           </span>
         </div>
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto lg:block">
           <table className="w-full min-w-[820px] border-collapse text-left">
             <thead className="bg-[#fafbfb]">
               <tr>
@@ -203,6 +203,66 @@ export function TeachersClient({ classes, teachers }: { classes: ClassOption[]; 
             </tbody>
           </table>
         </div>
+
+        <div className="grid gap-3 p-4 lg:hidden">
+          {filtered.length === 0 ? (
+            <div className="rounded-md border border-border px-5 py-10 text-center text-body text-text-muted">
+              No teachers match your search.
+            </div>
+          ) : (
+            filtered.map((t) => (
+              <div key={t.id} className="rounded-md border border-border bg-bg-card p-4">
+                <div className="flex items-center gap-2.5">
+                  <span className="grid h-[33px] w-[33px] flex-none place-items-center rounded-md bg-primary-bg text-[10px] font-medium text-primary">
+                    {t.name
+                      .split(" ")
+                      .slice(0, 2)
+                      .map((w) => w[0])
+                      .join("")
+                      .toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <strong className="block text-body font-medium text-text-primary">{t.name}</strong>
+                    <span className="block truncate text-caption text-text-muted">{t.email}</span>
+                  </div>
+                  <StatusPill label={t.isActive ? "Active" : "Inactive"} tone={t.isActive ? "success" : "neutral"} />
+                </div>
+                <div className="mt-3 border-t border-[#f0f2f3] pt-3">
+                  <span className="text-caption text-text-muted">Assigned classes</span>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {t.classNames.length === 0 ? (
+                      <span className="text-caption text-text-muted">No classes assigned</span>
+                    ) : (
+                      t.classNames.map((name, i) => (
+                        <span key={i} className="rounded-md border border-border bg-bg-page px-2 py-1 text-[10px] text-text-secondary">
+                          {name}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <div className="mt-3 flex justify-end gap-1.5 border-t border-[#f0f2f3] pt-3">
+                  <button
+                    type="button"
+                    onClick={() => openEdit(t)}
+                    className="inline-flex h-8 items-center rounded-md border border-[#cbdde9] bg-bg-card px-2.5 text-caption font-medium text-primary hover:bg-primary-bg"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleActive(t)}
+                    disabled={pending}
+                    className="inline-flex h-8 items-center rounded-md border border-border bg-bg-card px-2.5 text-caption font-medium text-text-secondary disabled:opacity-60"
+                  >
+                    {t.isActive ? "Deactivate" : "Activate"}
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
         <div className="border-t border-border px-5 py-4 text-caption text-text-muted">
           Showing {filtered.length} of {teachers.length} teachers
         </div>

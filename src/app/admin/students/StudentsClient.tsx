@@ -173,7 +173,7 @@ export function StudentsClient({ campuses, classes, students }: StudentsClientPr
             {filtered.length} {filtered.length === 1 ? "student" : "students"}
           </span>
         </div>
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto lg:block">
           <table className="w-full min-w-[830px] border-collapse text-left">
             <thead className="bg-[#fafbfb]">
               <tr>
@@ -223,6 +223,52 @@ export function StudentsClient({ campuses, classes, students }: StudentsClientPr
             </tbody>
           </table>
         </div>
+
+        <div className="grid gap-3 p-4 lg:hidden">
+          {filtered.length === 0 ? (
+            <div className="rounded-md border border-border px-5 py-10 text-center text-body text-text-muted">
+              No students match these filters.
+            </div>
+          ) : (
+            filtered.map((s) => (
+              <div key={s.id} className="rounded-md border border-border bg-bg-card p-4">
+                <div className="flex items-center gap-3">
+                  <span className="grid h-[34px] w-[34px] flex-none place-items-center rounded-lg bg-primary-bg text-caption font-medium text-primary">
+                    {s.name
+                      .split(" ")
+                      .slice(0, 2)
+                      .map((w) => w[0])
+                      .join("")
+                      .toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <strong className="block text-body font-medium text-text-primary">{s.name}</strong>
+                    <span className="block text-caption text-text-muted">{s.studentCode}</span>
+                  </div>
+                  <StatusPill label={s.isActive ? "Active" : "Inactive"} tone={s.isActive ? "success" : "neutral"} />
+                </div>
+                <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-[#f0f2f3] pt-3 text-caption">
+                  <div>
+                    <dt className="text-text-muted">Class</dt>
+                    <dd className="text-text-secondary">{s.className}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-text-muted">Campus</dt>
+                    <dd className="text-text-secondary">{s.campusName}</dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-text-muted">Parent contact</dt>
+                    <dd className="text-text-primary">
+                      {s.guardianName ?? "—"}
+                      {s.guardianPhone && <span className="block text-text-muted">{s.guardianPhone}</span>}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            ))
+          )}
+        </div>
+
         <div className="border-t border-border px-5 py-4 text-caption text-text-muted">
           Showing {filtered.length} of {students.length} student records
         </div>
@@ -230,7 +276,7 @@ export function StudentsClient({ campuses, classes, students }: StudentsClientPr
 
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add student" description="Enter a new student record.">
         <form action={handleAddStudent} className="contents">
-          <div className="grid grid-cols-2 gap-4 px-6 pt-5">
+          <div className="grid grid-cols-1 gap-4 px-6 pt-5 sm:grid-cols-2">
             <Field label="Student first name">
               <input name="firstName" required placeholder="First name" className={inputClass} />
             </Field>
