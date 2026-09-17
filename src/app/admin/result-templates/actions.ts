@@ -34,7 +34,13 @@ export type ComputedFormula =
       minPassed: number;
       overallField: string;
       promotionScore: number;
-    };
+    }
+  // `of` is the id of a "promotion"-kind field on the same template —
+  // reuses that field's criteria as the single source of truth rather than
+  // duplicating pass mark/minimums/etc. Produces a multi-line (\n-joined)
+  // narrative explaining the verdict, e.g. a report card's "Result
+  // Analysis (Criteria for passing)" section.
+  | { kind: "resultAnalysis"; of: string };
 export type TemplateField = {
   id: string;
   name: string;
@@ -88,6 +94,7 @@ const formulaSchema = z.discriminatedUnion("kind", [
     overallField: z.string(),
     promotionScore: z.number(),
   }),
+  z.object({ kind: z.literal("resultAnalysis"), of: z.string() }),
 ]);
 
 const gridConfigSchema = z.object({

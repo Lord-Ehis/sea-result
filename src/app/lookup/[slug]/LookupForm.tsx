@@ -5,6 +5,7 @@ import Link from "next/link";
 import { lookupStudentResult, type LookupResult } from "./actions";
 import { ComparisonReport } from "@/components/results/ComparisonReport";
 import { GridResultTable } from "@/components/results/GridResultTable";
+import { FieldValueRow } from "@/components/results/FieldValueRow";
 
 export function LookupForm({ schoolName, slug }: { schoolName: string; slug: string }) {
   const [studentCode, setStudentCode] = useState("");
@@ -112,10 +113,7 @@ export function LookupForm({ schoolName, slug }: { schoolName: string; slug: str
                         {r.fields.length > 0 && (
                           <div className="grid gap-2">
                             {r.fields.map((f) => (
-                              <div key={f.name} className="flex items-center justify-between gap-3 rounded-md border border-border bg-bg-card px-3 py-2.5">
-                                <span className="text-caption text-text-muted">{f.name}</span>
-                                <span className="text-body font-medium text-text-primary">{f.value}</span>
-                              </div>
+                              <FieldValueRow key={f.name} name={f.name} value={f.value} />
                             ))}
                           </div>
                         )}

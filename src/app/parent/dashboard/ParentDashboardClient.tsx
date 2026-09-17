@@ -6,6 +6,7 @@ import { FileText, Plus, ChevronDown } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ComparisonReport } from "@/components/results/ComparisonReport";
 import { GridResultTable } from "@/components/results/GridResultTable";
+import { FieldValueRow } from "@/components/results/FieldValueRow";
 import type { GridResultData } from "@/lib/grid-compute";
 
 type ResultEntry = {
@@ -105,10 +106,7 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
               {recent.fields.length > 0 && (
                 <div className="grid gap-2">
                   {recent.fields.map((f) => (
-                    <div key={f.name} className="flex items-center justify-between gap-3 rounded-md border border-border bg-bg-page px-3.5 py-2.5">
-                      <span className="text-caption text-text-muted">{f.name}</span>
-                      <span className="text-body font-medium text-text-primary">{f.value}</span>
-                    </div>
+                    <FieldValueRow key={f.name} name={f.name} value={f.value} background="page" />
                   ))}
                 </div>
               )}
@@ -156,10 +154,7 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
                     {r.fields.length > 0 && (
                       <div className="grid gap-2">
                         {r.fields.map((f) => (
-                          <div key={f.name} className="flex items-center justify-between gap-3 rounded-md border border-border bg-bg-page px-3.5 py-2.5">
-                            <span className="text-caption text-text-muted">{f.name}</span>
-                            <span className="text-body font-medium text-text-primary">{f.value}</span>
-                          </div>
+                          <FieldValueRow key={f.name} name={f.name} value={f.value} background="page" />
                         ))}
                       </div>
                     )}

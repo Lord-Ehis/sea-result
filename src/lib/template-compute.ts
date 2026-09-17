@@ -1,4 +1,4 @@
-import type { TemplateField } from "@/app/admin/result-templates/actions";
+import type { TemplateField, ComputedFormula } from "@/app/admin/result-templates/actions";
 
 // Pure computation, safe to import from both client components (live
 // preview as a teacher types) and server actions (authoritative
@@ -7,6 +7,40 @@ import type { TemplateField } from "@/app/admin/result-templates/actions";
 function toNumber(value: string | undefined): number {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
+}
+
+function fieldName(fields: TemplateField[], id: string): string {
+  return fields.find((f) => f.id === id)?.name || "Untitled field";
+}
+
+/**
+ * Turns a "promotion" formula's criteria + this student's already-computed
+ * data into a readable, multi-line (\n-joined) narrative — e.g. a report
+ * card's "Result Analysis (Criteria for passing)" section. Reuses the
+ * promotion field's config as the single source of truth rather than a
+ * second, independently-configured copy of the same criteria.
+ */
+function buildResultAnalysis(
+  formula: Extract<ComputedFormula, { kind: "promotion" }>,
+  fields: TemplateField[],
+  result: Record<string, string>,
+): string {
+  const offered = formula.subjectFields.filter((id) => (result[id] ?? "").trim() !== "");
+  const passed = offered.filter((id) => toNumber(result[id]) >= formula.passMark);
+
+  const lines: string[] = [];
+  if (formula.compulsoryFields.length > 0) {
+    const names = formula.compulsoryFields.map((id) => fieldName(fields, id));
+    const verdicts = formula.compulsoryFields
+      .map((id) => `You ${toNumber(result[id]) >= formula.passMark ? "passed" : "failed"} ${fieldName(fields, id)}`)
+      .join(". ");
+    lines.push(`Compulsory subjects to pass are ${names.join(" and ")}. ${verdicts}.`);
+  }
+  lines.push(`Minimum subjects to offer is ${formula.minOffered}, you offered ${offered.length}.`);
+  lines.push(`Minimum subjects to pass is ${formula.minPassed}, you passed ${passed.length} (pass mark is ${formula.passMark}).`);
+  lines.push(`Promotion score is ${formula.promotionScore}, you scored ${toNumber(result[formula.overallField])}.`);
+
+  return lines.join("\n");
 }
 
 export function ordinal(n: number): string {
@@ -54,6 +88,10 @@ export function computeOwnFields(fields: TemplateField[], data: Record<string, s
       result[field.id] = compulsoryOk && overallOk && meetsOffered && meetsPassed ? "Passed" : "Failed";
     } else if (formula.kind === "remarksLookup") {
       result[field.id] = formula.map.find((m) => m.grade === result[formula.of])?.remarks ?? "";
+    } else if (formula.kind === "resultAnalysis") {
+      const promotionField = fields.find((f) => f.id === formula.of);
+      result[field.id] =
+        promotionField?.formula?.kind === "promotion" ? buildResultAnalysis(promotionField.formula, fields, result) : "";
     }
   }
 

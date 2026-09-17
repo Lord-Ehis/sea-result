@@ -40,7 +40,7 @@ function FlatFieldControl({
 }) {
   if (field.type === "Computed") {
     return (
-      <div className="flex h-[34px] w-full min-w-[110px] items-center rounded-md border border-dashed border-border bg-bg-page px-2 text-caption text-text-secondary">
+      <div className="flex min-h-[34px] w-full min-w-[110px] items-center whitespace-pre-line rounded-md border border-dashed border-border bg-bg-page px-2 py-2 text-caption text-text-secondary">
         {computedAtPublish(field) ? <span className="italic text-text-muted">At publish</span> : computedValue || "—"}
       </div>
     );

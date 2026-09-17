@@ -38,6 +38,7 @@ const FORMULA_LABEL: Record<ComputedFormula["kind"], string> = {
   // internally for a Grid field's per-subject Remarks column.
   remarksLookup: "Remarks lookup",
   promotion: "Promotion status",
+  resultAnalysis: "Result analysis",
 };
 
 function defaultFormula(kind: ComputedFormula["kind"]): ComputedFormula {
@@ -45,6 +46,7 @@ function defaultFormula(kind: ComputedFormula["kind"]): ComputedFormula {
   if (kind === "position") return { kind, of: "" };
   if (kind === "cumulative") return { kind, of: "", aggregate: "sum" };
   if (kind === "remarksLookup") return { kind, of: "", map: [] };
+  if (kind === "resultAnalysis") return { kind, of: "" };
   if (kind === "promotion") {
     return {
       kind,
@@ -726,7 +728,7 @@ function FormulaConfig({
       <label className="grid gap-1.5 text-[10px] text-text-muted">
         Formula
         <select value={formula.kind} onChange={(e) => changeKind(e.target.value as ComputedFormula["kind"])} className={`${selectClass} max-w-[180px]`}>
-          {(["sum", "average", "grade", "position", "cumulative", "promotion"] as const).map((kind) => (
+          {(["sum", "average", "grade", "position", "cumulative", "promotion", "resultAnalysis"] as const).map((kind) => (
             <option key={kind} value={kind}>
               {FORMULA_LABEL[kind]}
             </option>
@@ -957,6 +959,34 @@ function FormulaConfig({
           <p className="m-0 text-[10px] leading-relaxed text-text-muted">
             Passes only if every compulsory subject is individually above the pass mark, enough subjects are offered
             and passed, and the overall average field meets the promotion score.
+          </p>
+        </>
+      )}
+
+      {formula.kind === "resultAnalysis" && (
+        <>
+          <label className="grid gap-1.5 text-[10px] text-text-muted">
+            Explains the criteria of
+            <select
+              value={formula.of}
+              onChange={(e) => onChange({ ...formula, of: e.target.value })}
+              className={`${selectClass} max-w-[180px]`}
+            >
+              <option value="">Select a Promotion status field…</option>
+              {otherFields
+                .filter((of) => of.formula?.kind === "promotion")
+                .map((of) => (
+                  <option key={of.id} value={of.id}>
+                    {of.name || "Untitled field"}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <p className="m-0 text-[10px] leading-relaxed text-text-muted">
+            Writes out that field&apos;s pass mark, minimums, and promotion score against this student&apos;s actual
+            numbers — e.g. &quot;Minimum subjects to pass is 10, you passed 17&quot; — as a multi-line explanation.
+            {otherFields.every((of) => of.formula?.kind !== "promotion") &&
+              " Add a Promotion status field first."}
           </p>
         </>
       )}
