@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
 import { iconRegistry } from "./icon-registry";
-import { Logo } from "@/components/ui/Logo";
+import { Logo, LogoIcon } from "@/components/ui/Logo";
 import type { NavItem } from "./types";
 
 type SidebarProps = {
@@ -26,12 +26,7 @@ export function Sidebar({ navItems, workspaceName, workspaceMeta, collapsed }: S
     >
       <div className={clsx("flex h-[84px] items-center gap-[9px] border-b border-border", collapsed ? "px-[18px]" : "px-[15px]")}>
         {collapsed ? (
-          // The full lockup's icon and wordmark overlap in the source art,
-          // so there's no clean crop to an icon-only mark for this narrow
-          // rail — a plain monogram is the deliberate fallback here.
-          <span className="grid h-[37px] w-[37px] flex-none place-items-center rounded-[9px] bg-primary text-[10px] font-medium tracking-tight text-white">
-            SEA
-          </span>
+          <LogoIcon height={30} />
         ) : (
           <div className="min-w-0">
             <Logo height={22} />
