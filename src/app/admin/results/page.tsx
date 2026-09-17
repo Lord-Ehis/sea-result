@@ -48,7 +48,7 @@ export default async function ResultsPage() {
     <>
       <PageHeader eyebrow="School workspace" title="Results awaiting approval" intro="Review submitted results before they're published." />
       <section className="overflow-hidden rounded-md border border-border bg-bg-card">
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto lg:block">
           <table className="w-full border-collapse text-left">
             <thead className="bg-[#fafbfb]">
               <tr>
@@ -81,6 +81,35 @@ export default async function ResultsPage() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        <div className="grid gap-3 p-4 lg:hidden">
+          {rows.map((b) => (
+            <div key={b.templateId} className="rounded-md border border-border bg-bg-card p-4">
+              <strong className="block text-body font-medium text-text-primary">{b.className}</strong>
+              <span className="text-caption text-text-muted">{b.templateName}</span>
+              <dl className="mt-3 grid grid-cols-2 gap-3 border-t border-[#f0f2f3] pt-3 text-caption">
+                <div>
+                  <dt className="text-[10px] text-text-muted">Teacher</dt>
+                  <dd className="text-text-secondary">{b.teacherName}</dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] text-text-muted">Submitted</dt>
+                  <dd className="text-text-secondary">{b.submittedAt ? new Date(b.submittedAt).toLocaleDateString("en-GB") : "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] text-text-muted">Students</dt>
+                  <dd className="text-text-secondary">{b.count}</dd>
+                </div>
+              </dl>
+              <Link
+                href={`/admin/results/${b.templateId}`}
+                className="mt-3 flex h-9 w-full items-center justify-center rounded-md border border-[#cbdde9] bg-bg-card text-caption font-medium text-primary hover:bg-primary-bg"
+              >
+                Review
+              </Link>
+            </div>
+          ))}
         </div>
       </section>
     </>

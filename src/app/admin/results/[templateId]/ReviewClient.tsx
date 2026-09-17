@@ -322,7 +322,7 @@ export function ReviewClient({
             <h2 className="m-0 text-heading font-medium text-text-primary">Student scores</h2>
             <p className="mt-1.5 text-caption text-text-muted">{students.length} students submitted</p>
           </div>
-          <div className="overflow-x-auto">
+          <div className="hidden overflow-x-auto lg:block">
             <table className="w-full border-collapse text-left" style={{ minWidth: 260 + fields.length * 150 }}>
               <thead className="bg-[#fafbfb]">
                 <tr>
@@ -359,6 +359,32 @@ export function ReviewClient({
                 ))}
               </tbody>
             </table>
+          </div>
+
+          <div className="grid gap-3 p-4 lg:hidden">
+            {students.map((s) => (
+              <div key={s.resultId} className="rounded-md border border-border bg-bg-card p-4">
+                <strong className="block text-body font-medium text-text-primary">{s.name}</strong>
+                <span className="text-caption text-text-muted">{s.studentCode}</span>
+                <div className="mt-3 grid gap-3 border-t border-[#f0f2f3] pt-3">
+                  {fields.map((f) => {
+                    const value = entries[s.resultId]?.[f.id] ?? "";
+                    return (
+                      <label key={f.id} className="grid gap-1.5 text-caption text-text-secondary">
+                        {f.name}
+                        <FlatFieldEditor
+                          field={f}
+                          value={value}
+                          blank={!value.trim()}
+                          onChange={(v) => handleFieldChange(s.resultId, f.id, v)}
+                          onBlur={(v) => handleFieldBlur(s.resultId, f.id, v)}
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </section>
       )}
