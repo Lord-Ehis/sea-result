@@ -29,6 +29,7 @@ export function AppShell({
   children,
 }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
     <div className="flex min-h-screen">
@@ -37,6 +38,8 @@ export function AppShell({
         workspaceName={workspaceName}
         workspaceMeta={workspaceMeta}
         collapsed={collapsed}
+        mobileNavOpen={mobileNavOpen}
+        onCloseMobileNav={() => setMobileNavOpen(false)}
       />
       <div className="min-w-0 flex-1">
         <Topbar
@@ -46,8 +49,9 @@ export function AppShell({
           userName={userName}
           userRoleLabel={userRoleLabel}
           onToggleSidebar={() => setCollapsed((value) => !value)}
+          onOpenMobileNav={() => setMobileNavOpen(true)}
         />
-        <main className="mx-auto max-w-[1510px] px-[43px] py-[38px]">{children}</main>
+        <main className="mx-auto max-w-[1510px] px-4 py-5 sm:px-6 sm:py-6 lg:px-[43px] lg:py-[38px]">{children}</main>
       </div>
     </div>
   );

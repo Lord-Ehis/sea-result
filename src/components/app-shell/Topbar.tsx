@@ -11,6 +11,7 @@ type TopbarProps = {
   userName: string;
   userRoleLabel: string;
   onToggleSidebar: () => void;
+  onOpenMobileNav: () => void;
 };
 
 export function Topbar({
@@ -20,6 +21,7 @@ export function Topbar({
   userName,
   userRoleLabel,
   onToggleSidebar,
+  onOpenMobileNav,
 }: TopbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const initials = userName
@@ -30,13 +32,21 @@ export function Topbar({
     .toUpperCase();
 
   return (
-    <header className="flex h-[84px] items-center justify-between gap-5 border-b border-border bg-bg-card px-[43px]">
-      <div className="flex min-w-0 items-center gap-[17px]">
+    <header className="flex h-[84px] items-center justify-between gap-3 border-b border-border bg-bg-card px-4 sm:gap-5 sm:px-6 lg:px-[43px]">
+      <div className="flex min-w-0 items-center gap-2.5 sm:gap-[17px]">
+        <button
+          type="button"
+          onClick={onOpenMobileNav}
+          aria-label="Open menu"
+          className="grid place-items-center rounded-[7px] p-1.5 text-text-secondary hover:bg-bg-page lg:hidden"
+        >
+          <Menu size={19} strokeWidth={1.8} />
+        </button>
         <button
           type="button"
           onClick={onToggleSidebar}
           aria-label="Toggle sidebar"
-          className="grid place-items-center rounded-[7px] p-1.5 text-text-secondary hover:bg-bg-page"
+          className="hidden place-items-center rounded-[7px] p-1.5 text-text-secondary hover:bg-bg-page lg:grid"
         >
           <Menu size={19} strokeWidth={1.8} />
         </button>
@@ -44,19 +54,19 @@ export function Topbar({
         {schoolName && (
           <>
             <span className="h-[19px] w-px flex-none bg-border" />
-            <span className="truncate text-[13px] font-medium text-text-primary">{schoolName}</span>
+            <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-text-primary">{schoolName}</span>
           </>
         )}
         {termBadge && (
           <>
-            <span className="h-[19px] w-px flex-none bg-border" />
-            <span className="inline-flex whitespace-nowrap rounded-md border border-border bg-primary-bg px-2.5 py-1.5 text-[11px] font-medium text-primary">
+            <span className="hidden h-[19px] w-px flex-none bg-border md:block" />
+            <span className="hidden whitespace-nowrap rounded-md border border-border bg-primary-bg px-2.5 py-1.5 text-[11px] font-medium text-primary md:inline-flex">
               {termBadge}
             </span>
           </>
         )}
       </div>
-      <div className="flex items-center gap-[17px]">
+      <div className="flex items-center gap-2.5 sm:gap-[17px]">
         <button
           type="button"
           aria-label="Notifications"
@@ -76,7 +86,7 @@ export function Topbar({
             <span className="grid h-[34px] w-[34px] place-items-center rounded-full bg-success-bg text-[11px] font-medium text-success">
               {initials}
             </span>
-            <div className="whitespace-nowrap text-left text-xs leading-[1.3] text-text-primary">
+            <div className="hidden whitespace-nowrap text-left text-xs leading-[1.3] text-text-primary sm:block">
               {userName}
               <small className="block text-[11px] text-text-muted">{userRoleLabel}</small>
             </div>
