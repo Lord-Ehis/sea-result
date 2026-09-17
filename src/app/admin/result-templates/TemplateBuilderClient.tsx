@@ -477,61 +477,65 @@ export function TemplateBuilderClient({
                       onDrop={() => handleDrop(f.id)}
                       className="rounded-md border border-border bg-bg-card"
                     >
-                    <div className="grid grid-cols-[24px_1fr_112px_auto] items-center gap-2 p-2">
-                      <span className="grid cursor-grab place-items-center text-text-muted">
-                        <GripVertical size={16} strokeWidth={1.8} />
-                      </span>
-                      <input
-                        value={f.name}
-                        onChange={(e) =>
-                          updateFields(selected.fields.map((x) => (x.id === f.id ? { ...x, name: e.target.value } : x)))
-                        }
-                        aria-label={`Field ${i + 1} name`}
-                        className="min-w-0 border-0 bg-transparent p-1 text-caption font-medium text-text-primary focus:outline-none"
-                      />
-                      <select
-                        value={f.type}
-                        onChange={(e) => updateFieldType(f.id, e.target.value as TemplateField["type"])}
-                        className="h-[30px] rounded-md border border-border bg-bg-page px-1.5 text-[10px] text-text-secondary"
-                      >
-                        {FIELD_TYPES.map((type) => (
-                          <option
-                            key={type}
-                            value={type}
-                            disabled={type === "Grid" && f.type !== "Grid" && selected.fields.some((x) => x.type === "Grid")}
+                    <div className="flex flex-col gap-2 p-2 sm:flex-row sm:items-center">
+                      <div className="flex items-center gap-2 sm:min-w-0 sm:flex-1">
+                        <span className="grid cursor-grab place-items-center text-text-muted">
+                          <GripVertical size={16} strokeWidth={1.8} />
+                        </span>
+                        <input
+                          value={f.name}
+                          onChange={(e) =>
+                            updateFields(selected.fields.map((x) => (x.id === f.id ? { ...x, name: e.target.value } : x)))
+                          }
+                          aria-label={`Field ${i + 1} name`}
+                          className="min-w-0 flex-1 border-0 bg-transparent p-1 text-caption font-medium text-text-primary focus:outline-none"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between gap-2 sm:justify-end">
+                        <select
+                          value={f.type}
+                          onChange={(e) => updateFieldType(f.id, e.target.value as TemplateField["type"])}
+                          className="h-[30px] rounded-md border border-border bg-bg-page px-1.5 text-[10px] text-text-secondary sm:w-[112px]"
+                        >
+                          {FIELD_TYPES.map((type) => (
+                            <option
+                              key={type}
+                              value={type}
+                              disabled={type === "Grid" && f.type !== "Grid" && selected.fields.some((x) => x.type === "Grid")}
+                            >
+                              {type}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="flex items-center gap-0.5">
+                          <button
+                            type="button"
+                            onClick={() => moveField(f.id, -1)}
+                            disabled={i === 0}
+                            aria-label={`Move ${f.name} up`}
+                            className="grid h-6 w-6 place-items-center rounded text-text-muted disabled:opacity-30"
                           >
-                            {type}
-                          </option>
-                        ))}
-                      </select>
-                      <span className="flex items-center gap-0.5">
-                        <button
-                          type="button"
-                          onClick={() => moveField(f.id, -1)}
-                          disabled={i === 0}
-                          aria-label={`Move ${f.name} up`}
-                          className="grid h-6 w-6 place-items-center rounded text-text-muted disabled:opacity-30"
-                        >
-                          <ChevronUp size={14} strokeWidth={1.8} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => moveField(f.id, 1)}
-                          disabled={i === selected.fields.length - 1}
-                          aria-label={`Move ${f.name} down`}
-                          className="grid h-6 w-6 place-items-center rounded text-text-muted disabled:opacity-30"
-                        >
-                          <ChevronDown size={14} strokeWidth={1.8} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeField(f.id)}
-                          aria-label={`Remove ${f.name}`}
-                          className="grid h-6 w-6 place-items-center rounded text-text-muted hover:bg-danger-bg hover:text-danger"
-                        >
-                          <X size={14} strokeWidth={1.8} />
-                        </button>
-                      </span>
+                            <ChevronUp size={14} strokeWidth={1.8} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveField(f.id, 1)}
+                            disabled={i === selected.fields.length - 1}
+                            aria-label={`Move ${f.name} down`}
+                            className="grid h-6 w-6 place-items-center rounded text-text-muted disabled:opacity-30"
+                          >
+                            <ChevronDown size={14} strokeWidth={1.8} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeField(f.id)}
+                            aria-label={`Remove ${f.name}`}
+                            className="grid h-6 w-6 place-items-center rounded text-text-muted hover:bg-danger-bg hover:text-danger"
+                          >
+                            <X size={14} strokeWidth={1.8} />
+                          </button>
+                        </span>
+                      </div>
                     </div>
                     {f.type === "Computed" && (
                       <FormulaConfig
@@ -565,7 +569,7 @@ export function TemplateBuilderClient({
               </div>
             </section>
 
-            <aside className="sticky top-4 rounded-md border border-border bg-bg-card">
+            <aside className="rounded-md border border-border bg-bg-card lg:sticky lg:top-4">
               <div className="flex items-center justify-between border-b border-border px-4 py-4">
                 <h2 className="m-0 text-body font-medium text-text-primary">Live preview</h2>
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-success-bg px-2 py-1 text-[10px] text-success before:h-1 before:w-1 before:rounded-full before:bg-current">
