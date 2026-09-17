@@ -154,7 +154,7 @@ export function ClassesClient({ campuses, classes }: { campuses: Campus[]; class
                   {rows.length} {rows.length === 1 ? "class" : "classes"}
                 </span>
               </div>
-              <div className="overflow-x-auto">
+              <div className="hidden overflow-x-auto lg:block">
                 <table className="w-full min-w-[640px] border-collapse text-left">
                   <thead className="bg-[#fafbfb]">
                     <tr>
@@ -198,6 +198,49 @@ export function ClassesClient({ campuses, classes }: { campuses: Campus[]; class
                   </tbody>
                 </table>
               </div>
+
+              <div className="grid gap-3 p-4 lg:hidden">
+                {rows.map((c) => (
+                  <div key={c.id} className="rounded-md border border-border bg-bg-card p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <strong className="text-body font-medium text-text-primary">{c.name}</strong>
+                      <div className="flex gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => openEdit(c)}
+                          aria-label={`Edit ${c.name}`}
+                          className="grid h-8 w-8 place-items-center rounded-md text-text-secondary hover:bg-bg-page"
+                        >
+                          <Pencil size={14} strokeWidth={1.8} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(c)}
+                          disabled={pending}
+                          aria-label={`Delete ${c.name}`}
+                          className="grid h-8 w-8 place-items-center rounded-md text-text-secondary hover:bg-danger-bg hover:text-danger disabled:opacity-60"
+                        >
+                          <Trash2 size={14} strokeWidth={1.8} />
+                        </button>
+                      </div>
+                    </div>
+                    <dl className="mt-3 grid grid-cols-2 gap-3 border-t border-[#f0f2f3] pt-3 text-caption">
+                      <div>
+                        <dt className="text-[10px] text-text-muted">Campus</dt>
+                        <dd className="text-text-secondary">{c.campusName}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-[10px] text-text-muted">Session</dt>
+                        <dd className="text-text-secondary">{c.session}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-[10px] text-text-muted">Students</dt>
+                        <dd className="text-text-secondary">{c.studentCount}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                ))}
+              </div>
             </section>
           ))}
         </div>
@@ -225,7 +268,7 @@ export function ClassesClient({ campuses, classes }: { campuses: Campus[]; class
                 className="h-10 rounded-md border border-border bg-bg-card px-3 text-body text-text-primary outline-none focus:border-primary"
               />
             </label>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
                 Campus
                 <select
@@ -304,7 +347,7 @@ export function ClassesClient({ campuses, classes }: { campuses: Campus[]; class
                 className="h-10 rounded-md border border-border bg-bg-card px-3 text-body text-text-primary outline-none focus:border-primary"
               />
             </label>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
                 Campus
                 <select
