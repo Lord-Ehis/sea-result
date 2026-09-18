@@ -147,7 +147,7 @@ export default async function AnalyticsPage() {
           <h2 className="m-0 text-heading font-medium text-text-primary">Recent payments</h2>
           <p className="mt-1.5 text-caption text-text-muted">Across every school on the platform</p>
         </div>
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto lg:block">
           <table className="w-full min-w-[720px] border-collapse text-left">
             <thead className="bg-[#fafbfb]">
               <tr>
@@ -184,6 +184,39 @@ export default async function AnalyticsPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="grid gap-3 p-4 lg:hidden">
+          {recentPayments.length === 0 ? (
+            <div className="rounded-md border border-border px-5 py-10 text-center text-body text-text-muted">No payments yet.</div>
+          ) : (
+            recentPayments.map((p) => (
+              <div key={p.id} className="rounded-md border border-border bg-bg-card p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-caption text-text-secondary">{new Date(p.createdAt).toLocaleDateString("en-GB")}</span>
+                  <StatusPill label={PAYMENT_STATUS_LABEL[p.status]} tone={PAYMENT_STATUS_TONE[p.status]} />
+                </div>
+                <dl className="mt-3 grid grid-cols-2 gap-3 border-t border-[#f0f2f3] pt-3 text-caption">
+                  <div>
+                    <dt className="text-[10px] text-text-muted">School</dt>
+                    <dd>
+                      <Link href={`/owner/schools/${p.schoolId}`} className="font-medium text-primary hover:underline">
+                        {p.school.name}
+                      </Link>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] text-text-muted">Amount</dt>
+                    <dd className="font-medium tabular-nums text-text-primary">{naira(p.amount.toNumber())}</dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-[10px] text-text-muted">Reference</dt>
+                    <dd className="text-text-secondary">{p.paystackReference}</dd>
+                  </div>
+                </dl>
+              </div>
+            ))
+          )}
         </div>
       </section>
     </>

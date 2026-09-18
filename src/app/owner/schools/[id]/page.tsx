@@ -173,7 +173,7 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ i
             {school.payments.length} {school.payments.length === 1 ? "payment" : "payments"}
           </span>
         </div>
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto lg:block">
           <table className="w-full border-collapse text-left">
             <thead className="bg-[#fafbfb]">
               <tr>
@@ -205,6 +205,31 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ i
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="grid gap-3 p-4 lg:hidden">
+          {school.payments.length === 0 ? (
+            <div className="rounded-md border border-border px-5 py-10 text-center text-body text-text-muted">No payments yet.</div>
+          ) : (
+            school.payments.map((p) => (
+              <div key={p.id} className="rounded-md border border-border bg-bg-card p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-caption text-text-secondary">{new Date(p.createdAt).toLocaleDateString("en-GB")}</span>
+                  <StatusPill label={PAYMENT_STATUS_LABEL[p.status]} tone={PAYMENT_STATUS_TONE[p.status]} />
+                </div>
+                <dl className="mt-3 grid gap-2 border-t border-[#f0f2f3] pt-3 text-caption">
+                  <div>
+                    <dt className="text-[10px] text-text-muted">Reference</dt>
+                    <dd className="text-text-secondary">{p.paystackReference}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] text-text-muted">Amount</dt>
+                    <dd className="font-medium tabular-nums text-text-primary">{naira(p.amount.toNumber())}</dd>
+                  </div>
+                </dl>
+              </div>
+            ))
+          )}
         </div>
       </section>
 

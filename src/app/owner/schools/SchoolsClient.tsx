@@ -104,7 +104,7 @@ export function SchoolsClient({ schools }: { schools: SchoolRow[] }) {
       </div>
 
       <section className="overflow-hidden rounded-md border border-border bg-bg-card">
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto lg:block">
           <table className="w-full min-w-[860px] border-collapse text-left">
             <thead className="bg-[#fafbfb]">
               <tr>
@@ -158,6 +158,56 @@ export function SchoolsClient({ schools }: { schools: SchoolRow[] }) {
             </tbody>
           </table>
         </div>
+
+        <div className="grid gap-3 p-4 lg:hidden">
+          {filtered.length === 0 ? (
+            <div className="rounded-md border border-border px-5 py-10 text-center text-body text-text-muted">
+              No schools match your search.
+            </div>
+          ) : (
+            filtered.map((s) => (
+              <div key={s.id} className="rounded-md border border-border bg-bg-card p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <strong className="block text-body font-medium text-text-primary">{s.name}</strong>
+                    <span className="text-caption text-text-muted">{s.slug}</span>
+                  </div>
+                  <StatusPill label={STATUS_LABEL[s.status]} tone={STATUS_TONE[s.status]} />
+                </div>
+                <dl className="mt-3 grid grid-cols-2 gap-3 border-t border-[#f0f2f3] pt-3 text-caption">
+                  <div>
+                    <dt className="text-[10px] text-text-muted">Plan</dt>
+                    <dd className="text-text-secondary">
+                      {s.plan ? (
+                        <>
+                          {s.plan.billingCycle === "FULL_SESSION" ? "Full session" : "Per term"}
+                          <div className="text-[10px] text-text-muted">Renews {new Date(s.plan.endDate).toLocaleDateString("en-GB")}</div>
+                        </>
+                      ) : (
+                        <span className="text-text-muted">No active plan</span>
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] text-text-muted">Students</dt>
+                    <dd className="text-text-secondary">{s.studentCount.toLocaleString()}</dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-[10px] text-text-muted">Lifetime revenue</dt>
+                    <dd className="font-medium tabular-nums text-text-primary">{naira(s.revenue)}</dd>
+                  </div>
+                </dl>
+                <Link
+                  href={`/owner/schools/${s.id}`}
+                  className="mt-3 flex h-9 w-full items-center justify-center rounded-md border border-[#cbdde9] bg-bg-card text-caption font-medium text-primary hover:bg-primary-bg"
+                >
+                  View
+                </Link>
+              </div>
+            ))
+          )}
+        </div>
+
         <div className="border-t border-border px-5 py-4 text-caption text-text-muted">
           Showing {filtered.length} of {schools.length} schools
         </div>
