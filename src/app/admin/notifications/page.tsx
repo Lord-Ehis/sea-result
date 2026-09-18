@@ -45,7 +45,7 @@ export default async function NotificationsPage() {
             {notifications.length} {notifications.length === 1 ? "notification" : "notifications"}
           </span>
         </div>
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto lg:block">
           <table className="w-full border-collapse text-left">
             <thead className="bg-[#fafbfb]">
               <tr>
@@ -81,6 +81,45 @@ export default async function NotificationsPage() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        <div className="grid gap-3 p-4 lg:hidden">
+          {notifications.map((n) => (
+            <div key={n.id} className="rounded-md border border-border bg-bg-card p-4">
+              <div className="flex items-center justify-between gap-3">
+                <strong className="text-body font-medium text-text-primary">
+                  {n.student ? `${n.student.firstName} ${n.student.lastName}` : "—"}
+                </strong>
+                <StatusPill
+                  label={n.status === "SENT" ? "Sent" : n.status === "PENDING" ? "Pending" : "Failed"}
+                  tone={n.status === "SENT" ? "success" : n.status === "PENDING" ? "warning" : "danger"}
+                />
+              </div>
+              <dl className="mt-3 grid gap-2 border-t border-[#f0f2f3] pt-3 text-caption">
+                <div>
+                  <dt className="text-[10px] text-text-muted">Date</dt>
+                  <dd className="text-text-secondary">{new Date(n.createdAt).toLocaleString("en-GB")}</dd>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <dt className="text-[10px] text-text-muted">Channel</dt>
+                    <dd className="mt-0.5 inline-flex items-center gap-1.5 text-text-secondary">
+                      {n.channel === "SMS" ? <MessageSquare size={14} strokeWidth={1.8} /> : <Mail size={14} strokeWidth={1.8} />}
+                      {n.channel}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] text-text-muted">Event</dt>
+                    <dd className="text-text-secondary">{EVENT_LABEL[n.event] ?? n.event}</dd>
+                  </div>
+                </div>
+                <div>
+                  <dt className="text-[10px] text-text-muted">Recipient</dt>
+                  <dd className="text-text-secondary">{n.recipient}</dd>
+                </div>
+              </dl>
+            </div>
+          ))}
         </div>
       </section>
     </>

@@ -170,7 +170,7 @@ export function SignupWizard({ pricing }: { pricing: Pricing }) {
               </label>
               <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
                 Your result-lookup URL
-                <div className="flex items-center overflow-hidden rounded-md border border-border focus-within:border-primary">
+                <div className="flex flex-col overflow-hidden rounded-md border border-border focus-within:border-primary sm:flex-row sm:items-center">
                   <span className="whitespace-nowrap bg-bg-page px-3 py-2 text-caption text-text-muted">sea-result.vercel.app/lookup/</span>
                   <input
                     value={slug}
@@ -179,7 +179,7 @@ export function SignupWizard({ pricing }: { pricing: Pricing }) {
                       setManualSlug(slugify(e.target.value));
                     }}
                     required
-                    className="h-10 min-w-0 flex-1 border-0 bg-bg-card px-2 text-body text-text-primary outline-none"
+                    className="h-10 w-full min-w-0 flex-1 border-0 bg-bg-card px-2 text-body text-text-primary outline-none"
                   />
                 </div>
                 {slugStatus === "checking" && <span className="text-caption text-text-muted">Checking availability…</span>}

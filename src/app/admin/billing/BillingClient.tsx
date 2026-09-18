@@ -232,7 +232,7 @@ export function BillingClient({
             {payments.length} {payments.length === 1 ? "payment" : "payments"}
           </span>
         </div>
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto lg:block">
           <table className="w-full border-collapse text-left">
             <thead className="bg-[#fafbfb]">
               <tr>
@@ -279,6 +279,44 @@ export function BillingClient({
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="grid gap-3 p-4 lg:hidden">
+          {payments.length === 0 ? (
+            <div className="rounded-md border border-border px-5 py-10 text-center text-body text-text-muted">No payments yet.</div>
+          ) : (
+            payments.map((p) => (
+              <div key={p.id} className="rounded-md border border-border bg-bg-card p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-caption text-text-secondary">{new Date(p.createdAt).toLocaleDateString("en-GB")}</span>
+                  <StatusPill
+                    label={p.status === "SUCCESS" ? "Paid" : p.status === "PENDING" ? "Pending" : "Failed"}
+                    tone={p.status === "SUCCESS" ? "success" : p.status === "PENDING" ? "warning" : "danger"}
+                  />
+                </div>
+                <dl className="mt-3 grid gap-2 border-t border-[#f0f2f3] pt-3 text-caption">
+                  <div>
+                    <dt className="text-[10px] text-text-muted">Reference</dt>
+                    <dd className="text-text-secondary">{p.reference}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] text-text-muted">Amount</dt>
+                    <dd className="font-medium tabular-nums text-text-primary">{naira(p.amount)}</dd>
+                  </div>
+                </dl>
+                {p.status === "SUCCESS" && (
+                  <button
+                    type="button"
+                    onClick={() => downloadReceipt(p)}
+                    className="mt-3 flex h-9 w-full items-center justify-center gap-2 rounded-md border border-[#cbdde9] bg-bg-card text-caption font-medium text-primary hover:bg-primary-bg"
+                  >
+                    <Download size={14} strokeWidth={1.8} />
+                    Download receipt
+                  </button>
+                )}
+              </div>
+            ))
+          )}
         </div>
       </section>
 
