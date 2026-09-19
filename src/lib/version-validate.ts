@@ -13,6 +13,15 @@ export type ValidateGradingScale = { bands: { minScore: number; maxScore: number
 export type ValidationIssue = { message: string };
 export type ValidationResult = { errors: ValidationIssue[]; warnings: ValidationIssue[] };
 
+// Whole-number scales (0–39, 40–44, …) and two-decimal scales (…39.99, 40, …)
+// are both normal — the next band starts one step after the previous ends,
+// where a step is 1 for whole-number boundaries and 0.01 otherwise. Only a
+// larger jump leaves scores that genuinely map to no grade.
+function bandsAreContiguous(previousMax: number, nextMin: number): boolean {
+  const step = Number.isInteger(previousMax) && Number.isInteger(nextMin) ? 1 : 0.01;
+  return nextMin - previousMax <= step + 1e-9;
+}
+
 export function validateVersionConfig(input: {
   sections: ValidateSection[];
   gradingScale: ValidateGradingScale;
@@ -61,7 +70,7 @@ export function validateVersionConfig(input: {
       const next = bands[i + 1];
       if (next && next.minScore <= band.maxScore) {
         errors.push({ message: `Grading scale bands overlap between ${band.maxScore} and ${next.minScore}.` });
-      } else if (next && next.minScore > band.maxScore + 0.01) {
+      } else if (next && !bandsAreContiguous(band.maxScore, next.minScore)) {
         warnings.push({ message: `Grading scale has a gap between ${band.maxScore} and ${next.minScore}.` });
       }
     }
