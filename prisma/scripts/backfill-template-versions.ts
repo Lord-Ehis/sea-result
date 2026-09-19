@@ -140,7 +140,9 @@ async function migrateTemplate(schoolId: string, template: { id: string; name: s
         },
       });
     }
-  });
+    // A remote DB (e.g. Supabase) makes each query slow enough that a
+    // many-subject template exceeds Prisma's default 5s interactive limit.
+  }, { timeout: 120_000, maxWait: 20_000 });
 
   return gradingScaleId;
 }
