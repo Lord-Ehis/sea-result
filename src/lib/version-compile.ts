@@ -16,6 +16,8 @@ export type CompileComponent = {
   componentName: string;
   componentCode: string;
   maxScore: number;
+  weightPercent: number;
+  isRequired: boolean;
   displayOrder: number;
 };
 export type CompileSection = {
@@ -69,6 +71,8 @@ function buildSharedRawColumns(sections: CompileSection[]): GridConfig["rawColum
         id: c.legacySourceId ?? c.id,
         name: c.componentName,
         maxMark: c.maxScore,
+        weight: c.weightPercent,
+        required: c.isRequired,
         order: c.displayOrder,
       });
     }
@@ -76,7 +80,7 @@ function buildSharedRawColumns(sections: CompileSection[]): GridConfig["rawColum
 
   return Array.from(byCode.values())
     .sort((a, b) => a.order - b.order)
-    .map(({ id, name, maxMark }) => ({ id, name, maxMark }));
+    .map(({ id, name, maxMark, weight, required }) => ({ id, name, maxMark, weight, required }));
 }
 
 function buildGrid(input: CompileVersionInput): GridConfig {
@@ -96,6 +100,9 @@ function buildGrid(input: CompileVersionInput): GridConfig {
     // Cumulative Result columns are a later-phase (annual summary)
     // concern; this increment never turns this on for a compiled version.
     includeCumulative: false,
+    // Versions are validated to weights summing to 100, so their subject
+    // totals are weighted (raw ÷ max × weight) rather than a flat sum.
+    weighted: true,
   };
 }
 

@@ -8,8 +8,12 @@ import { z } from "zod";
 
 export type GradeBand = { min: number; max: number; label: string };
 export type GridSubject = { id: string; name: string };
-export type GridRawColumn = { id: string; name: string; maxMark: number };
+// `weight` (percent) and `required` are only set on columns compiled from an
+// activated template version; older templates leave them undefined and keep
+// summing raw marks.
+export type GridRawColumn = { id: string; name: string; maxMark: number; weight?: number; required?: boolean };
 export type GridRemarksEntry = { grade: string; remarks: string };
+export type WeightedPart = { key: string; max: number; weight: number };
 export type GridConfig = {
   subjects: GridSubject[];
   rawColumns: GridRawColumn[];
@@ -18,9 +22,13 @@ export type GridConfig = {
   // Gates the Cumulative Result columns (First/Second/Third Term,
   // Cumulative Total/Average/Grade/Remarks/Position) — a later round.
   includeCumulative: boolean;
+  // True when every column carries a weight: the subject total becomes
+  // sum(raw / max × weight) instead of a flat sum of raw marks.
+  weighted?: boolean;
 };
 export type ComputedFormula =
   | { kind: "sum"; of: string[] }
+  | { kind: "weightedSum"; parts: WeightedPart[] }
   | { kind: "average"; of: string[] }
   | { kind: "grade"; of: string; bands: GradeBand[] }
   | { kind: "position"; of: string }
@@ -63,6 +71,10 @@ export const gradeBandSchema = z.object({ min: z.number(), max: z.number(), labe
 export const gridRemarksEntrySchema = z.object({ grade: z.string(), remarks: z.string() });
 export const formulaSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("sum"), of: z.array(z.string()) }),
+  z.object({
+    kind: z.literal("weightedSum"),
+    parts: z.array(z.object({ key: z.string(), max: z.number(), weight: z.number() })),
+  }),
   z.object({ kind: z.literal("average"), of: z.array(z.string()) }),
   z.object({ kind: z.literal("grade"), of: z.string(), bands: z.array(gradeBandSchema) }),
   z.object({ kind: z.literal("position"), of: z.string() }),
@@ -83,10 +95,19 @@ export const formulaSchema = z.discriminatedUnion("kind", [
 
 export const gridConfigSchema = z.object({
   subjects: z.array(z.object({ id: z.string(), name: z.string() })),
-  rawColumns: z.array(z.object({ id: z.string(), name: z.string(), maxMark: z.number() })),
+  rawColumns: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      maxMark: z.number(),
+      weight: z.number().optional(),
+      required: z.boolean().optional(),
+    }),
+  ),
   gradeBands: z.array(gradeBandSchema),
   remarksMap: z.array(gridRemarksEntrySchema),
   includeCumulative: z.boolean(),
+  weighted: z.boolean().optional(),
 });
 
 export const fieldSchema = z.object({

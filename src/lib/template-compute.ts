@@ -1,4 +1,5 @@
-import type { TemplateField, ComputedFormula } from "@/app/admin/result-templates/actions";
+import type { TemplateField, ComputedFormula, WeightedPart } from "@/app/admin/result-templates/actions";
+import { readScoreState } from "@/lib/score-state";
 
 // Pure computation, safe to import from both client components (live
 // preview as a teacher types) and server actions (authoritative
@@ -7,6 +8,32 @@ import type { TemplateField, ComputedFormula } from "@/app/admin/result-template
 function toNumber(value: string | undefined): number {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
+}
+
+function round4(n: number): number {
+  return Math.round(n * 10_000) / 10_000;
+}
+
+/**
+ * Subject total from weighted components: sum(raw ÷ max × weight). Absent
+ * and missing contribute zero without changing the maximum (spec §13: never
+ * silently renormalise); exempted / not-applicable components are dropped and
+ * the remaining weights rescaled so the subject is still out of 100.
+ * Stored to four decimals — display rounding happens at render time.
+ */
+export function computeWeightedTotal(parts: WeightedPart[], data: Record<string, string>): string {
+  let includedWeight = 0;
+  let earned = 0;
+
+  for (const part of parts) {
+    const state = readScoreState(data, part.key);
+    if (state === "exempted" || state === "not_applicable") continue;
+    includedWeight += part.weight;
+    if (state === "scored" && part.max > 0) earned += (toNumber(data[part.key]) / part.max) * part.weight;
+  }
+
+  if (includedWeight <= 0) return "";
+  return String(round4((earned * 100) / includedWeight));
 }
 
 function fieldName(fields: TemplateField[], id: string): string {
@@ -72,6 +99,8 @@ export function computeOwnFields(fields: TemplateField[], data: Record<string, s
 
     if (formula.kind === "sum") {
       result[field.id] = String(formula.of.reduce((sum, id) => sum + toNumber(result[id]), 0));
+    } else if (formula.kind === "weightedSum") {
+      result[field.id] = computeWeightedTotal(formula.parts, result);
     } else if (formula.kind === "average") {
       result[field.id] = formula.of.length === 0 ? "" : (formula.of.reduce((sum, id) => sum + toNumber(result[id]), 0) / formula.of.length).toFixed(2);
     } else if (formula.kind === "grade") {

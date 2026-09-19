@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { resolveTemplateForClass } from "@/lib/resolve-template";
 import { ResultEntryClient } from "./ResultEntryClient";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
 
@@ -30,12 +31,7 @@ export default async function ResultEntryPage({ params }: { params: Promise<{ id
     );
   }
 
-  const template =
-    (await prisma.resultTemplate.findFirst({ where: { schoolId, classId: klass.id, isActive: true } })) ??
-    (klass.level
-      ? await prisma.resultTemplate.findFirst({ where: { schoolId, classId: null, level: klass.level, isActive: true } })
-      : null) ??
-    (await prisma.resultTemplate.findFirst({ where: { schoolId, classId: null, level: null, isActive: true } }));
+  const template = await resolveTemplateForClass(schoolId, klass);
 
   if (!template || !template.term) {
     return (
@@ -81,6 +77,7 @@ export default async function ResultEntryPage({ params }: { params: Promise<{ id
           studentCode: s.studentCode,
           data: (result?.data as Record<string, string>) ?? {},
           status: result?.status ?? null,
+          revision: result ? result.revision : null,
           rejectionNote: result?.rejectionNote ?? null,
         };
       })}

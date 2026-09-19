@@ -9,9 +9,10 @@ import { GridEntryTable } from "@/components/results/GridEntryTable";
 import { saveClassResults } from "./actions";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
 import { computeOwnFields } from "@/lib/template-compute";
-import { expandThisTermFields, gridRawKeys } from "@/lib/grid-compute";
+import { expandThisTermFields } from "@/lib/grid-compute";
 import { computedAtPublish } from "@/lib/result-field-display";
 import { DROPDOWN_OPTIONS, ratingOptionsFor } from "@/lib/field-options";
+import { identicalScoreWarnings, pickAllowedData, validateStudentEntry } from "@/lib/result-validate";
 
 type StudentRow = {
   id: string;
@@ -19,6 +20,9 @@ type StudentRow = {
   studentCode: string;
   data: Record<string, string>;
   status: "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "PUBLISHED" | null;
+  // Null until the student's record exists; sent back on save so a stale
+  // edit (someone else saved first) is caught instead of overwriting them.
+  revision: number | null;
   rejectionNote: string | null;
 };
 
@@ -98,6 +102,9 @@ export function ResultEntryClient({
   const [entries, setEntries] = useState<Record<string, Record<string, string>>>(() =>
     Object.fromEntries(students.map((s) => [s.id, { ...s.data }])),
   );
+  const [revisions, setRevisions] = useState<Record<string, number | null>>(() =>
+    Object.fromEntries(students.map((s) => [s.id, s.revision])),
+  );
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(students[0]?.id ?? null);
@@ -125,50 +132,66 @@ export function ResultEntryClient({
     return map;
   }, [students, expandedFields, entries]);
 
-  const requiredKeys = useMemo(
-    () => [...flatFields.filter((f) => !computedAtPublish(f)).map((f) => f.id), ...(gridField ? gridRawKeys(gridField) : [])],
-    [flatFields, gridField],
+  // The same validator the server runs on save/submit, so what the teacher
+  // sees blocked here is exactly what the server would refuse.
+  const validationByStudent = useMemo(
+    () => new Map(students.map((s) => [s.id, validateStudentEntry(fields, pickAllowedData(fields, entries[s.id] ?? {}))])),
+    [students, fields, entries],
   );
   const completedCount = useMemo(
-    () => students.filter((s) => requiredKeys.every((k) => (computedByStudent.get(s.id)?.[k] ?? "").trim() !== "")).length,
-    [students, requiredKeys, computedByStudent],
+    () =>
+      locked
+        ? students.length // already submitted: it passed the server's checks when it was
+        : students.filter((s) => {
+            const v = validationByStudent.get(s.id);
+            return !!v && v.errors.length === 0 && v.missing.length === 0;
+          }).length,
+    [locked, students, validationByStudent],
   );
-  const allComplete = requiredKeys.length > 0 && completedCount === students.length;
+  const errorIssues = useMemo(
+    () => students.flatMap((s) => (validationByStudent.get(s.id)?.errors ?? []).map((issue) => ({ student: s.name, issue }))),
+    [students, validationByStudent],
+  );
+  const warnings = useMemo(
+    () => identicalScoreWarnings(fields, students.map((s) => entries[s.id] ?? {})),
+    [fields, students, entries],
+  );
+  const canSubmit = students.length > 0 && completedCount === students.length && errorIssues.length === 0;
 
   function setValue(studentId: string, key: string, value: string) {
     setEntries((prev) => ({ ...prev, [studentId]: { ...prev[studentId], [key]: value } }));
   }
 
   function buildEntries() {
-    return students.map((s) => ({ studentId: s.id, data: entries[s.id] ?? {} }));
+    return students.map((s) => ({ studentId: s.id, data: entries[s.id] ?? {}, revision: revisions[s.id] ?? null }));
+  }
+
+  function run(submit: boolean, successMessage: string, fallbackError: string) {
+    setError(null);
+    setMessage(null);
+    startTransition(async () => {
+      try {
+        const result = await saveClassResults({ classId, templateId, term, session, entries: buildEntries(), submit });
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        setRevisions((prev) => ({ ...prev, ...result.revisions }));
+        setMessage(successMessage);
+        if (!submit) setTimeout(() => setMessage(null), 3000);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : fallbackError);
+      }
+    });
   }
 
   function handleSaveDraft() {
-    setError(null);
-    setMessage(null);
-    startTransition(async () => {
-      try {
-        await saveClassResults({ classId, templateId, term, session, entries: buildEntries(), submit: false });
-        setMessage("Draft saved.");
-        setTimeout(() => setMessage(null), 3000);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not save draft.");
-      }
-    });
+    run(false, "Draft saved.", "Could not save draft.");
   }
 
   function handleSubmit() {
-    if (!allComplete) return;
-    setError(null);
-    setMessage(null);
-    startTransition(async () => {
-      try {
-        await saveClassResults({ classId, templateId, term, session, entries: buildEntries(), submit: true });
-        setMessage("Results submitted for approval.");
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not submit results.");
-      }
-    });
+    if (!canSubmit) return;
+    run(true, "Results submitted for approval.", "Could not submit results.");
   }
 
   const selectedStudent = students.find((s) => s.id === selectedStudentId) ?? null;
@@ -195,6 +218,32 @@ export function ResultEntryClient({
       {message && <p className="mb-4 rounded-md bg-success-bg px-3 py-2 text-caption text-success">{message}</p>}
       {error && <p className="mb-4 rounded-md bg-danger-bg px-3 py-2 text-caption text-danger">{error}</p>}
 
+      {errorIssues.length > 0 && !locked && (
+        <div className="mb-4 rounded-md border border-danger/30 bg-danger-bg px-4 py-3 text-caption text-danger">
+          <strong className="block">Fix these scores before saving or submitting:</strong>
+          <ul className="mt-1.5 grid gap-0.5 pl-4">
+            {errorIssues.slice(0, 8).map(({ student, issue }) => (
+              <li key={`${student}-${issue.key}`} className="list-disc">
+                {student} — {issue.label}: {issue.message}
+              </li>
+            ))}
+            {errorIssues.length > 8 && <li className="list-none">…and {errorIssues.length - 8} more.</li>}
+          </ul>
+        </div>
+      )}
+      {warnings.length > 0 && !locked && (
+        <div className="mb-4 rounded-md border border-warning/30 bg-warning-bg px-4 py-3 text-caption text-warning">
+          <strong className="block">Worth a second look (won&apos;t stop you submitting):</strong>
+          <ul className="mt-1.5 grid gap-0.5 pl-4">
+            {warnings.map((w) => (
+              <li key={w.message} className="list-disc">
+                {w.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="mb-5 rounded-md border border-border bg-bg-card p-5">
         <div className="flex items-center justify-between gap-3">
           <strong className="text-body font-medium text-text-secondary">Entry progress</strong>
@@ -219,7 +268,8 @@ export function ResultEntryClient({
           <div className="grid gap-0 lg:grid-cols-[220px_1fr]">
             <div className="max-h-[560px] overflow-y-auto border-b border-border lg:border-b-0 lg:border-r">
               {students.map((s) => {
-                const complete = requiredKeys.every((k) => (computedByStudent.get(s.id)?.[k] ?? "").trim() !== "");
+                const v = validationByStudent.get(s.id);
+                const complete = !!v && v.errors.length === 0 && v.missing.length === 0;
                 return (
                   <button
                     key={s.id}
@@ -346,15 +396,17 @@ export function ResultEntryClient({
         <p className="m-0 text-caption text-text-muted">
           {locked
             ? "This batch is locked while it's under review."
-            : allComplete
-              ? "All student records are complete and ready to submit."
-              : `${students.length - completedCount} student record(s) still need scores.`}
+            : errorIssues.length > 0
+              ? `${errorIssues.length} score(s) need fixing before you can save or submit.`
+              : canSubmit
+                ? "All student records are complete and ready to submit."
+                : `${students.length - completedCount} student record(s) still need scores.`}
         </p>
         <div className="flex gap-2">
           <button
             type="button"
             onClick={handleSaveDraft}
-            disabled={locked || pending}
+            disabled={locked || pending || errorIssues.length > 0}
             className="inline-flex h-[39px] items-center rounded-md border border-border bg-bg-card px-3.5 text-caption font-medium text-text-secondary disabled:opacity-50"
           >
             Save draft
@@ -362,7 +414,7 @@ export function ResultEntryClient({
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={locked || !allComplete || pending}
+            disabled={locked || !canSubmit || pending}
             className="inline-flex h-[39px] items-center rounded-md border border-primary bg-primary px-3.5 text-caption font-medium text-white disabled:opacity-45"
           >
             Submit for approval

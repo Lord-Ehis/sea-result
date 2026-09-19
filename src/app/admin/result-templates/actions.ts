@@ -15,6 +15,7 @@ export type {
   GridSubject,
   GridRawColumn,
   GridRemarksEntry,
+  WeightedPart,
   GridConfig,
   ComputedFormula,
   TemplateField,

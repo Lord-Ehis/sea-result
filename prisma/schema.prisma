@@ -126,6 +126,7 @@ model School {
   ratingCategories     RatingCategory[]
   ratingItems          RatingItem[]
   templateAssignments  TemplateAssignment[]
+  resultBatches        ResultBatch[]
 
   @@map("schools")
 }
@@ -230,6 +231,7 @@ model Class {
   teachers            TeacherClassAssignment[]
   resultTemplates     ResultTemplate[]
   templateAssignments TemplateAssignment[]
+  resultBatches       ResultBatch[]
 
   @@index([schoolId])
   @@index([campusId])
@@ -330,6 +332,7 @@ model ResultTemplate {
   school   School            @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   class    Class?            @relation(fields: [classId], references: [id])
   results  Result[]
+  batches  ResultBatch[]
   versions TemplateVersion[] @relation("TemplateVersions")
 
   @@index([schoolId])
@@ -546,19 +549,61 @@ model Result {
   publishedAt       DateTime?
   rejectionNote     String?
 
+  // Optimistic locking: every write states the revision it read, so two
+  // people editing the same record can't silently overwrite each other.
+  revision Int     @default(0)
+  // Null on rows created before batches existed; set on their next teacher save.
+  batchId  String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   school      School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   student     Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
   template    ResultTemplate @relation(fields: [templateId], references: [id])
+  batch       ResultBatch?   @relation(fields: [batchId], references: [id])
   submittedBy User?          @relation("SubmittedBy", fields: [submittedByUserId], references: [id])
   approvedBy  User?          @relation("ApprovedBy", fields: [approvedByUserId], references: [id])
 
   @@unique([studentId, templateId, term, session])
   @@index([schoolId])
   @@index([status])
+  @@index([batchId])
   @@map("results")
+}
+
+// The class-level unit of the teacher → admin workflow: one class's results
+// for one template, term and session. Row statuses on Result stay the
+// authority for review/publish; the batch mirrors them and pins the template
+// version it was started under (spec §5: "a batch retains its original
+// template version").
+model ResultBatch {
+  id                String       @id @default(cuid())
+  schoolId          String
+  classId           String
+  templateId        String
+  // The template's active version when the batch was created (null for
+  // templates that never went through the versioned builder).
+  templateVersionId String?
+  term              String
+  session           String
+  status            ResultStatus @default(DRAFT)
+  createdByUserId   String?
+  submittedByUserId String?
+  submittedAt       DateTime?
+  revision          Int          @default(0)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  school   School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  class    Class          @relation(fields: [classId], references: [id], onDelete: Cascade)
+  template ResultTemplate @relation(fields: [templateId], references: [id])
+  results  Result[]
+
+  @@unique([classId, templateId, term, session])
+  @@index([schoolId])
+  @@index([templateId])
+  @@map("result_batches")
 }
 
 // ---------------------------------------------------------------------------

@@ -10,6 +10,7 @@ import { updateResultValue, publishBatch, sendBackBatch } from "./actions";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
 import { computeOwnFields } from "@/lib/template-compute";
 import { expandThisTermFields, gridRawKeys } from "@/lib/grid-compute";
+import { explicitScoreState } from "@/lib/score-state";
 import { computedAtPublish } from "@/lib/result-field-display";
 import { DROPDOWN_OPTIONS, ratingOptionsFor } from "@/lib/field-options";
 
@@ -96,6 +97,11 @@ function FlatFieldEditor({
   );
 }
 
+// A cell marked absent / exempted / n.a. is deliberately empty, not blank.
+function isBlank(data: Record<string, string>, key: string): boolean {
+  return !explicitScoreState(data, key) && !(data[key] ?? "").trim();
+}
+
 export function ReviewClient({
   templateId,
   className,
@@ -133,7 +139,7 @@ export function ReviewClient({
     [flatFields, gridField],
   );
   const emptyCount = useMemo(
-    () => students.reduce((n, s) => n + requiredKeys.filter((k) => !(entries[s.resultId]?.[k] ?? "").trim()).length, 0),
+    () => students.reduce((n, s) => n + requiredKeys.filter((k) => isBlank(entries[s.resultId] ?? {}, k)).length, 0),
     [students, requiredKeys, entries],
   );
 
@@ -144,7 +150,12 @@ export function ReviewClient({
   function handleFieldBlur(resultId: string, key: string, value: string) {
     startTransition(async () => {
       try {
-        await updateResultValue(resultId, key, value);
+        const saved = await updateResultValue(resultId, key, value);
+        if (!saved.ok) {
+          setError(saved.error);
+          return;
+        }
+        setError(null);
         // Mirrors the server's own recompute so Total/Grade reflect the
         // edit immediately, without waiting on a full page reload.
         setEntries((prev) => ({ ...prev, [resultId]: computeOwnFields(expandedFields, { ...prev[resultId], [key]: value }) }));
@@ -188,7 +199,7 @@ export function ReviewClient({
   const selectedBlankKeys = useMemo(() => {
     if (!selectedStudent) return new Set<string>();
     const data = entries[selectedStudent.resultId] ?? {};
-    return new Set(requiredKeys.filter((k) => !(data[k] ?? "").trim()));
+    return new Set(requiredKeys.filter((k) => isBlank(data, k)));
   }, [selectedStudent, entries, requiredKeys]);
 
   return (
@@ -259,7 +270,7 @@ export function ReviewClient({
             <div className="max-h-[560px] overflow-y-auto border-b border-border lg:border-b-0 lg:border-r">
               {students.map((s) => {
                 const data = entries[s.resultId] ?? {};
-                const blankCount = requiredKeys.filter((k) => !(data[k] ?? "").trim()).length;
+                const blankCount = requiredKeys.filter((k) => isBlank(data, k)).length;
                 return (
                   <button
                     key={s.resultId}

@@ -47,6 +47,7 @@ const LEGACY_FIELD_TYPES: TemplateField["type"][] = ["Number", "Text", "Dropdown
 
 const FORMULA_LABEL: Record<ComputedFormula["kind"], string> = {
   sum: "Total (sum)",
+  weightedSum: "Weighted total",
   average: "Average",
   grade: "Grade",
   position: "Position",
@@ -57,6 +58,7 @@ const FORMULA_LABEL: Record<ComputedFormula["kind"], string> = {
 };
 
 function defaultFormula(kind: ComputedFormula["kind"]): ComputedFormula {
+  if (kind === "weightedSum") return { kind, parts: [] }; // only ever synthesized for a compiled Grid, never picked in the builder
   if (kind === "grade") return { kind, of: "", bands: [] };
   if (kind === "position") return { kind, of: "" };
   if (kind === "cumulative") return { kind, of: "", aggregate: "sum" };
@@ -354,7 +356,11 @@ export function TemplateBuilderClient({
     setError(null);
     startTransition(async () => {
       try {
-        await activateVersion(selectedVersion.id);
+        const activated = await activateVersion(selectedVersion.id);
+        if (!activated.ok) {
+          setError(activated.error);
+          return;
+        }
         const vs = await getTemplateVersions(selected.id);
         setVersions(vs);
         const active = vs.find((v) => v.status === "ACTIVE");

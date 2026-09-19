@@ -1,4 +1,5 @@
 import type { TemplateField } from "@/app/admin/result-templates/actions";
+import { SCORE_STATE_LABEL, explicitScoreState, formatScore } from "@/lib/score-state";
 
 // Pure translation layer for the "Grid" field type (a subjects × columns
 // table, e.g. a report card's Cognitive Domain section). Rather than a
@@ -22,6 +23,9 @@ export function gridKey(fieldId: string, subjectId: string, columnKey: string): 
 export function expandGridThisTermFields(field: TemplateField): TemplateField[] {
   if (field.type !== "Grid" || !field.grid) return [];
   const { subjects, rawColumns, gradeBands, remarksMap } = field.grid;
+  // Only templates activated from a version (every column carries a weight)
+  // use weighted totals; older ones keep the flat sum so no number changes.
+  const weighted = field.grid.weighted === true && rawColumns.every((c) => typeof c.weight === "number");
 
   return subjects.flatMap((subject): TemplateField[] => {
     const totalId = gridKey(field.id, subject.id, "termTotal");
@@ -31,7 +35,12 @@ export function expandGridThisTermFields(field: TemplateField): TemplateField[] 
         id: totalId,
         name: `${subject.name} Term Total`,
         type: "Computed",
-        formula: { kind: "sum", of: rawColumns.map((c) => gridKey(field.id, subject.id, c.id)) },
+        formula: weighted
+          ? {
+              kind: "weightedSum",
+              parts: rawColumns.map((c) => ({ key: gridKey(field.id, subject.id, c.id), max: c.maxMark, weight: c.weight ?? 0 })),
+            }
+          : { kind: "sum", of: rawColumns.map((c) => gridKey(field.id, subject.id, c.id)) },
       },
       {
         id: gradeId,
@@ -232,7 +241,17 @@ export function buildGridResultData(fields: TemplateField[], data: Record<string
         subjects: f.grid!.subjects,
         columns,
         cells: Object.fromEntries(
-          f.grid!.subjects.map((s) => [s.id, Object.fromEntries(columns.map((c) => [c.key, data[gridKey(f.id, s.id, c.key)] ?? ""]))]),
+          f.grid!.subjects.map((s) => [
+            s.id,
+            Object.fromEntries(
+              columns.map((c) => {
+                const key = gridKey(f.id, s.id, c.key);
+                const state = explicitScoreState(data, key);
+                if (state) return [c.key, SCORE_STATE_LABEL[state]];
+                return [c.key, c.key === "termTotal" ? formatScore(data[key]) : (data[key] ?? "")];
+              }),
+            ),
+          ]),
         ),
       };
     });
