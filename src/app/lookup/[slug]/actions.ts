@@ -2,8 +2,9 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import type { TemplateField } from "@/app/admin/result-templates/actions";
-import { buildGridResultData, type GridResultData } from "@/lib/grid-compute";
+import type { GridResultData } from "@/lib/grid-compute";
+import { isSnapshotIntact, type SnapshotPayload } from "@/lib/snapshot";
+import { signSnapshotToken } from "@/lib/snapshot-token";
 
 const lookupSchema = z.object({
   slug: z.string().trim().min(1),
@@ -18,6 +19,12 @@ export type LookupResult = {
     templateId: string;
     templateName: string;
     term: string | null;
+    snapshotId: string;
+    verificationCode: string;
+    // Opens this one result's printable page for a short time — the lookup
+    // has no login, so this is its proof that the viewer passed code + name.
+    printToken: string;
+    intact: boolean;
     fields: { name: string; value: string }[];
     grids: GridResultData[];
   }[];
@@ -43,28 +50,28 @@ export async function lookupStudentResult(input: { slug: string; studentCode: st
   const fullName = normalizeName(`${student.firstName} ${student.lastName}`);
   if (fullName !== normalizeName(parsed.fullName)) return { found: false };
 
-  const publishedResults = await prisma.result.findMany({
-    where: { studentId: student.id, status: "PUBLISHED" },
-    include: { template: true },
+  // The frozen snapshot, not the live template — see the parent dashboard.
+  const snapshots = await prisma.publishedResultSnapshot.findMany({
+    where: { studentId: student.id, supersededAt: null },
     orderBy: { publishedAt: "desc" },
   });
 
   return {
     found: true,
     studentName: `${student.firstName} ${student.lastName}`,
-    results: publishedResults.map((r) => {
-      const templateFields = Array.isArray(r.template.fields) ? (r.template.fields as unknown as TemplateField[]) : [];
-      const data = (r.data as Record<string, string>) ?? {};
+    results: snapshots.map((snap) => {
+      const payload = snap.payload as unknown as SnapshotPayload;
+      const intact = isSnapshotIntact(snap);
       return {
-        templateId: r.templateId,
-        templateName: r.template.name,
-        term: r.term,
-        // Grid fields have no single data[field.id] value (their cells
-        // live under composite keys) — rendered separately via `grids`.
-        fields: templateFields
-          .filter((f) => f.type !== "Grid")
-          .map((f) => ({ name: f.name, value: data[f.id] ?? "—" })),
-        grids: buildGridResultData(templateFields, data),
+        templateId: payload.template.id,
+        templateName: payload.template.name,
+        term: payload.period.term,
+        snapshotId: snap.id,
+        verificationCode: snap.verificationCode,
+        printToken: signSnapshotToken(snap.id),
+        intact,
+        fields: intact ? payload.fields : [],
+        grids: intact ? payload.grids : [],
       };
     }),
   };

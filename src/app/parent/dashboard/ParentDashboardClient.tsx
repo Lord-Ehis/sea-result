@@ -14,9 +14,34 @@ type ResultEntry = {
   templateName: string;
   term: string | null;
   publishedAt: string | null;
+  snapshotId: string;
+  verificationCode: string;
+  // False if the frozen record no longer matches its checksum — its contents
+  // are withheld rather than shown.
+  intact: boolean;
   fields: { name: string; value: string }[];
   grids: GridResultData[];
 };
+
+function ResultFooter({ r }: { r: ResultEntry }) {
+  if (!r.intact) {
+    return (
+      <p className="m-0 rounded-md border border-warning/30 bg-warning-bg px-3 py-2 text-caption text-warning">
+        This result failed an automatic integrity check, so it can&apos;t be shown. Please contact your school.
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 text-caption text-text-muted">
+      <span>
+        Verification code <strong className="font-mono text-text-secondary">{r.verificationCode}</strong>
+      </span>
+      <Link href={`/result/${r.snapshotId}/print`} target="_blank" className="font-medium text-primary hover:underline">
+        Print / save as PDF
+      </Link>
+    </div>
+  );
+}
 
 type Child = {
   id: string;
@@ -113,6 +138,7 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
               {recent.grids.map((g, gi) => (
                 <GridResultTable key={gi} grid={g} />
               ))}
+              <ResultFooter r={recent} />
             </div>
           ) : (
             <p className="m-0 text-body text-text-muted">Results will appear here once the school publishes them.</p>
@@ -161,6 +187,7 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
                     {r.grids.map((g, gi) => (
                       <GridResultTable key={gi} grid={g} />
                     ))}
+                    <ResultFooter r={r} />
                   </div>
                 )}
               </div>

@@ -6,25 +6,26 @@ import { prisma } from "@/lib/prisma";
 import { ReviewClient } from "./ReviewClient";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
 
-export default async function ReviewBatchPage({ params }: { params: Promise<{ templateId: string }> }) {
-  const { templateId } = await params;
+export default async function ReviewBatchPage({ params }: { params: Promise<{ batchId: string }> }) {
+  const { batchId } = await params;
   const session = await auth();
   const schoolId = session!.user.schoolId!;
 
-  const template = await prisma.resultTemplate.findFirst({
-    where: { id: templateId, schoolId },
-    include: { class: true },
+  const batch = await prisma.resultBatch.findFirst({
+    where: { id: batchId, schoolId },
+    include: { class: true, template: true },
   });
 
-  const results = template
+  const reviewable = batch && (batch.status === "SUBMITTED" || batch.status === "APPROVED");
+  const results = reviewable
     ? await prisma.result.findMany({
-        where: { templateId, schoolId, status: "SUBMITTED" },
-        include: { student: true, submittedBy: true },
+        where: { batchId: batch.id, schoolId },
+        include: { student: true },
         orderBy: { student: { firstName: "asc" } },
       })
     : [];
 
-  if (!template || results.length === 0) {
+  if (!batch || !reviewable || results.length === 0) {
     return (
       <>
         <PageHeader eyebrow="Results / Review batch" title="Review results" intro="This batch has nothing pending review." />
@@ -33,14 +34,19 @@ export default async function ReviewBatchPage({ params }: { params: Promise<{ te
     );
   }
 
+  const submitter = batch.submittedByUserId
+    ? await prisma.user.findUnique({ where: { id: batch.submittedByUserId }, select: { name: true } })
+    : null;
+
   return (
     <ReviewClient
-      templateId={template.id}
-      className={template.class?.name ?? "All classes"}
-      term={template.term ?? ""}
-      teacherName={results[0]?.submittedBy?.name ?? "—"}
-      submittedAt={results[0]?.submittedAt?.toISOString() ?? null}
-      fields={Array.isArray(template.fields) ? (template.fields as unknown as TemplateField[]) : []}
+      batchId={batch.id}
+      status={batch.status as "SUBMITTED" | "APPROVED"}
+      className={batch.class.name}
+      term={batch.term}
+      teacherName={submitter?.name ?? "—"}
+      submittedAt={batch.submittedAt?.toISOString() ?? null}
+      fields={Array.isArray(batch.template.fields) ? (batch.template.fields as unknown as TemplateField[]) : []}
       students={results.map((r) => ({
         resultId: r.id,
         name: `${r.student.firstName} ${r.student.lastName}`,

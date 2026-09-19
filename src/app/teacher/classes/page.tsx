@@ -63,7 +63,7 @@ export default async function MyClassesPage() {
         completed = results.length;
         const allStudentsCovered = results.length === klass.students.length;
         if (results.some((r) => r.status === "REJECTED")) status = "Sent back for corrections";
-        else if (allStudentsCovered && results.every((r) => r.status === "SUBMITTED" || r.status === "PUBLISHED")) status = "Submitted";
+        else if (allStudentsCovered && results.every((r) => r.status === "SUBMITTED" || r.status === "APPROVED" || r.status === "PUBLISHED")) status = "Submitted";
         else if (results.length > 0) status = "In progress";
       }
 

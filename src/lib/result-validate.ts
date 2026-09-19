@@ -144,3 +144,13 @@ export function identicalScoreWarnings(fields: TemplateField[], dataByStudent: R
   }
   return warnings;
 }
+
+/** "Student — Subject · Component: message; …" with a cap, for a single readable error line. */
+export function summarizeIssues(prefix: string, issues: { student: string; issue: EntryIssue }[], max = 5): string {
+  const shown = issues
+    .slice(0, max)
+    .map(({ student, issue }) => `${student} — ${issue.label}: ${issue.message}`)
+    .join("; ");
+  const more = issues.length > max ? ` (and ${issues.length - max} more)` : "";
+  return `${prefix} ${shown}${more}`;
+}
