@@ -4,59 +4,21 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { fieldSchema, type TemplateField } from "./field-schemas";
 
-export type GradeBand = { min: number; max: number; label: string };
-export type GridSubject = { id: string; name: string };
-export type GridRawColumn = { id: string; name: string; maxMark: number };
-export type GridRemarksEntry = { grade: string; remarks: string };
-export type GridConfig = {
-  subjects: GridSubject[];
-  rawColumns: GridRawColumn[];
-  gradeBands: GradeBand[];
-  remarksMap: GridRemarksEntry[];
-  // Gates the Cumulative Result columns (First/Second/Third Term,
-  // Cumulative Total/Average/Grade/Remarks/Position) — a later round.
-  includeCumulative: boolean;
-};
-export type ComputedFormula =
-  | { kind: "sum"; of: string[] }
-  | { kind: "average"; of: string[] }
-  | { kind: "grade"; of: string; bands: GradeBand[] }
-  | { kind: "position"; of: string }
-  | { kind: "cumulative"; of: string; aggregate: "sum" | "average" }
-  | { kind: "remarksLookup"; of: string; map: GridRemarksEntry[] }
-  | {
-      kind: "promotion";
-      subjectFields: string[];
-      compulsoryFields: string[];
-      passMark: number;
-      minOffered: number;
-      minPassed: number;
-      overallField: string;
-      promotionScore: number;
-    }
-  // `of` is the id of a "promotion"-kind field on the same template —
-  // reuses that field's criteria as the single source of truth rather than
-  // duplicating pass mark/minimums/etc. Produces a multi-line (\n-joined)
-  // narrative explaining the verdict, e.g. a report card's "Result
-  // Analysis (Criteria for passing)" section.
-  | { kind: "resultAnalysis"; of: string };
-export type TemplateField = {
-  id: string;
-  name: string;
-  type: "Number" | "Text" | "Dropdown" | "Rating scale" | "Computed" | "Grid";
-  formula?: ComputedFormula;
-  // Present iff type === "Grid" — a subjects × columns table (e.g. the
-  // Cognitive Domain section of a Nigerian report card), stored as one
-  // TemplateField so it slots into the existing flat-field list; its cell
-  // values live in Result.data under composite keys (see src/lib/grid-compute.ts).
-  grid?: GridConfig;
-  // Only meaningful for type === "Rating scale". Undefined on older fields
-  // (created before this was configurable) — falls back to the original
-  // fixed 1-5 scale everywhere it's read, so already-published "3"s keep
-  // meaning "3 of 5" rather than being silently reinterpreted.
-  ratingOptions?: string[];
-};
+// Re-exported so existing imports (`import type { TemplateField } from
+// "./actions"`) across the app keep working — the real definitions live in
+// field-schemas.ts, a plain module, since a "use server" file may only
+// export async functions, not types or const Zod schemas.
+export type {
+  GradeBand,
+  GridSubject,
+  GridRawColumn,
+  GridRemarksEntry,
+  GridConfig,
+  ComputedFormula,
+  TemplateField,
+} from "./field-schemas";
 
 async function requireSchoolAdmin() {
   const session = await auth();
@@ -68,51 +30,48 @@ async function requireSchoolAdmin() {
 
 export async function createTemplate(name: string) {
   const schoolId = await requireSchoolAdmin();
-  const template = await prisma.resultTemplate.create({
-    data: { schoolId, name, fields: [] },
+  const template = await prisma.$transaction(async (tx) => {
+    const created = await tx.resultTemplate.create({ data: { schoolId, name, fields: [] } });
+    await tx.templateVersion.create({ data: { schoolId, templateId: created.id, versionNumber: 1, status: "DRAFT" } });
+    return created;
   });
   revalidatePath("/admin/result-templates");
   return template.id;
 }
 
-const gradeBandSchema = z.object({ min: z.number(), max: z.number(), label: z.string() });
-const gridRemarksEntrySchema = z.object({ grade: z.string(), remarks: z.string() });
-const formulaSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("sum"), of: z.array(z.string()) }),
-  z.object({ kind: z.literal("average"), of: z.array(z.string()) }),
-  z.object({ kind: z.literal("grade"), of: z.string(), bands: z.array(gradeBandSchema) }),
-  z.object({ kind: z.literal("position"), of: z.string() }),
-  z.object({ kind: z.literal("cumulative"), of: z.string(), aggregate: z.enum(["sum", "average"]) }),
-  z.object({ kind: z.literal("remarksLookup"), of: z.string(), map: z.array(gridRemarksEntrySchema) }),
-  z.object({
-    kind: z.literal("promotion"),
-    subjectFields: z.array(z.string()),
-    compulsoryFields: z.array(z.string()),
-    passMark: z.number(),
-    minOffered: z.number(),
-    minPassed: z.number(),
-    overallField: z.string(),
-    promotionScore: z.number(),
-  }),
-  z.object({ kind: z.literal("resultAnalysis"), of: z.string() }),
-]);
-
-const gridConfigSchema = z.object({
-  subjects: z.array(z.object({ id: z.string(), name: z.string() })),
-  rawColumns: z.array(z.object({ id: z.string(), name: z.string(), maxMark: z.number() })),
-  gradeBands: z.array(gradeBandSchema),
-  remarksMap: z.array(gridRemarksEntrySchema),
-  includeCumulative: z.boolean(),
+const templateMetaSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().trim().min(1, "Template name is required"),
+  classId: z.string().optional(),
+  level: z.string().trim().optional(),
+  term: z.string().trim().optional(),
 });
 
-const fieldSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  type: z.enum(["Number", "Text", "Dropdown", "Rating scale", "Computed", "Grid"]),
-  formula: formulaSchema.optional(),
-  grid: gridConfigSchema.optional(),
-  ratingOptions: z.array(z.string()).optional(),
-});
+// Name/scope/term editing — independent of `fields`, so it works whether or
+// not the template has moved to the versioned builder (saveTemplate's
+// whole-`fields`-array path is rejected once any TemplateVersion exists).
+export async function updateTemplateMeta(input: {
+  id: string;
+  name: string;
+  classId?: string;
+  level?: string;
+  term?: string;
+}) {
+  const schoolId = await requireSchoolAdmin();
+  const parsed = templateMetaSchema.parse(input);
+
+  await prisma.resultTemplate.update({
+    where: { id: parsed.id, schoolId },
+    data: {
+      name: parsed.name,
+      classId: parsed.classId || null,
+      level: parsed.classId ? null : parsed.level || null,
+      term: parsed.term || null,
+    },
+  });
+
+  revalidatePath("/admin/result-templates");
+}
 
 const saveTemplateSchema = z.object({
   id: z.string().min(1),
@@ -136,6 +95,11 @@ export async function saveTemplate(input: {
 }) {
   const schoolId = await requireSchoolAdmin();
   const parsed = saveTemplateSchema.parse(input);
+
+  const versionCount = await prisma.templateVersion.count({ where: { templateId: parsed.id, schoolId } });
+  if (versionCount > 0) {
+    throw new Error("This template now uses the versioned editor above — edit its draft version instead.");
+  }
 
   await prisma.resultTemplate.update({
     where: { id: parsed.id, schoolId },

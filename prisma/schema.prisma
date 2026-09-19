@@ -52,6 +52,12 @@ enum ResultStatus {
   PUBLISHED
 }
 
+enum TemplateVersionStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
 enum DeletionRequestStatus {
   PENDING
   APPROVED
@@ -89,17 +95,17 @@ enum ProviderKind {
 // ---------------------------------------------------------------------------
 
 model School {
-  id                 String       @id @default(cuid())
-  name               String
-  slug               String       @unique
-  status             SchoolStatus @default(ACTIVE)
-  customDomain       String?      @unique
-  customDomainVerified Boolean    @default(false)
-  resultFormatConfig Json?
-  allowParentAccounts Boolean     @default(true)
-  allowResultLookup   Boolean     @default(true)
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
+  id                   String       @id @default(cuid())
+  name                 String
+  slug                 String       @unique
+  status               SchoolStatus @default(ACTIVE)
+  customDomain         String?      @unique
+  customDomainVerified Boolean      @default(false)
+  resultFormatConfig   Json?
+  allowParentAccounts  Boolean      @default(true)
+  allowResultLookup    Boolean      @default(true)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
 
   campuses         Campus[]
   users            User[]
@@ -111,6 +117,15 @@ model School {
   payments         Payment[]
   notifications    Notification[]
   deletionRequests DeletionRequest[]
+
+  templateVersions     TemplateVersion[]
+  templateSections     TemplateSection[]
+  assessmentComponents AssessmentComponent[]
+  gradingScales        GradingScale[]
+  gradingScaleBands    GradingScaleBand[]
+  ratingCategories     RatingCategory[]
+  ratingItems          RatingItem[]
+  templateAssignments  TemplateAssignment[]
 
   @@map("schools")
 }
@@ -128,9 +143,10 @@ model Campus {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  school   School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  students Student[]
-  classes  Class[]
+  school              School               @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  students            Student[]
+  classes             Class[]
+  templateAssignments TemplateAssignment[]
 
   @@index([schoolId])
   @@map("campuses")
@@ -199,20 +215,21 @@ model PasswordResetToken {
 // ---------------------------------------------------------------------------
 
 model Class {
-  id         String   @id @default(cuid())
-  schoolId   String
-  campusId   String
-  name       String // e.g. "JSS 1A", "SSS 2 Commerce"
-  level      String? // e.g. "JSS 1", "SSS 2"
-  session    String // academic session, e.g. "2025/2026"
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(cuid())
+  schoolId  String
+  campusId  String
+  name      String // e.g. "JSS 1A", "SSS 2 Commerce"
+  level     String? // e.g. "JSS 1", "SSS 2"
+  session   String // academic session, e.g. "2025/2026"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  school      School                    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  campus      Campus                    @relation(fields: [campusId], references: [id], onDelete: Cascade)
-  students    Student[]
-  teachers    TeacherClassAssignment[]
-  resultTemplates ResultTemplate[]
+  school              School                   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  campus              Campus                   @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  students            Student[]
+  teachers            TeacherClassAssignment[]
+  resultTemplates     ResultTemplate[]
+  templateAssignments TemplateAssignment[]
 
   @@index([schoolId])
   @@index([campusId])
@@ -237,28 +254,28 @@ model TeacherClassAssignment {
 // ---------------------------------------------------------------------------
 
 model Student {
-  id          String   @id @default(cuid())
-  schoolId    String
-  campusId    String
-  classId     String?
-  studentCode String // unique per school, used for no-login result lookup
-  firstName   String
-  lastName    String
-  dateOfBirth DateTime?
+  id            String    @id @default(cuid())
+  schoolId      String
+  campusId      String
+  classId       String?
+  studentCode   String // unique per school, used for no-login result lookup
+  firstName     String
+  lastName      String
+  dateOfBirth   DateTime?
   // Plain contact details for notifications — not a linked parent account.
   // See ParentStudentLink for actual parent/student login access.
   guardianName  String?
   guardianPhone String?
   guardianEmail String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  school      School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  campus      Campus              @relation(fields: [campusId], references: [id], onDelete: Cascade)
-  class       Class?              @relation(fields: [classId], references: [id])
-  parentLinks ParentStudentLink[]
-  results     Result[]
+  school        School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  campus        Campus              @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  class         Class?              @relation(fields: [classId], references: [id])
+  parentLinks   ParentStudentLink[]
+  results       Result[]
   notifications Notification[]
 
   @@unique([schoolId, studentCode])
@@ -270,10 +287,10 @@ model Student {
 // A parent/student account can link multiple children; a student can
 // have more than one linked guardian.
 model ParentStudentLink {
-  id            String   @id @default(cuid())
-  parentUserId  String
-  studentId     String
-  createdAt     DateTime @default(now())
+  id           String   @id @default(cuid())
+  parentUserId String
+  studentId    String
+  createdAt    DateTime @default(now())
 
   parent  User    @relation(fields: [parentUserId], references: [id], onDelete: Cascade)
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -297,17 +314,218 @@ model ResultTemplate {
   term      String? // e.g. "Term 2, 2025/2026"
   // Field definitions are school-configurable (subjects, grading scale,
   // comment fields, etc.) — not a single fixed format across schools.
+  // Kept as the compute-facing source of truth: entry/review/publish read
+  // this column exactly as before. Once a TemplateVersion is activated,
+  // this column is derived (compiled) from it — see version-compile.ts.
   fields    Json
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  school  School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  class   Class?   @relation(fields: [classId], references: [id])
-  results Result[]
+  // Which version last compiled into `fields`, if any. Null for templates
+  // that have never gone through the versioned builder.
+  currentVersionId String?
+  currentVersion   TemplateVersion? @relation("CurrentVersion", fields: [currentVersionId], references: [id])
+
+  school   School            @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  class    Class?            @relation(fields: [classId], references: [id])
+  results  Result[]
+  versions TemplateVersion[] @relation("TemplateVersions")
 
   @@index([schoolId])
   @@map("result_templates")
+}
+
+// ---------------------------------------------------------------------------
+// Result template versioning (spec v1.0 "Configuration foundation")
+//
+// A ResultTemplate is the reusable identity; a TemplateVersion is an
+// immutable revision once activated (an admin duplicates an ACTIVE version
+// into a new DRAFT to change anything). Sections/components/rating
+// categories live only inside one version, not shared across versions — the
+// one deliberately reusable, school-owned exception is GradingScale.
+//
+// Activating a version compiles it into the legacy `TemplateField[]` shape
+// on ResultTemplate.fields (see src/lib/version-compile.ts) so entry,
+// review, publish and the compute engine keep working completely unchanged.
+// ---------------------------------------------------------------------------
+
+model TemplateVersion {
+  id                     String                @id @default(cuid())
+  schoolId               String
+  templateId             String
+  versionNumber          Int
+  status                 TemplateVersionStatus @default(DRAFT)
+  gradingScaleId         String? // null = falls back to the school's isDefault scale
+  // The original Grid TemplateField's own id, preserved across every
+  // version of a template once first migrated/activated. Result.data keys
+  // for Grid cells are `${gridFieldId}:${subjectId}:${columnId}` (see
+  // src/lib/grid-compute.ts) — reusing a different id here would silently
+  // orphan every already-scored cell for this template.
+  legacyGridFieldId      String?
+  // Verbatim passthrough for field types not yet modeled structurally here
+  // (Text, Dropdown, Computed incl. promotion/resultAnalysis, comment
+  // fields) — ids inside this array are never regenerated.
+  legacyFields           Json                  @default("[]")
+  // Snapshot of exactly what was compiled onto ResultTemplate.fields at
+  // activation — audit-log-ready even though no audit log exists yet.
+  compiledFieldsSnapshot Json?
+  createdByUserId        String?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  activatedByUserId      String?
+  activatedAt            DateTime?
+
+  school           School               @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  template         ResultTemplate       @relation("TemplateVersions", fields: [templateId], references: [id], onDelete: Cascade)
+  currentFor       ResultTemplate[]     @relation("CurrentVersion")
+  gradingScale     GradingScale?        @relation(fields: [gradingScaleId], references: [id])
+  sections         TemplateSection[]
+  ratingCategories RatingCategory[]
+  assignments      TemplateAssignment[]
+
+  @@unique([templateId, versionNumber])
+  @@index([schoolId])
+  @@map("template_versions")
+}
+
+model TemplateSection {
+  id             String   @id @default(cuid())
+  schoolId       String
+  versionId      String
+  name           String // e.g. "Mathematics" — a Grid "subject"
+  displayOrder   Int
+  // Set only by the one-time backfill script: the original Grid subject id,
+  // so compileVersionToFields can reproduce the exact same composite keys.
+  legacySourceId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  school     School                @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  version    TemplateVersion       @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  components AssessmentComponent[]
+
+  @@index([schoolId])
+  @@index([versionId])
+  @@map("template_sections")
+}
+
+model AssessmentComponent {
+  id             String   @id @default(cuid())
+  schoolId       String
+  sectionId      String
+  componentName  String // e.g. "1st CA"
+  componentCode  String // e.g. "CA1" — unique within a section
+  maxScore       Decimal  @db.Decimal(6, 2)
+  weightPercent  Decimal  @db.Decimal(5, 2)
+  displayOrder   Int
+  isRequired     Boolean  @default(true)
+  legacySourceId String? // original Grid rawColumn id (migration only)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  school  School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  section TemplateSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@unique([sectionId, componentCode])
+  @@index([schoolId])
+  @@map("assessment_components")
+}
+
+model GradingScale {
+  id        String   @id @default(cuid())
+  schoolId  String
+  name      String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  school   School             @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  bands    GradingScaleBand[]
+  versions TemplateVersion[]
+
+  @@index([schoolId])
+  @@map("grading_scales")
+}
+
+model GradingScaleBand {
+  id             String @id @default(cuid())
+  schoolId       String
+  gradingScaleId String
+  minScore       Float
+  maxScore       Float
+  gradeCode      String // e.g. "A"
+  remark         String // e.g. "Excellent"
+  displayOrder   Int
+
+  school       School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  gradingScale GradingScale @relation(fields: [gradingScaleId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId])
+  @@index([gradingScaleId])
+  @@map("grading_scale_bands")
+}
+
+model RatingCategory {
+  id            String   @id @default(cuid())
+  schoolId      String
+  versionId     String
+  name          String // e.g. "Affective domain"
+  displayOrder  Int
+  ratingOptions Json     @default("[\"1\",\"2\",\"3\",\"4\",\"5\"]") // string[] shared by items in this category
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  school  School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  version TemplateVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  items   RatingItem[]
+
+  @@index([schoolId])
+  @@index([versionId])
+  @@map("rating_categories")
+}
+
+model RatingItem {
+  id             String   @id @default(cuid())
+  schoolId       String
+  categoryId     String
+  name           String // e.g. "Punctuality"
+  displayOrder   Int
+  isEnabled      Boolean  @default(true)
+  legacySourceId String? // original flat "Rating scale" field id (migration only)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  school   School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  category RatingCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId])
+  @@index([categoryId])
+  @@map("rating_items")
+}
+
+model TemplateAssignment {
+  id        String   @id @default(cuid())
+  schoolId  String
+  versionId String
+  classId   String?
+  level     String?
+  // Part of the full spec shape; not populated by activateVersion in this
+  // increment — ResultTemplate has no campus concept to derive it from yet.
+  campusId  String?
+  term      String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  school  School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  version TemplateVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  class   Class?          @relation(fields: [classId], references: [id])
+  campus  Campus?         @relation(fields: [campusId], references: [id])
+
+  @@index([schoolId])
+  @@index([versionId])
+  @@map("template_assignments")
 }
 
 model Result {
@@ -348,18 +566,18 @@ model Result {
 // ---------------------------------------------------------------------------
 
 model Subscription {
-  id          String             @id @default(cuid())
-  schoolId    String
+  id           String             @id @default(cuid())
+  schoolId     String
   billingCycle BillingCycle
-  term        String? // set when billingCycle = PER_TERM
-  session     String
-  amount      Decimal            @db.Decimal(12, 2)
+  term         String? // set when billingCycle = PER_TERM
+  session      String
+  amount       Decimal            @db.Decimal(12, 2)
   discountNote String?
-  status      SubscriptionStatus @default(ACTIVE)
-  startDate   DateTime
-  endDate     DateTime
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  status       SubscriptionStatus @default(ACTIVE)
+  startDate    DateTime
+  endDate      DateTime
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
 
   school   School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   payments Payment[]
@@ -391,15 +609,15 @@ model Payment {
 // ---------------------------------------------------------------------------
 
 model DeletionRequest {
-  id         String                @id @default(cuid())
-  schoolId   String
+  id                String                @id @default(cuid())
+  schoolId          String
   requestedByUserId String
   resolvedByUserId  String?
-  reason     String
-  status     DeletionRequestStatus @default(PENDING)
-  requestedAt DateTime             @default(now())
-  resolvedAt  DateTime?
-  resolutionNote String?
+  reason            String
+  status            DeletionRequestStatus @default(PENDING)
+  requestedAt       DateTime              @default(now())
+  resolvedAt        DateTime?
+  resolutionNote    String?
 
   school      School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   requestedBy User   @relation("RequestedBy", fields: [requestedByUserId], references: [id])

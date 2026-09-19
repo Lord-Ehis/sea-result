@@ -1,12 +1,25 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { FileText, GripVertical, ChevronUp, ChevronDown, X, Plus, Check } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { createTemplate, saveTemplate, type TemplateField, type ComputedFormula, type GridConfig } from "./actions";
+import { createTemplate, updateTemplateMeta, type TemplateField, type ComputedFormula } from "./actions";
+import {
+  activateVersion,
+  createDraftVersion,
+  duplicateActiveVersionIntoDraft,
+  getTemplateVersions,
+  previewCompiledFields,
+  updateVersionDraft,
+  validateVersion,
+} from "./version-actions";
 import { GradeBandsEditor } from "./GradeBandsEditor";
-import { GridFieldConfig } from "./GridFieldConfig";
-import { DEFAULT_NEW_RATING_OPTIONS, ratingOptionsFor } from "@/lib/field-options";
+import { SectionsEditor } from "./SectionsEditor";
+import { GradingScaleEditor } from "./GradingScaleEditor";
+import { RatingCategoriesEditor } from "./RatingCategoriesEditor";
+import { ratingOptionsFor } from "@/lib/field-options";
+import { PRESETS, type GradingScaleSummary, type PresetKey, type RatingCategoryInput, type SectionInput, type TemplateVersionSummary } from "./version-types";
+import type { ValidationResult } from "@/lib/version-validate";
 
 type ClassOption = { id: string; name: string };
 type Template = {
@@ -26,7 +39,11 @@ function scopeOf(t: Template): Scope {
   return "ALL";
 }
 
-const FIELD_TYPES: TemplateField["type"][] = ["Number", "Text", "Dropdown", "Rating scale", "Computed", "Grid"];
+// "Grid" and "Rating scale" are no longer directly buildable here — subjects
+// live in the Sections editor and ratings in the Rating categories editor.
+// Everything else (comments, promotion/result-analysis criteria, one-off
+// numbers) still lives in this freeform "legacy fields" list.
+const LEGACY_FIELD_TYPES: TemplateField["type"][] = ["Number", "Text", "Dropdown", "Computed"];
 
 const FORMULA_LABEL: Record<ComputedFormula["kind"], string> = {
   sum: "Total (sum)",
@@ -34,8 +51,6 @@ const FORMULA_LABEL: Record<ComputedFormula["kind"], string> = {
   grade: "Grade",
   position: "Position",
   cumulative: "Cumulative (across terms)",
-  // Never chosen via the builder's own formula dropdown — only synthesized
-  // internally for a Grid field's per-subject Remarks column.
   remarksLookup: "Remarks lookup",
   promotion: "Promotion status",
   resultAnalysis: "Result analysis",
@@ -48,33 +63,9 @@ function defaultFormula(kind: ComputedFormula["kind"]): ComputedFormula {
   if (kind === "remarksLookup") return { kind, of: "", map: [] };
   if (kind === "resultAnalysis") return { kind, of: "" };
   if (kind === "promotion") {
-    return {
-      kind,
-      subjectFields: [],
-      compulsoryFields: [],
-      passMark: 40,
-      minOffered: 1,
-      minPassed: 1,
-      overallField: "",
-      promotionScore: 40,
-    };
+    return { kind, subjectFields: [], compulsoryFields: [], passMark: 40, minOffered: 1, minPassed: 1, overallField: "", promotionScore: 40 };
   }
   return { kind, of: [] };
-}
-
-function defaultGridConfig(): GridConfig {
-  return {
-    subjects: [],
-    rawColumns: [
-      { id: crypto.randomUUID(), name: "1st CA", maxMark: 10 },
-      { id: crypto.randomUUID(), name: "2nd CA", maxMark: 10 },
-      { id: crypto.randomUUID(), name: "3rd CA", maxMark: 10 },
-      { id: crypto.randomUUID(), name: "Exam", maxMark: 70 },
-    ],
-    gradeBands: [],
-    remarksMap: [],
-    includeCumulative: false,
-  };
 }
 
 function previewValue(field: TemplateField) {
@@ -82,7 +73,7 @@ function previewValue(field: TemplateField) {
   if (field.type === "Grid") {
     const grid = field.grid;
     if (!grid || grid.subjects.length === 0 || grid.rawColumns.length === 0) {
-      return <span className="text-[9px] italic text-[#8a99a2]">Configure subjects and score columns below.</span>;
+      return <span className="text-[9px] italic text-[#8a99a2]">Configure subjects below.</span>;
     }
     const sampleSubjects = grid.subjects.slice(0, 3);
     return (
@@ -127,24 +118,6 @@ function previewValue(field: TemplateField) {
     );
   }
   if (field.type === "Number") {
-    if (n.includes("subject")) {
-      return (
-        <table className="w-full text-[8px]">
-          <tbody>
-            {[
-              ["English language", 84],
-              ["Mathematics", 91],
-              ["Basic science", 78],
-            ].map(([subject, score]) => (
-              <tr key={subject} className="border-t border-[#e9edef]">
-                <td className="py-1.5 text-left text-[#637781]">{subject}</td>
-                <td className="py-1.5 text-right font-medium text-[#354b58]">{score}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      );
-    }
     return (
       <span className="text-[9px] font-medium text-[#384c58]">
         {n.includes("attendance") ? "94 / 100 days" : n.includes("position") ? "3rd of 36" : "85"}
@@ -156,7 +129,7 @@ function previewValue(field: TemplateField) {
   }
   if (field.type === "Rating scale") {
     const options = ratingOptionsFor(field);
-    const selectedIndex = Math.max(0, options.length - 2); // a plausible mid/high sample choice
+    const selectedIndex = Math.max(0, options.length - 2);
     return (
       <span className="flex flex-wrap gap-1">
         {options.map((opt, i) => (
@@ -179,63 +152,112 @@ function previewValue(field: TemplateField) {
   );
 }
 
+const STATUS_BADGE: Record<TemplateVersionSummary["status"], string> = {
+  DRAFT: "bg-bg-page text-text-secondary",
+  ACTIVE: "bg-success-bg text-success",
+  ARCHIVED: "bg-bg-page text-text-muted",
+};
+
 export function TemplateBuilderClient({
   initialTemplates,
   classes,
   levels,
+  initialGradingScales,
 }: {
   initialTemplates: Template[];
   classes: ClassOption[];
   levels: string[];
+  initialGradingScales: GradingScaleSummary[];
 }) {
   const [templates, setTemplates] = useState(initialTemplates);
   const [selectedId, setSelectedId] = useState<string | null>(initialTemplates[0]?.id ?? null);
+  const [gradingScales, setGradingScales] = useState(initialGradingScales);
+  const [versions, setVersions] = useState<TemplateVersionSummary[]>([]);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+
+  const [draftSections, setDraftSections] = useState<SectionInput[]>([]);
+  const [draftRatingCategories, setDraftRatingCategories] = useState<RatingCategoryInput[]>([]);
+  const [draftGradingScaleId, setDraftGradingScaleId] = useState<string | null>(null);
+  const [draftLegacyFields, setDraftLegacyFields] = useState<TemplateField[]>([]);
+  const [previewFields, setPreviewFields] = useState<TemplateField[]>([]);
+  const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
+
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const selected = useMemo(() => templates.find((t) => t.id === selectedId) ?? null, [templates, selectedId]);
+  const selectedVersion = useMemo(() => versions.find((v) => v.id === selectedVersionId) ?? null, [versions, selectedVersionId]);
+  const isEditableDraft = selectedVersion?.status === "DRAFT";
+
+  // Templates/versions switched are reflected during render, per React's
+  // own recommended pattern for "reset local state when a prop/id changes"
+  // (react.dev/learn/you-might-not-need-an-effect) — an Effect that only
+  // resets state synchronously on a guard clause causes an extra cascading
+  // render, which is exactly what this avoids.
+  const [versionsOwnerId, setVersionsOwnerId] = useState<string | null>(selectedId);
+  if (selectedId !== versionsOwnerId) {
+    setVersionsOwnerId(selectedId);
+    setVersions([]);
+    setSelectedVersionId(null);
+    setLoadingVersions(!!selectedId);
+  }
+
+  const [hydratedVersionId, setHydratedVersionId] = useState<string | null>(null);
+  if (selectedVersionId !== hydratedVersionId) {
+    setHydratedVersionId(selectedVersionId);
+    setDraftSections(selectedVersion?.sections ?? []);
+    setDraftRatingCategories(selectedVersion?.ratingCategories ?? []);
+    setDraftGradingScaleId(selectedVersion?.gradingScaleId ?? null);
+    setDraftLegacyFields(selectedVersion?.legacyFields ?? []);
+    setValidation(null);
+    setPreviewFields([]);
+  }
+
+  useEffect(() => {
+    if (!selectedId) return;
+    let cancelled = false;
+    getTemplateVersions(selectedId).then((vs) => {
+      if (cancelled) return;
+      setVersions(vs);
+      const draft = vs.find((v) => v.status === "DRAFT");
+      setSelectedVersionId((draft ?? vs[0])?.id ?? null);
+      setLoadingVersions(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId]);
+
+  useEffect(() => {
+    if (!selectedVersion) return;
+    const handle = setTimeout(() => {
+      previewCompiledFields({
+        versionId: selectedVersion.id,
+        gradingScaleId: draftGradingScaleId,
+        sections: draftSections,
+        ratingCategories: draftRatingCategories,
+        legacyFields: draftLegacyFields,
+      })
+        .then(setPreviewFields)
+        .catch(() => {});
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [selectedVersion, draftGradingScaleId, draftSections, draftRatingCategories, draftLegacyFields]);
 
   function updateSelected(patch: Partial<Template>) {
     if (!selected) return;
     setTemplates((prev) => prev.map((t) => (t.id === selected.id ? { ...t, ...patch } : t)));
   }
 
-  function updateFields(fields: TemplateField[]) {
-    updateSelected({ fields });
-  }
-
-  function updateFieldType(fieldId: string, type: TemplateField["type"]) {
-    if (!selected) return;
-    updateFields(
-      selected.fields.map((x) =>
-        x.id === fieldId
-          ? {
-              ...x,
-              type,
-              formula: type === "Computed" ? (x.formula ?? defaultFormula("sum")) : undefined,
-              grid: type === "Grid" ? (x.grid ?? defaultGridConfig()) : undefined,
-              ratingOptions: type === "Rating scale" ? (x.ratingOptions ?? DEFAULT_NEW_RATING_OPTIONS) : undefined,
-            }
-          : x,
-      ),
-    );
-  }
-
-  function updateFieldFormula(fieldId: string, formula: ComputedFormula) {
-    if (!selected) return;
-    updateFields(selected.fields.map((x) => (x.id === fieldId ? { ...x, formula } : x)));
-  }
-
-  function updateFieldGrid(fieldId: string, grid: GridConfig) {
-    if (!selected) return;
-    updateFields(selected.fields.map((x) => (x.id === fieldId ? { ...x, grid } : x)));
-  }
-
-  function updateFieldRatingOptions(fieldId: string, ratingOptions: string[]) {
-    if (!selected) return;
-    updateFields(selected.fields.map((x) => (x.id === fieldId ? { ...x, ratingOptions } : x)));
+  function refreshVersions(preferId?: string) {
+    if (!selected) return Promise.resolve();
+    return getTemplateVersions(selected.id).then((vs) => {
+      setVersions(vs);
+      if (preferId) setSelectedVersionId(preferId);
+    });
   }
 
   function handleNewTemplate() {
@@ -247,60 +269,142 @@ export function TemplateBuilderClient({
     });
   }
 
-  function handleSave() {
+  function handleSaveMeta() {
     if (!selected) return;
     setError(null);
     setSavedMessage(null);
     startTransition(async () => {
       try {
-        await saveTemplate({
+        await updateTemplateMeta({
           id: selected.id,
           name: selected.name,
           classId: selected.classId ?? undefined,
           level: selected.level ?? undefined,
           term: selected.term ?? undefined,
-          fields: selected.fields,
         });
-        setSavedMessage("Template saved.");
+        setSavedMessage("Template details saved.");
         setTimeout(() => setSavedMessage(null), 3000);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not save template.");
+        setError(err instanceof Error ? err.message : "Could not save template details.");
       }
     });
   }
 
-  function addField() {
+  function handleInitializeVersioning() {
     if (!selected) return;
-    const field: TemplateField = { id: crypto.randomUUID(), name: "New field", type: "Text" };
-    updateFields([...selected.fields, field]);
+    startTransition(async () => {
+      const id = await createDraftVersion(selected.id);
+      await refreshVersions(id);
+    });
   }
 
-  function removeField(id: string) {
+  function handleNewDraft(preset?: PresetKey) {
     if (!selected) return;
-    updateFields(selected.fields.filter((f) => f.id !== id));
+    startTransition(async () => {
+      const id = await createDraftVersion(selected.id, preset ? { preset } : undefined);
+      await refreshVersions(id);
+    });
   }
 
-  function moveField(id: string, direction: -1 | 1) {
+  function handleDuplicateActive() {
     if (!selected) return;
-    const fields = [...selected.fields];
-    const i = fields.findIndex((f) => f.id === id);
-    const j = i + direction;
-    if (i < 0 || j < 0 || j >= fields.length) return;
-    [fields[i], fields[j]] = [fields[j], fields[i]];
-    updateFields(fields);
+    setError(null);
+    startTransition(async () => {
+      try {
+        const id = await duplicateActiveVersionIntoDraft(selected.id);
+        await refreshVersions(id);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not duplicate the active version.");
+      }
+    });
+  }
+
+  function handleSaveDraft() {
+    if (!selectedVersion) return;
+    setError(null);
+    setSavedMessage(null);
+    startTransition(async () => {
+      try {
+        await updateVersionDraft({
+          versionId: selectedVersion.id,
+          gradingScaleId: draftGradingScaleId,
+          sections: draftSections,
+          ratingCategories: draftRatingCategories,
+          legacyFields: draftLegacyFields,
+        });
+        setSavedMessage("Draft saved.");
+        setTimeout(() => setSavedMessage(null), 3000);
+        await refreshVersions(selectedVersion.id);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not save draft.");
+      }
+    });
+  }
+
+  function handleValidate() {
+    if (!selectedVersion) return;
+    startTransition(async () => {
+      const result = await validateVersion(selectedVersion.id);
+      setValidation(result);
+    });
+  }
+
+  function handleActivate() {
+    if (!selectedVersion || !selected) return;
+    setError(null);
+    startTransition(async () => {
+      try {
+        await activateVersion(selectedVersion.id);
+        const vs = await getTemplateVersions(selected.id);
+        setVersions(vs);
+        const active = vs.find((v) => v.status === "ACTIVE");
+        setSelectedVersionId(active?.id ?? selectedVersion.id);
+        setSavedMessage("Version activated — the result card now reflects it.");
+        setTimeout(() => setSavedMessage(null), 4000);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not activate.");
+      }
+    });
+  }
+
+  function onScaleCreated(scale: GradingScaleSummary) {
+    setGradingScales((prev) => [...prev, scale]);
+  }
+
+  function addLegacyField() {
+    setDraftLegacyFields((prev) => [...prev, { id: crypto.randomUUID(), name: "New field", type: "Text" }]);
+  }
+
+  function removeLegacyField(id: string) {
+    setDraftLegacyFields((prev) => prev.filter((f) => f.id !== id));
+  }
+
+  function moveLegacyField(id: string, direction: -1 | 1) {
+    setDraftLegacyFields((prev) => {
+      const fields = [...prev];
+      const i = fields.findIndex((f) => f.id === id);
+      const j = i + direction;
+      if (i < 0 || j < 0 || j >= fields.length) return prev;
+      [fields[i], fields[j]] = [fields[j], fields[i]];
+      return fields;
+    });
   }
 
   function handleDrop(targetId: string) {
-    if (!selected || !dragId || dragId === targetId) return;
-    const fields = [...selected.fields];
-    const from = fields.findIndex((f) => f.id === dragId);
-    const to = fields.findIndex((f) => f.id === targetId);
-    if (from < 0 || to < 0) return;
-    const [moved] = fields.splice(from, 1);
-    fields.splice(to, 0, moved);
-    updateFields(fields);
+    if (!dragId || dragId === targetId) return;
+    setDraftLegacyFields((prev) => {
+      const fields = [...prev];
+      const from = fields.findIndex((f) => f.id === dragId);
+      const to = fields.findIndex((f) => f.id === targetId);
+      if (from < 0 || to < 0) return prev;
+      const [moved] = fields.splice(from, 1);
+      fields.splice(to, 0, moved);
+      return fields;
+    });
     setDragId(null);
   }
+
+  const previewList = previewFields.length > 0 ? previewFields : selected?.fields ?? [];
 
   return (
     <>
@@ -308,17 +412,8 @@ export function TemplateBuilderClient({
         <PageHeader
           eyebrow="Results management"
           title="Result templates"
-          intro="Build result cards for each class and term, then preview changes as you go."
+          intro="Build versioned result templates, review weight validation, then activate for the class to use."
         />
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={!selected || pending}
-          className="inline-flex h-[38px] items-center gap-2 rounded-md border border-primary bg-primary px-3.5 text-caption font-medium text-white disabled:opacity-60"
-        >
-          <Check size={15} strokeWidth={1.8} />
-          Save template
-        </button>
       </div>
 
       {savedMessage && <p className="mb-4 rounded-md bg-success-bg px-3 py-2 text-caption text-success">{savedMessage}</p>}
@@ -364,17 +459,24 @@ export function TemplateBuilderClient({
         {selected ? (
           <>
             <section className="rounded-md border border-border bg-bg-card">
-              <div className="border-b border-border px-5 py-5">
-                <h2 className="m-0 text-heading font-medium text-text-primary">Template editor</h2>
-                <p className="mt-1.5 text-caption text-text-muted">Drag fields to reorder or edit their type.</p>
+              <div className="flex items-center justify-between gap-2 border-b border-border px-5 py-5">
+                <div>
+                  <h2 className="m-0 text-heading font-medium text-text-primary">Template editor</h2>
+                  <p className="mt-1.5 text-caption text-text-muted">Details, subjects, grading and ratings for this template.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveMeta}
+                  disabled={pending}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-caption font-medium text-text-secondary disabled:opacity-60"
+                >
+                  <Check size={14} strokeWidth={1.8} />
+                  Save details
+                </button>
               </div>
               <div className="grid grid-cols-1 gap-3 border-b border-border px-5 py-5 sm:grid-cols-2">
                 <Field label="Template name">
-                  <input
-                    value={selected.name}
-                    onChange={(e) => updateSelected({ name: e.target.value })}
-                    className={inputClass}
-                  />
+                  <input value={selected.name} onChange={(e) => updateSelected({ name: e.target.value })} className={inputClass} />
                 </Field>
                 <Field label="Term">
                   <input
@@ -385,10 +487,6 @@ export function TemplateBuilderClient({
                   />
                 </Field>
               </div>
-              <p className="mx-5 mt-3 text-[10px] leading-relaxed text-text-muted">
-                Starting a new term? Update this same template&apos;s Term rather than creating a new one — that&apos;s
-                what lets a Cumulative field (see field types below) build up history across the session.
-              </p>
               <div className="grid gap-2 border-b border-border px-5 py-5">
                 <span className="text-[10px] text-text-muted">Applies to</span>
                 <div className="inline-flex w-fit rounded-md border border-border bg-bg-page p-1">
@@ -420,11 +518,7 @@ export function TemplateBuilderClient({
                   ))}
                 </div>
                 {scopeOf(selected) === "LEVEL" && (
-                  <select
-                    value={selected.level ?? ""}
-                    onChange={(e) => updateSelected({ level: e.target.value })}
-                    className={`${inputClass} mt-1 max-w-[220px]`}
-                  >
+                  <select value={selected.level ?? ""} onChange={(e) => updateSelected({ level: e.target.value })} className={`${inputClass} mt-1 max-w-[220px]`}>
                     {levels.length === 0 && <option value="">No levels set up yet</option>}
                     {levels.map((l) => (
                       <option key={l} value={l}>
@@ -436,12 +530,7 @@ export function TemplateBuilderClient({
                 {scopeOf(selected) === "CLASS" && (
                   <select
                     value={selected.classId ?? ""}
-                    onChange={(e) =>
-                      updateSelected({
-                        classId: e.target.value || null,
-                        className: classes.find((c) => c.id === e.target.value)?.name ?? null,
-                      })
-                    }
+                    onChange={(e) => updateSelected({ classId: e.target.value || null, className: classes.find((c) => c.id === e.target.value)?.name ?? null })}
                     className={`${inputClass} mt-1 max-w-[220px]`}
                   >
                     {classes.map((c) => (
@@ -452,121 +541,259 @@ export function TemplateBuilderClient({
                   </select>
                 )}
               </div>
-              <div className="px-5 py-5">
-                <div className="mb-3.5 flex items-start justify-between gap-2">
-                  <div>
-                    <h3 className="m-0 text-body font-medium text-text-primary">Result card fields</h3>
-                    <p className="mt-1 text-caption text-text-muted">Choose what appears on the final result sheet.</p>
+
+              <div className="border-b border-border px-5 py-5">
+                <div className="mb-3.5 flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="m-0 text-body font-medium text-text-primary">Versions</h3>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        e.target.value = "";
+                        if (value === "__blank__") handleNewDraft();
+                        else if (value) handleNewDraft(value as PresetKey);
+                      }}
+                      defaultValue=""
+                      disabled={pending}
+                      className="h-8 rounded-md border border-dashed border-border bg-bg-card px-2 text-[10px] font-medium text-primary"
+                    >
+                      <option value="" disabled>
+                        + New draft…
+                      </option>
+                      <option value="__blank__">Blank</option>
+                      {Object.entries(PRESETS).map(([key, preset]) => (
+                        <option key={key} value={key}>
+                          From preset: {preset.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleDuplicateActive}
+                      disabled={pending || !versions.some((v) => v.status === "ACTIVE")}
+                      className="h-8 rounded-md border border-border px-2.5 text-[10px] font-medium text-text-secondary disabled:opacity-40"
+                    >
+                      Duplicate active into new draft
+                    </button>
                   </div>
-                  <span className="whitespace-nowrap rounded-md bg-bg-page px-2 py-1.5 text-[10px] text-text-secondary">
-                    {selected.fields.length} fields
-                  </span>
                 </div>
-                <div className="grid gap-2">
-                  {selected.fields.length === 0 && (
-                    <div className="rounded-md border border-dashed border-border px-5 py-6 text-center text-caption text-text-muted">
-                      No fields yet. Add a field below.
+
+                {loadingVersions ? (
+                  <p className="m-0 text-caption text-text-muted">Loading versions…</p>
+                ) : versions.length === 0 ? (
+                  <div className="rounded-md border border-dashed border-border px-4 py-5 text-center">
+                    <p className="m-0 mb-2 text-caption text-text-muted">This template hasn&apos;t been set up in the versioned builder yet.</p>
+                    <button
+                      type="button"
+                      onClick={handleInitializeVersioning}
+                      disabled={pending}
+                      className="h-8 rounded-md border border-primary bg-primary px-3 text-caption font-medium text-white disabled:opacity-60"
+                    >
+                      Initialize versioning
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {versions.map((v) => (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => setSelectedVersionId(v.id)}
+                        className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium ${
+                          v.id === selectedVersionId ? "border-primary text-primary" : "border-border text-text-secondary"
+                        }`}
+                      >
+                        v{v.versionNumber}
+                        <span className={`rounded-full px-1.5 py-0.5 ${STATUS_BADGE[v.status]}`}>{v.status}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {selectedVersion && (
+                <>
+                  <div className="flex items-center justify-between gap-2 border-b border-border px-5 py-4">
+                    <div>
+                      <h3 className="m-0 text-body font-medium text-text-primary">
+                        Version {selectedVersion.versionNumber}
+                        {!isEditableDraft && <span className="ml-2 text-[10px] font-normal text-text-muted">(read-only — {selectedVersion.status.toLowerCase()})</span>}
+                      </h3>
+                    </div>
+                    {isEditableDraft && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleValidate}
+                          disabled={pending}
+                          className="h-8 rounded-md border border-border px-3 text-caption font-medium text-text-secondary disabled:opacity-60"
+                        >
+                          Validate
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveDraft}
+                          disabled={pending}
+                          className="h-8 rounded-md border border-border px-3 text-caption font-medium text-text-secondary disabled:opacity-60"
+                        >
+                          Save draft
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleActivate}
+                          disabled={pending}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-primary bg-primary px-3 text-caption font-medium text-white disabled:opacity-60"
+                        >
+                          <Check size={14} strokeWidth={1.8} />
+                          Activate
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {validation && (validation.errors.length > 0 || validation.warnings.length > 0) && (
+                    <div className="grid gap-1.5 border-b border-border px-5 py-4">
+                      {validation.errors.map((e, i) => (
+                        <p key={`err-${i}`} className="m-0 rounded-md bg-danger-bg px-3 py-2 text-caption text-danger">
+                          {e.message}
+                        </p>
+                      ))}
+                      {validation.warnings.map((w, i) => (
+                        <p key={`warn-${i}`} className="m-0 rounded-md bg-bg-page px-3 py-2 text-caption text-text-secondary">
+                          {w.message}
+                        </p>
+                      ))}
                     </div>
                   )}
-                  {selected.fields.map((f, i) => (
-                    <div
-                      key={f.id}
-                      draggable
-                      onDragStart={() => setDragId(f.id)}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={() => handleDrop(f.id)}
-                      className="rounded-md border border-border bg-bg-card"
-                    >
-                    <div className="flex flex-col gap-2 p-2 sm:flex-row sm:items-center">
-                      <div className="flex items-center gap-2 sm:min-w-0 sm:flex-1">
-                        <span className="grid cursor-grab place-items-center text-text-muted">
-                          <GripVertical size={16} strokeWidth={1.8} />
-                        </span>
-                        <input
-                          value={f.name}
-                          onChange={(e) =>
-                            updateFields(selected.fields.map((x) => (x.id === f.id ? { ...x, name: e.target.value } : x)))
-                          }
-                          aria-label={`Field ${i + 1} name`}
-                          className="min-w-0 flex-1 border-0 bg-transparent p-1 text-caption font-medium text-text-primary focus:outline-none"
-                        />
+
+                  <div className="border-b border-border px-5 py-5">
+                    <h3 className="m-0 mb-3 text-body font-medium text-text-primary">Subjects &amp; assessment components</h3>
+                    <fieldset disabled={!isEditableDraft} className="disabled:opacity-60">
+                      <SectionsEditor sections={draftSections} onChange={setDraftSections} />
+                    </fieldset>
+                  </div>
+
+                  <div className="border-b border-border px-5 py-5">
+                    <h3 className="m-0 mb-3 text-body font-medium text-text-primary">Grading scale</h3>
+                    <fieldset disabled={!isEditableDraft} className="disabled:opacity-60">
+                      <GradingScaleEditor scales={gradingScales} selectedId={draftGradingScaleId} onSelect={setDraftGradingScaleId} onScaleCreated={onScaleCreated} />
+                    </fieldset>
+                  </div>
+
+                  <div className="border-b border-border px-5 py-5">
+                    <h3 className="m-0 mb-3 text-body font-medium text-text-primary">Affective &amp; psychomotor ratings</h3>
+                    <fieldset disabled={!isEditableDraft} className="disabled:opacity-60">
+                      <RatingCategoriesEditor categories={draftRatingCategories} onChange={setDraftRatingCategories} />
+                    </fieldset>
+                  </div>
+
+                  <div className="px-5 py-5">
+                    <div className="mb-3.5 flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className="m-0 text-body font-medium text-text-primary">Legacy &amp; advanced fields</h3>
+                        <p className="mt-1 text-caption text-text-muted">Comments, promotion criteria and one-off fields not covered above.</p>
                       </div>
-                      <div className="flex items-center justify-between gap-2 sm:justify-end">
-                        <select
-                          value={f.type}
-                          onChange={(e) => updateFieldType(f.id, e.target.value as TemplateField["type"])}
-                          className="h-[30px] rounded-md border border-border bg-bg-page px-1.5 text-[10px] text-text-secondary sm:w-[112px]"
+                      <span className="whitespace-nowrap rounded-md bg-bg-page px-2 py-1.5 text-[10px] text-text-secondary">{draftLegacyFields.length} fields</span>
+                    </div>
+                    <fieldset disabled={!isEditableDraft} className="grid gap-2 disabled:opacity-60">
+                      {draftLegacyFields.length === 0 && (
+                        <div className="rounded-md border border-dashed border-border px-5 py-6 text-center text-caption text-text-muted">No legacy fields.</div>
+                      )}
+                      {draftLegacyFields.map((f, i) => (
+                        <div
+                          key={f.id}
+                          draggable={isEditableDraft}
+                          onDragStart={() => setDragId(f.id)}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={() => handleDrop(f.id)}
+                          className="rounded-md border border-border bg-bg-card"
                         >
-                          {FIELD_TYPES.map((type) => (
-                            <option
-                              key={type}
-                              value={type}
-                              disabled={type === "Grid" && f.type !== "Grid" && selected.fields.some((x) => x.type === "Grid")}
-                            >
-                              {type}
-                            </option>
-                          ))}
-                        </select>
-                        <span className="flex items-center gap-0.5">
-                          <button
-                            type="button"
-                            onClick={() => moveField(f.id, -1)}
-                            disabled={i === 0}
-                            aria-label={`Move ${f.name} up`}
-                            className="grid h-6 w-6 place-items-center rounded text-text-muted disabled:opacity-30"
-                          >
-                            <ChevronUp size={14} strokeWidth={1.8} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => moveField(f.id, 1)}
-                            disabled={i === selected.fields.length - 1}
-                            aria-label={`Move ${f.name} down`}
-                            className="grid h-6 w-6 place-items-center rounded text-text-muted disabled:opacity-30"
-                          >
-                            <ChevronDown size={14} strokeWidth={1.8} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => removeField(f.id)}
-                            aria-label={`Remove ${f.name}`}
-                            className="grid h-6 w-6 place-items-center rounded text-text-muted hover:bg-danger-bg hover:text-danger"
-                          >
-                            <X size={14} strokeWidth={1.8} />
-                          </button>
-                        </span>
-                      </div>
-                    </div>
-                    {f.type === "Computed" && (
-                      <FormulaConfig
-                        field={f}
-                        otherFields={selected.fields.filter((x) => x.id !== f.id)}
-                        onChange={(formula) => updateFieldFormula(f.id, formula)}
-                      />
+                          <div className="flex flex-col gap-2 p-2 sm:flex-row sm:items-center">
+                            <div className="flex items-center gap-2 sm:min-w-0 sm:flex-1">
+                              <span className="grid cursor-grab place-items-center text-text-muted">
+                                <GripVertical size={16} strokeWidth={1.8} />
+                              </span>
+                              <input
+                                value={f.name}
+                                onChange={(e) => setDraftLegacyFields((prev) => prev.map((x) => (x.id === f.id ? { ...x, name: e.target.value } : x)))}
+                                aria-label={`Field ${i + 1} name`}
+                                className="min-w-0 flex-1 border-0 bg-transparent p-1 text-caption font-medium text-text-primary focus:outline-none"
+                              />
+                            </div>
+                            <div className="flex items-center justify-between gap-2 sm:justify-end">
+                              <select
+                                value={f.type}
+                                onChange={(e) => {
+                                  const type = e.target.value as TemplateField["type"];
+                                  setDraftLegacyFields((prev) =>
+                                    prev.map((x) =>
+                                      x.id === f.id
+                                        ? { ...x, type, formula: type === "Computed" ? (x.formula ?? defaultFormula("sum")) : undefined, ratingOptions: undefined, grid: undefined }
+                                        : x,
+                                    ),
+                                  );
+                                }}
+                                className="h-[30px] rounded-md border border-border bg-bg-page px-1.5 text-[10px] text-text-secondary sm:w-[112px]"
+                              >
+                                {LEGACY_FIELD_TYPES.map((type) => (
+                                  <option key={type} value={type}>
+                                    {type}
+                                  </option>
+                                ))}
+                              </select>
+                              <span className="flex items-center gap-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => moveLegacyField(f.id, -1)}
+                                  disabled={i === 0}
+                                  aria-label={`Move ${f.name} up`}
+                                  className="grid h-6 w-6 place-items-center rounded text-text-muted disabled:opacity-30"
+                                >
+                                  <ChevronUp size={14} strokeWidth={1.8} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => moveLegacyField(f.id, 1)}
+                                  disabled={i === draftLegacyFields.length - 1}
+                                  aria-label={`Move ${f.name} down`}
+                                  className="grid h-6 w-6 place-items-center rounded text-text-muted disabled:opacity-30"
+                                >
+                                  <ChevronDown size={14} strokeWidth={1.8} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => removeLegacyField(f.id)}
+                                  aria-label={`Remove ${f.name}`}
+                                  className="grid h-6 w-6 place-items-center rounded text-text-muted hover:bg-danger-bg hover:text-danger"
+                                >
+                                  <X size={14} strokeWidth={1.8} />
+                                </button>
+                              </span>
+                            </div>
+                          </div>
+                          {f.type === "Computed" && (
+                            <FormulaConfig
+                              field={f}
+                              otherFields={draftLegacyFields.filter((x) => x.id !== f.id)}
+                              onChange={(formula) => setDraftLegacyFields((prev) => prev.map((x) => (x.id === f.id ? { ...x, formula } : x)))}
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </fieldset>
+                    {isEditableDraft && (
+                      <button
+                        type="button"
+                        onClick={addLegacyField}
+                        className="mt-3 flex h-9 w-full items-center justify-center gap-2 rounded-md border border-dashed border-border bg-bg-page text-caption font-medium text-primary hover:bg-primary-bg"
+                      >
+                        <Plus size={15} strokeWidth={1.8} />
+                        Add legacy field
+                      </button>
                     )}
-                    {f.type === "Grid" && (
-                      <GridFieldConfig grid={f.grid ?? defaultGridConfig()} onChange={(grid) => updateFieldGrid(f.id, grid)} />
-                    )}
-                    {f.type === "Rating scale" && (
-                      <RatingOptionsEditor
-                        options={f.ratingOptions ?? DEFAULT_NEW_RATING_OPTIONS}
-                        onChange={(options) => updateFieldRatingOptions(f.id, options)}
-                      />
-                    )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="border-t border-border px-5 py-4">
-                <button
-                  type="button"
-                  onClick={addField}
-                  className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-dashed border-border bg-bg-page text-caption font-medium text-primary hover:bg-primary-bg"
-                >
-                  <Plus size={15} strokeWidth={1.8} />
-                  Add field
-                </button>
-              </div>
+                  </div>
+                </>
+              )}
             </section>
 
             <aside className="rounded-md border border-border bg-bg-card lg:sticky lg:top-4">
@@ -602,12 +829,10 @@ export function TemplateBuilderClient({
                     </div>
                   </div>
                   <div className="grid gap-2.5 pt-3.5">
-                    {selected.fields.length === 0 ? (
-                      <div className="rounded border border-[#e8ecee] p-2.5 text-[9px] text-text-muted">
-                        Add a field to see it here.
-                      </div>
+                    {previewList.length === 0 ? (
+                      <div className="rounded border border-[#e8ecee] p-2.5 text-[9px] text-text-muted">Add subjects or fields to see them here.</div>
                     ) : (
-                      selected.fields.map((f) => (
+                      previewList.map((f) => (
                         <div key={f.id} className="min-h-10 rounded border border-[#e8ecee] p-2.5">
                           <div className="mb-1.5 text-[8px] text-[#8a99a2]">{f.name || "Untitled field"}</div>
                           {previewValue(f)}
@@ -618,7 +843,7 @@ export function TemplateBuilderClient({
                 </div>
               </div>
               <p className="px-4 pb-4 text-center text-[10px] leading-relaxed text-text-muted">
-                Sample values are shown for layout preview.
+                {isEditableDraft ? "Preview reflects your unsaved draft." : "Preview reflects this version's saved configuration."}
               </p>
             </aside>
           </>
@@ -644,73 +869,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 const selectClass = "h-[30px] rounded-md border border-border bg-bg-card px-2 text-[10px] text-text-primary";
-
-function RatingOptionsEditor({ options, onChange }: { options: string[]; onChange: (options: string[]) => void }) {
-  function move(i: number, direction: -1 | 1) {
-    const j = i + direction;
-    if (j < 0 || j >= options.length) return;
-    const next = [...options];
-    [next[i], next[j]] = [next[j], next[i]];
-    onChange(next);
-  }
-
-  return (
-    <div className="grid gap-1.5 border-t border-border bg-bg-page px-3 py-3">
-      <span className="text-[10px] text-text-muted">Scale options, in order</span>
-      <div className="grid gap-1">
-        {options.map((opt, i) => (
-          <div key={i} className="grid grid-cols-[1fr_auto] items-center gap-1.5">
-            <input
-              value={opt}
-              onChange={(e) => {
-                const next = [...options];
-                next[i] = e.target.value;
-                onChange(next);
-              }}
-              placeholder="Option label"
-              className="h-[30px] min-w-0 rounded-md border border-border bg-bg-card px-2 text-[10px] text-text-primary"
-            />
-            <span className="flex items-center gap-0.5">
-              <button
-                type="button"
-                onClick={() => move(i, -1)}
-                disabled={i === 0}
-                aria-label={`Move ${opt || "option"} up`}
-                className="grid h-6 w-6 place-items-center rounded text-text-muted disabled:opacity-30"
-              >
-                <ChevronUp size={14} strokeWidth={1.8} />
-              </button>
-              <button
-                type="button"
-                onClick={() => move(i, 1)}
-                disabled={i === options.length - 1}
-                aria-label={`Move ${opt || "option"} down`}
-                className="grid h-6 w-6 place-items-center rounded text-text-muted disabled:opacity-30"
-              >
-                <ChevronDown size={14} strokeWidth={1.8} />
-              </button>
-              <button
-                type="button"
-                onClick={() => onChange(options.filter((_, oi) => oi !== i))}
-                aria-label={`Remove ${opt || "option"}`}
-                className="grid h-6 w-6 place-items-center rounded text-text-muted hover:bg-danger-bg hover:text-danger"
-              >
-                <X size={14} strokeWidth={1.8} />
-              </button>
-            </span>
-          </div>
-        ))}
-      </div>
-      <button
-        type="button"
-        onClick={() => onChange([...options, ""])}
-        className="h-7 w-fit rounded-md border border-dashed border-border px-2.5 text-[10px] font-medium text-primary hover:bg-primary-bg"
-      >
-        + Add option
-      </button>
-    </div>
-  );
-}
 
 function FormulaConfig({
   field,
@@ -753,10 +911,7 @@ function FormulaConfig({
                     type="checkbox"
                     checked={formula.of.includes(of.id)}
                     onChange={(e) =>
-                      onChange({
-                        ...formula,
-                        of: e.target.checked ? [...formula.of, of.id] : formula.of.filter((id) => id !== of.id),
-                      })
+                      onChange({ ...formula, of: e.target.checked ? [...formula.of, of.id] : formula.of.filter((id) => id !== of.id) })
                     }
                     className="h-3.5 w-3.5 accent-primary"
                   />
@@ -772,11 +927,7 @@ function FormulaConfig({
         <>
           <label className="grid gap-1.5 text-[10px] text-text-muted">
             Grade of
-            <select
-              value={formula.of}
-              onChange={(e) => onChange({ ...formula, of: e.target.value })}
-              className={`${selectClass} max-w-[180px]`}
-            >
+            <select value={formula.of} onChange={(e) => onChange({ ...formula, of: e.target.value })} className={`${selectClass} max-w-[180px]`}>
               <option value="">Select a field…</option>
               {otherFields.map((of) => (
                 <option key={of.id} value={of.id}>
@@ -792,11 +943,7 @@ function FormulaConfig({
       {formula.kind === "position" && (
         <label className="grid gap-1.5 text-[10px] text-text-muted">
           Position by
-          <select
-            value={formula.of}
-            onChange={(e) => onChange({ ...formula, of: e.target.value })}
-            className={`${selectClass} max-w-[180px]`}
-          >
+          <select value={formula.of} onChange={(e) => onChange({ ...formula, of: e.target.value })} className={`${selectClass} max-w-[180px]`}>
             <option value="">Select a field…</option>
             {otherFields.map((of) => (
               <option key={of.id} value={of.id}>
@@ -811,11 +958,7 @@ function FormulaConfig({
         <>
           <label className="grid gap-1.5 text-[10px] text-text-muted">
             Accumulate
-            <select
-              value={formula.of}
-              onChange={(e) => onChange({ ...formula, of: e.target.value })}
-              className={`${selectClass} max-w-[180px]`}
-            >
+            <select value={formula.of} onChange={(e) => onChange({ ...formula, of: e.target.value })} className={`${selectClass} max-w-[180px]`}>
               <option value="">Select a field…</option>
               {otherFields.map((of) => (
                 <option key={of.id} value={of.id}>
@@ -826,19 +969,11 @@ function FormulaConfig({
           </label>
           <label className="grid gap-1.5 text-[10px] text-text-muted">
             As
-            <select
-              value={formula.aggregate}
-              onChange={(e) => onChange({ ...formula, aggregate: e.target.value as "sum" | "average" })}
-              className={`${selectClass} max-w-[180px]`}
-            >
+            <select value={formula.aggregate} onChange={(e) => onChange({ ...formula, aggregate: e.target.value as "sum" | "average" })} className={`${selectClass} max-w-[180px]`}>
               <option value="sum">Total across terms</option>
               <option value="average">Average across terms</option>
             </select>
           </label>
-          <p className="m-0 text-[10px] leading-relaxed text-text-muted">
-            Adds up this field&apos;s value from every term published so far this session, using this same template — reuse
-            it across terms (just update Term below) rather than creating a new one each time.
-          </p>
         </>
       )}
 
@@ -858,13 +993,8 @@ function FormulaConfig({
                       onChange={(e) =>
                         onChange({
                           ...formula,
-                          subjectFields: e.target.checked
-                            ? [...formula.subjectFields, of.id]
-                            : formula.subjectFields.filter((id) => id !== of.id),
-                          // Keep compulsory a subset of subjects.
-                          compulsoryFields: e.target.checked
-                            ? formula.compulsoryFields
-                            : formula.compulsoryFields.filter((id) => id !== of.id),
+                          subjectFields: e.target.checked ? [...formula.subjectFields, of.id] : formula.subjectFields.filter((id) => id !== of.id),
+                          compulsoryFields: e.target.checked ? formula.compulsoryFields : formula.compulsoryFields.filter((id) => id !== of.id),
                         })
                       }
                       className="h-3.5 w-3.5 accent-primary"
@@ -892,9 +1022,7 @@ function FormulaConfig({
                         onChange={(e) =>
                           onChange({
                             ...formula,
-                            compulsoryFields: e.target.checked
-                              ? [...formula.compulsoryFields, of.id]
-                              : formula.compulsoryFields.filter((id) => id !== of.id),
+                            compulsoryFields: e.target.checked ? [...formula.compulsoryFields, of.id] : formula.compulsoryFields.filter((id) => id !== of.id),
                           })
                         }
                         className="h-3.5 w-3.5 accent-primary"
@@ -947,11 +1075,7 @@ function FormulaConfig({
 
           <label className="grid gap-1.5 text-[10px] text-text-muted">
             Overall average field
-            <select
-              value={formula.overallField}
-              onChange={(e) => onChange({ ...formula, overallField: e.target.value })}
-              className={`${selectClass} max-w-[180px]`}
-            >
+            <select value={formula.overallField} onChange={(e) => onChange({ ...formula, overallField: e.target.value })} className={`${selectClass} max-w-[180px]`}>
               <option value="">Select a field…</option>
               {otherFields.map((of) => (
                 <option key={of.id} value={of.id}>
@@ -960,39 +1084,23 @@ function FormulaConfig({
               ))}
             </select>
           </label>
-          <p className="m-0 text-[10px] leading-relaxed text-text-muted">
-            Passes only if every compulsory subject is individually above the pass mark, enough subjects are offered
-            and passed, and the overall average field meets the promotion score.
-          </p>
         </>
       )}
 
       {formula.kind === "resultAnalysis" && (
-        <>
-          <label className="grid gap-1.5 text-[10px] text-text-muted">
-            Explains the criteria of
-            <select
-              value={formula.of}
-              onChange={(e) => onChange({ ...formula, of: e.target.value })}
-              className={`${selectClass} max-w-[180px]`}
-            >
-              <option value="">Select a Promotion status field…</option>
-              {otherFields
-                .filter((of) => of.formula?.kind === "promotion")
-                .map((of) => (
-                  <option key={of.id} value={of.id}>
-                    {of.name || "Untitled field"}
-                  </option>
-                ))}
-            </select>
-          </label>
-          <p className="m-0 text-[10px] leading-relaxed text-text-muted">
-            Writes out that field&apos;s pass mark, minimums, and promotion score against this student&apos;s actual
-            numbers — e.g. &quot;Minimum subjects to pass is 10, you passed 17&quot; — as a multi-line explanation.
-            {otherFields.every((of) => of.formula?.kind !== "promotion") &&
-              " Add a Promotion status field first."}
-          </p>
-        </>
+        <label className="grid gap-1.5 text-[10px] text-text-muted">
+          Explains the criteria of
+          <select value={formula.of} onChange={(e) => onChange({ ...formula, of: e.target.value })} className={`${selectClass} max-w-[180px]`}>
+            <option value="">Select a Promotion status field…</option>
+            {otherFields
+              .filter((of) => of.formula?.kind === "promotion")
+              .map((of) => (
+                <option key={of.id} value={of.id}>
+                  {of.name || "Untitled field"}
+                </option>
+              ))}
+          </select>
+        </label>
       )}
     </div>
   );
