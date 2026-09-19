@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { createAndSendNotification } from "@/lib/notifications";
 import { computeOwnFields, computePositions, aggregateCumulative } from "@/lib/template-compute";
 import { expandThisTermFields, expandForPublish, fillGridCumulativeTermSlots } from "@/lib/grid-compute";
+import { validateSingleValue } from "@/lib/result-validate";
+import { UserError, toResult, type ActionResult } from "@/lib/user-error";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
 
 async function requireSchoolAdmin() {
@@ -16,15 +18,29 @@ async function requireSchoolAdmin() {
   return { schoolId: session.user.schoolId, userId: session.user.id };
 }
 
-export async function updateResultValue(resultId: string, fieldId: string, value: string) {
+// Corrections during review. Problems the admin can act on come back as
+// `{ ok: false, error }` (see user-error.ts) so the message survives production.
+export async function updateResultValue(resultId: string, fieldId: string, value: string): Promise<ActionResult> {
   const { schoolId } = await requireSchoolAdmin();
-  const result = await prisma.result.findFirst({ where: { id: resultId, schoolId }, include: { template: true } });
-  if (!result) throw new Error("Result not found.");
+  return toResult(async () => {
+    const result = await prisma.result.findFirst({ where: { id: resultId, schoolId }, include: { template: true } });
+    if (!result) throw new UserError("Result not found.");
 
-  const fields = Array.isArray(result.template.fields) ? (result.template.fields as unknown as TemplateField[]) : [];
-  const raw = { ...((result.data as Record<string, string>) ?? {}), [fieldId]: value };
-  const data = computeOwnFields(expandThisTermFields(fields), raw);
-  await prisma.result.update({ where: { id: resultId }, data: { data } });
+    // Corrections are only for the review stage: a draft belongs to the
+    // teacher, and a published result is final until a formal amendment.
+    if (result.status !== "SUBMITTED") {
+      throw new UserError(`This result is ${result.status.toLowerCase()} and can't be edited during review.`);
+    }
+
+    const fields = Array.isArray(result.template.fields) ? (result.template.fields as unknown as TemplateField[]) : [];
+    const problem = validateSingleValue(fields, fieldId, value);
+    if (problem) throw new UserError(problem);
+
+    const raw = { ...((result.data as Record<string, string>) ?? {}), [fieldId]: value };
+    const data = computeOwnFields(expandThisTermFields(fields), raw);
+    await prisma.result.update({ where: { id: resultId }, data: { data, revision: { increment: 1 } } });
+    return {};
+  });
 }
 
 export async function publishBatch(templateId: string) {
@@ -102,14 +118,16 @@ export async function publishBatch(templateId: string) {
   const finalData = computePositions(expandedFields, afterCumulative);
 
   const now = new Date();
-  await prisma.$transaction(
-    rows.map((r, i) =>
+  await prisma.$transaction([
+    ...rows.map((r, i) =>
       prisma.result.update({
         where: { id: r.id },
         data: { data: finalData[i], status: "PUBLISHED", approvedByUserId: userId, approvedAt: now, publishedAt: now },
       }),
     ),
-  );
+    // Batches mirror their rows' status (rows stay the authority here).
+    prisma.resultBatch.updateMany({ where: { schoolId, templateId, status: "SUBMITTED" }, data: { status: "PUBLISHED" } }),
+  ]);
 
   // Sent after the DB update commits — these are network calls and don't
   // belong inside the transaction. Each notification records its own
@@ -156,10 +174,13 @@ export async function sendBackBatch(templateId: string, note: string) {
   const { schoolId, userId } = await requireSchoolAdmin();
   if (!note.trim()) throw new Error("A note is required when sending results back.");
 
-  await prisma.result.updateMany({
-    where: { schoolId, templateId, status: "SUBMITTED" },
-    data: { status: "REJECTED", rejectionNote: note.trim(), approvedByUserId: userId, approvedAt: new Date() },
-  });
+  await prisma.$transaction([
+    prisma.result.updateMany({
+      where: { schoolId, templateId, status: "SUBMITTED" },
+      data: { status: "REJECTED", rejectionNote: note.trim(), approvedByUserId: userId, approvedAt: new Date() },
+    }),
+    prisma.resultBatch.updateMany({ where: { schoolId, templateId, status: "SUBMITTED" }, data: { status: "REJECTED" } }),
+  ]);
 
   revalidatePath("/admin/results");
   revalidatePath(`/admin/results/${templateId}`);

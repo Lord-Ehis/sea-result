@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ensureDefaultGradingScale } from "@/lib/grading-scale-defaults";
 import type { TemplateField } from "./field-schemas";
+import { UserError, toResult, type ActionResult } from "@/lib/user-error";
 import { compileVersionToFields, type CompileVersionInput } from "@/lib/version-compile";
 import { validateVersionConfig, type ValidationResult } from "@/lib/version-validate";
 import {
@@ -395,6 +396,8 @@ function sectionsFromDb(sections: VersionWithRelations["sections"]): CompileVers
       componentName: c.componentName,
       componentCode: c.componentCode,
       maxScore: c.maxScore.toNumber(),
+      weightPercent: c.weightPercent.toNumber(),
+      isRequired: c.isRequired,
       displayOrder: c.displayOrder,
     })),
   }));
@@ -420,6 +423,8 @@ function sectionsFromInput(sections: SectionInput[]): CompileVersionInput["secti
       componentName: c.componentName,
       componentCode: c.componentCode,
       maxScore: c.maxScore,
+      weightPercent: c.weightPercent,
+      isRequired: c.isRequired,
       displayOrder: c.displayOrder,
     })),
   }));
@@ -447,21 +452,58 @@ export async function validateVersion(versionId: string): Promise<ValidationResu
         componentName: c.componentName,
         componentCode: c.componentCode,
         weightPercent: c.weightPercent.toNumber(),
+        maxScore: c.maxScore.toNumber(),
       })),
     })),
     gradingScale: scale,
   });
 }
 
-export async function activateVersion(versionId: string) {
+// Blocking problems (invalid weights, work in progress, an overlapping template)
+// come back as `{ ok: false, error }` so the admin sees the real reason in
+// production — see user-error.ts.
+export async function activateVersion(versionId: string): Promise<ActionResult> {
   const { schoolId, userId } = await requireSchoolAdmin();
+  return toResult(async () => {
+    await activateVersionImpl(versionId, schoolId, userId);
+    return {};
+  });
+}
+
+async function activateVersionImpl(versionId: string, schoolId: string, userId: string) {
   const version = await fetchVersion(versionId, schoolId);
-  if (!version) throw new Error("Version not found.");
-  if (version.status !== "DRAFT") throw new Error("Only a draft version can be activated.");
+  if (!version) throw new UserError("Version not found.");
+  if (version.status !== "DRAFT") throw new UserError("Only a draft version can be activated.");
 
   const validation = await validateVersion(versionId);
   if (validation.errors.length > 0) {
-    throw new Error(`Cannot activate: ${validation.errors.map((e) => e.message).join(" ")}`);
+    throw new UserError(`Cannot activate: ${validation.errors.map((e) => e.message).join(" ")}`);
+  }
+
+  // Swapping the live fields under results that are mid-flight would change
+  // what teachers are entering against and what the admin is reviewing.
+  const inProgress = await prisma.result.count({
+    where: { schoolId, templateId: version.templateId, status: { not: "PUBLISHED" } },
+  });
+  if (inProgress > 0) {
+    throw new UserError(
+      `Cannot activate: ${inProgress} result record(s) for this template are still in progress (draft, submitted or sent back). Finish and publish them first.`,
+    );
+  }
+
+  // A class has exactly one active template per term (spec §5). Templates
+  // with a different scope are fine — the most specific one wins at entry.
+  const thisTemplate = await prisma.resultTemplate.findUniqueOrThrow({ where: { id: version.templateId } });
+  const rivals = await prisma.resultTemplate.findMany({
+    where: { schoolId, isActive: true, currentVersionId: { not: null }, id: { not: version.templateId } },
+    select: { name: true, classId: true, level: true, term: true },
+  });
+  const sameTerm = (a: string | null, b: string | null) => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
+  const rival = rivals.find(
+    (r) => sameTerm(r.term, thisTemplate.term) && r.classId === thisTemplate.classId && (r.classId !== null || r.level === thisTemplate.level),
+  );
+  if (rival) {
+    throw new UserError(`Cannot activate: "${rival.name}" is already active for the same classes and term. Change this template's scope or term first.`);
   }
 
   const legacyGridFieldId = version.legacyGridFieldId ?? (version.sections.length > 0 ? randomUUID() : null);

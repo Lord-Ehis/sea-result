@@ -6,7 +6,7 @@
 
 const WEIGHT_SUM_TOLERANCE = 0.01;
 
-export type ValidateComponent = { componentName: string; componentCode: string; weightPercent: number };
+export type ValidateComponent = { componentName: string; componentCode: string; weightPercent: number; maxScore: number };
 export type ValidateSection = { name: string; components: ValidateComponent[] };
 export type ValidateGradingScale = { bands: { minScore: number; maxScore: number }[] } | null;
 
@@ -53,6 +53,23 @@ export function validateVersionConfig(input: {
     for (const [code, count] of codeCounts) {
       if (count > 1) {
         errors.push({ message: `"${section.name}" has duplicate component code "${code}".` });
+      }
+    }
+  }
+
+  // The result card runs one shared set of score columns for every subject,
+  // so a version whose subjects differ in components, max marks or weights
+  // can't be represented at entry time yet — better an explicit error than
+  // silently applying the first subject's setup to all of them.
+  const signature = (s: ValidateSection) =>
+    [...s.components].map((c) => `${c.componentCode}|${c.maxScore}|${c.weightPercent}`).join(";");
+  const [firstSection, ...otherSections] = input.sections.filter((s) => s.components.length > 0);
+  if (firstSection) {
+    for (const section of otherSections) {
+      if (signature(section) !== signature(firstSection)) {
+        errors.push({
+          message: `"${section.name}" uses different components, max marks or weights than "${firstSection.name}" — every subject must share the same setup for now.`,
+        });
       }
     }
   }
