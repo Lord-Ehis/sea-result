@@ -5,8 +5,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ParentDashboardClient } from "./ParentDashboardClient";
-import type { TemplateField } from "@/app/admin/result-templates/actions";
-import { buildGridResultData } from "@/lib/grid-compute";
+import { isSnapshotIntact, type SnapshotPayload } from "@/lib/snapshot";
 
 export default async function ParentDashboardPage() {
   const session = await auth();
@@ -35,9 +34,10 @@ export default async function ParentDashboardPage() {
 
   const familyChildren = await Promise.all(
     links.map(async ({ student }) => {
-      const results = await prisma.result.findMany({
-        where: { studentId: student.id, status: "PUBLISHED" },
-        include: { template: true },
+      // Parents see the frozen snapshot, never the live template — so editing
+      // a template later can't change a published result.
+      const snapshots = await prisma.publishedResultSnapshot.findMany({
+        where: { studentId: student.id, supersededAt: null },
         orderBy: { publishedAt: "desc" },
       });
 
@@ -46,20 +46,19 @@ export default async function ParentDashboardPage() {
         name: `${student.firstName} ${student.lastName}`,
         className: student.class?.name ?? "No class",
         campusName: student.campus.name,
-        results: results.map((r) => {
-          const templateFields = Array.isArray(r.template.fields) ? (r.template.fields as unknown as TemplateField[]) : [];
-          const data = (r.data as Record<string, string>) ?? {};
+        results: snapshots.map((snap) => {
+          const payload = snap.payload as unknown as SnapshotPayload;
+          const intact = isSnapshotIntact(snap);
           return {
-            templateId: r.templateId,
-            templateName: r.template.name,
-            term: r.term,
-            publishedAt: r.publishedAt?.toISOString() ?? null,
-            // Grid fields have no single data[field.id] value (their cells
-            // live under composite keys) — rendered separately via `grids`.
-            fields: templateFields
-              .filter((f) => f.type !== "Grid")
-              .map((f) => ({ name: f.name, value: data[f.id] ?? "—" })),
-            grids: buildGridResultData(templateFields, data),
+            templateId: payload.template.id,
+            templateName: payload.template.name,
+            term: payload.period.term,
+            publishedAt: snap.publishedAt.toISOString(),
+            snapshotId: snap.id,
+            verificationCode: snap.verificationCode,
+            intact,
+            fields: intact ? payload.fields : [],
+            grids: intact ? payload.grids : [],
           };
         }),
       };

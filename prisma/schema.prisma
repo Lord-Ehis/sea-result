@@ -52,6 +52,13 @@ enum ResultStatus {
   PUBLISHED
 }
 
+enum ResultEventAction {
+  SUBMITTED
+  SENT_BACK
+  APPROVED
+  PUBLISHED
+}
+
 enum TemplateVersionStatus {
   DRAFT
   ACTIVE
@@ -127,6 +134,8 @@ model School {
   ratingItems          RatingItem[]
   templateAssignments  TemplateAssignment[]
   resultBatches        ResultBatch[]
+  resultEvents         ResultEvent[]
+  resultSnapshots      PublishedResultSnapshot[]
 
   @@map("schools")
 }
@@ -273,12 +282,13 @@ model Student {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  school        School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  campus        Campus              @relation(fields: [campusId], references: [id], onDelete: Cascade)
-  class         Class?              @relation(fields: [classId], references: [id])
-  parentLinks   ParentStudentLink[]
-  results       Result[]
-  notifications Notification[]
+  school          School                    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  campus          Campus                    @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  class           Class?                    @relation(fields: [classId], references: [id])
+  parentLinks     ParentStudentLink[]
+  results         Result[]
+  notifications   Notification[]
+  resultSnapshots PublishedResultSnapshot[]
 
   @@unique([schoolId, studentCode])
   @@index([schoolId])
@@ -558,12 +568,13 @@ model Result {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  school      School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  student     Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  template    ResultTemplate @relation(fields: [templateId], references: [id])
-  batch       ResultBatch?   @relation(fields: [batchId], references: [id])
-  submittedBy User?          @relation("SubmittedBy", fields: [submittedByUserId], references: [id])
-  approvedBy  User?          @relation("ApprovedBy", fields: [approvedByUserId], references: [id])
+  school      School                    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student     Student                   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  template    ResultTemplate            @relation(fields: [templateId], references: [id])
+  batch       ResultBatch?              @relation(fields: [batchId], references: [id])
+  snapshots   PublishedResultSnapshot[]
+  submittedBy User?                     @relation("SubmittedBy", fields: [submittedByUserId], references: [id])
+  approvedBy  User?                     @relation("ApprovedBy", fields: [approvedByUserId], references: [id])
 
   @@unique([studentId, templateId, term, session])
   @@index([schoolId])
@@ -688,6 +699,9 @@ model Notification {
   status    NotificationStatus  @default(PENDING)
   sentAt    DateTime?
   createdAt DateTime            @default(now())
+  // Makes a send idempotent: repeating an action (e.g. Publish) finds the
+  // existing row instead of messaging the same guardian twice.
+  dedupeKey String?             @unique
 
   school  School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   student Student? @relation(fields: [studentId], references: [id])
@@ -710,4 +724,65 @@ model ProviderSetting {
   updatedAt DateTime     @updatedAt
 
   @@map("provider_settings")
+}
+
+// ---------------------------------------------------------------------------
+// Publication: immutable snapshots + append-only audit log (spec Phase 3)
+// ---------------------------------------------------------------------------
+
+// What a parent sees, frozen at publication. The payload is self-contained
+// (labels, values and structure baked in) so later template edits can't
+// change history. A database trigger rejects any change to the frozen
+// columns — only `supersededAt` may be updated (reserved for amendments).
+model PublishedResultSnapshot {
+  id                String    @id @default(cuid())
+  schoolId          String
+  resultId          String
+  // Plain string, no FK: the snapshot must outlive batch housekeeping.
+  batchId           String?
+  studentId         String
+  version           Int       @default(1)
+  payload           Json
+  // SHA-256 of the payload's canonical JSON — detects accidental or
+  // unauthorised change.
+  checksum          String
+  // Short public reference for authenticity checks, e.g. R7K4-P2M9.
+  verificationCode  String    @unique
+  templateVersionId String?
+  publishedByUserId String?
+  publishedAt       DateTime
+  supersededAt      DateTime?
+  createdAt         DateTime  @default(now())
+
+  school  School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  result  Result  @relation(fields: [resultId], references: [id], onDelete: Cascade)
+
+  @@unique([resultId, version])
+  @@index([schoolId])
+  @@index([studentId])
+  @@map("published_result_snapshots")
+}
+
+// Append-only history of who moved a batch through the workflow, when, why,
+// and under which template version. A database trigger blocks UPDATE.
+// batchId/resultId are plain strings so history survives row deletion.
+model ResultEvent {
+  id                String            @id @default(cuid())
+  schoolId          String
+  batchId           String
+  resultId          String?
+  action            ResultEventAction
+  actorUserId       String?
+  actorRole         Role?
+  reason            String?
+  templateVersionId String?
+  metadata          Json?
+  createdAt         DateTime          @default(now())
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId])
+  @@index([batchId])
+  @@map("result_events")
 }
