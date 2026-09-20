@@ -20,6 +20,9 @@ import { RatingCategoriesEditor } from "./RatingCategoriesEditor";
 import { ratingOptionsFor } from "@/lib/field-options";
 import { PRESETS, type GradingScaleSummary, type PresetKey, type RatingCategoryInput, type SectionInput, type TemplateVersionSummary } from "./version-types";
 import type { ValidationResult } from "@/lib/version-validate";
+import { TERM_NUMBERS, isTermNumber, termLabel } from "@/lib/term-number";
+import type { AnnualSettings } from "@/lib/annual-summary";
+import { AnnualSettingsCard } from "./AnnualSettingsCard";
 
 type ClassOption = { id: string; name: string };
 type Template = {
@@ -29,6 +32,7 @@ type Template = {
   className: string | null;
   level: string | null;
   term: string | null;
+  termNumber: number | null;
   fields: TemplateField[];
 };
 type Scope = "ALL" | "LEVEL" | "CLASS";
@@ -165,11 +169,13 @@ export function TemplateBuilderClient({
   classes,
   levels,
   initialGradingScales,
+  annualSettings,
 }: {
   initialTemplates: Template[];
   classes: ClassOption[];
   levels: string[];
   initialGradingScales: GradingScaleSummary[];
+  annualSettings: AnnualSettings;
 }) {
   const [templates, setTemplates] = useState(initialTemplates);
   const [selectedId, setSelectedId] = useState<string | null>(initialTemplates[0]?.id ?? null);
@@ -182,6 +188,7 @@ export function TemplateBuilderClient({
   const [draftRatingCategories, setDraftRatingCategories] = useState<RatingCategoryInput[]>([]);
   const [draftGradingScaleId, setDraftGradingScaleId] = useState<string | null>(null);
   const [draftLegacyFields, setDraftLegacyFields] = useState<TemplateField[]>([]);
+  const [draftIncludeAnnual, setDraftIncludeAnnual] = useState(false);
   const [previewFields, setPreviewFields] = useState<TemplateField[]>([]);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -214,6 +221,7 @@ export function TemplateBuilderClient({
     setDraftRatingCategories(selectedVersion?.ratingCategories ?? []);
     setDraftGradingScaleId(selectedVersion?.gradingScaleId ?? null);
     setDraftLegacyFields(selectedVersion?.legacyFields ?? []);
+    setDraftIncludeAnnual(selectedVersion?.includeAnnualSummary ?? false);
     setValidation(null);
     setPreviewFields([]);
   }
@@ -242,12 +250,13 @@ export function TemplateBuilderClient({
         sections: draftSections,
         ratingCategories: draftRatingCategories,
         legacyFields: draftLegacyFields,
+        includeAnnualSummary: draftIncludeAnnual,
       })
         .then(setPreviewFields)
         .catch(() => {});
     }, 400);
     return () => clearTimeout(handle);
-  }, [selectedVersion, draftGradingScaleId, draftSections, draftRatingCategories, draftLegacyFields]);
+  }, [selectedVersion, draftGradingScaleId, draftSections, draftRatingCategories, draftLegacyFields, draftIncludeAnnual]);
 
   function updateSelected(patch: Partial<Template>) {
     if (!selected) return;
@@ -265,7 +274,7 @@ export function TemplateBuilderClient({
   function handleNewTemplate() {
     startTransition(async () => {
       const id = await createTemplate("Untitled template");
-      const created: Template = { id, name: "Untitled template", classId: null, className: null, level: null, term: null, fields: [] };
+      const created: Template = { id, name: "Untitled template", classId: null, className: null, level: null, term: null, termNumber: null, fields: [] };
       setTemplates((prev) => [...prev, created]);
       setSelectedId(id);
     });
@@ -277,13 +286,18 @@ export function TemplateBuilderClient({
     setSavedMessage(null);
     startTransition(async () => {
       try {
-        await updateTemplateMeta({
+        const result = await updateTemplateMeta({
           id: selected.id,
           name: selected.name,
           classId: selected.classId ?? undefined,
           level: selected.level ?? undefined,
           term: selected.term ?? undefined,
+          termNumber: selected.termNumber,
         });
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
         setSavedMessage("Template details saved.");
         setTimeout(() => setSavedMessage(null), 3000);
       } catch (err) {
@@ -333,6 +347,7 @@ export function TemplateBuilderClient({
           sections: draftSections,
           ratingCategories: draftRatingCategories,
           legacyFields: draftLegacyFields,
+          includeAnnualSummary: draftIncludeAnnual,
         });
         setSavedMessage("Draft saved.");
         setTimeout(() => setSavedMessage(null), 3000);
@@ -422,6 +437,8 @@ export function TemplateBuilderClient({
         />
       </div>
 
+      <AnnualSettingsCard initial={annualSettings} />
+
       {savedMessage && <p className="mb-4 rounded-md bg-success-bg px-3 py-2 text-caption text-success">{savedMessage}</p>}
       {error && <p className="mb-4 rounded-md bg-danger-bg px-3 py-2 text-caption text-danger">{error}</p>}
 
@@ -485,12 +502,21 @@ export function TemplateBuilderClient({
                   <input value={selected.name} onChange={(e) => updateSelected({ name: e.target.value })} className={inputClass} />
                 </Field>
                 <Field label="Term">
-                  <input
-                    value={selected.term ?? ""}
-                    onChange={(e) => updateSelected({ term: e.target.value })}
-                    placeholder="e.g. Term 2, 2025/2026"
+                  <select
+                    value={selected.termNumber ?? ""}
+                    onChange={(e) => {
+                      const n = Number(e.target.value);
+                      updateSelected(isTermNumber(n) ? { termNumber: n, term: termLabel(n) } : { termNumber: null });
+                    }}
                     className={inputClass}
-                  />
+                  >
+                    <option value="">{selected.term && !selected.termNumber ? "Custom: " + selected.term : "Not set"}</option>
+                    {TERM_NUMBERS.map((n) => (
+                      <option key={n} value={n}>
+                        {termLabel(n)}
+                      </option>
+                    ))}
+                  </select>
                 </Field>
               </div>
               <div className="grid gap-2 border-b border-border px-5 py-5">
@@ -683,6 +709,20 @@ export function TemplateBuilderClient({
                     <h3 className="m-0 mb-3 text-body font-medium text-text-primary">Grading scale</h3>
                     <fieldset disabled={!isEditableDraft} className="disabled:opacity-60">
                       <GradingScaleEditor scales={gradingScales} selectedId={draftGradingScaleId} onSelect={setDraftGradingScaleId} onScaleCreated={onScaleCreated} />
+                    </fieldset>
+                  </div>
+
+                  <div className="border-b border-border px-5 py-5">
+                    <h3 className="m-0 mb-1 text-body font-medium text-text-primary">Annual summary</h3>
+                    <p className="m-0 mb-3 text-caption text-text-muted">
+                      On the 3rd Term result, also show each subject&apos;s 1st, 2nd and 3rd Term marks with a weighted annual average, grade and promotion decision. Use the
+                      same template each term, changing its Term once a term is published.
+                    </p>
+                    <fieldset disabled={!isEditableDraft} className="disabled:opacity-60">
+                      <label className="flex items-center gap-2 text-caption text-text-secondary">
+                        <input type="checkbox" checked={draftIncludeAnnual} onChange={(e) => setDraftIncludeAnnual(e.target.checked)} />
+                        Show annual summary on 3rd Term results
+                      </label>
                     </fieldset>
                   </div>
 

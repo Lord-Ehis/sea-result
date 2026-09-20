@@ -1,4 +1,5 @@
 // Pure date math, safe to import from client components — no DB/env access.
+import { termLabel } from "@/lib/term-number";
 
 /** Nigerian school year runs roughly Aug-Jul across three terms. */
 function currentTermNumber(date: Date): 1 | 2 | 3 {
@@ -14,5 +15,5 @@ export function defaultSessionLabel(date: Date = new Date()): string {
 }
 
 export function defaultTermLabel(date: Date = new Date()): string {
-  return `Term ${currentTermNumber(date)}, ${defaultSessionLabel(date)}`;
+  return `${termLabel(currentTermNumber(date))}, ${defaultSessionLabel(date)}`;
 }

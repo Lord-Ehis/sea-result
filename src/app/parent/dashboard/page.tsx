@@ -53,12 +53,14 @@ export default async function ParentDashboardPage() {
             templateId: payload.template.id,
             templateName: payload.template.name,
             term: payload.period.term,
+            session: payload.period.session ?? null,
             publishedAt: snap.publishedAt.toISOString(),
             snapshotId: snap.id,
             verificationCode: snap.verificationCode,
             intact,
             fields: intact ? payload.fields : [],
             grids: intact ? payload.grids : [],
+            annual: intact ? (payload.annual ?? null) : null,
           };
         }),
       };

@@ -8,6 +8,9 @@ import { computeOwnFields } from "@/lib/template-compute";
 import { expandThisTermFields } from "@/lib/grid-compute";
 import { pickAllowedData, validateStudentEntry, type EntryIssue } from "@/lib/result-validate";
 import { recordResultEvent } from "@/lib/result-events";
+import { termNumberFromLabel } from "@/lib/term-number";
+import { findAnnualGrid, weightsAreValid } from "@/lib/annual-summary";
+import { loadAnnualSettings } from "@/lib/annual-context";
 import { UserError, toResult, type ActionResult } from "@/lib/user-error";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
 
@@ -73,6 +76,7 @@ async function saveClassResultsImpl(input: SaveInput): Promise<SaveClassResultsR
 
   const fields = Array.isArray(template.fields) ? (template.fields as unknown as TemplateField[]) : [];
   const expandedFields = expandThisTermFields(fields);
+  const termNumber = template.termNumber ?? termNumberFromLabel(template.term);
   const studentName = new Map(klass.students.map((s) => [s.id, `${s.firstName} ${s.lastName}`]));
 
   for (const entry of input.entries) {
@@ -111,6 +115,15 @@ async function saveClassResultsImpl(input: SaveInput): Promise<SaveClassResultsR
       throw new UserError(`Every student must be included to submit. Missing: ${absent.map((s) => `${s.firstName} ${s.lastName}`).join(", ")}.`);
     }
     if (missing.length > 0) throw new UserError(summarize(`${missing.length} score(s) are still missing:`, missing));
+
+    // A 3rd Term with an annual summary can't be reviewed while the school's
+    // term weights are wrong — the year couldn't be computed (spec §6.2).
+    if (termNumber === 3 && findAnnualGrid(fields)) {
+      const settings = await loadAnnualSettings(user.schoolId);
+      if (!weightsAreValid(settings.weights)) {
+        throw new UserError("The school's annual term weights don't total 100%. Ask your school admin to fix them in Result templates → Annual summary, then submit again.");
+      }
+    }
   }
 
   const now = new Date();
@@ -129,6 +142,7 @@ async function saveClassResultsImpl(input: SaveInput): Promise<SaveClassResultsR
             templateId: template.id,
             templateVersionId: template.currentVersionId,
             term: input.term,
+            termNumber,
             session: input.session,
             status: input.submit ? "SUBMITTED" : "DRAFT",
             createdByUserId: user.id,
