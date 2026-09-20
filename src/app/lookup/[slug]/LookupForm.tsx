@@ -120,6 +120,24 @@ export function LookupForm({ schoolName, slug }: { schoolName: string; slug: str
                         {r.grids.map((g, gi2) => (
                           <GridResultTable key={gi2} grid={g} />
                         ))}
+                        {r.intact ? (
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-caption text-text-muted">
+                            <span>
+                              Verification code <strong className="font-mono text-text-secondary">{r.verificationCode}</strong>
+                            </span>
+                            <Link
+                              href={`/result/${r.snapshotId}/print?t=${encodeURIComponent(r.printToken)}`}
+                              target="_blank"
+                              className="font-medium text-primary hover:underline"
+                            >
+                              Print / save as PDF
+                            </Link>
+                          </div>
+                        ) : (
+                          <p className="m-0 rounded-md border border-warning/30 bg-warning-bg px-3 py-2 text-caption text-warning">
+                            This result failed an automatic integrity check, so it can&apos;t be shown. Please contact your school.
+                          </p>
+                        )}
                       </div>
                     ))}
                     {group.length > 1 && group[0].fields.length > 0 && (

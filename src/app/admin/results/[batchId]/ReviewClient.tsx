@@ -3,10 +3,12 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Check, Users, CalendarDays } from "lucide-react";
+import { ArrowLeft, Check, Eye, Users, CalendarDays } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { GridEntryTable } from "@/components/results/GridEntryTable";
-import { updateResultValue, publishBatch, sendBackBatch } from "./actions";
+import { updateResultValue, approveBatch, publishBatch, sendBackBatch, previewBatchPayload } from "./actions";
+import { SnapshotView } from "@/components/results/SnapshotView";
+import type { SnapshotPayload } from "@/lib/snapshot";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
 import { computeOwnFields } from "@/lib/template-compute";
 import { expandThisTermFields, gridRawKeys } from "@/lib/grid-compute";
@@ -103,7 +105,8 @@ function isBlank(data: Record<string, string>, key: string): boolean {
 }
 
 export function ReviewClient({
-  templateId,
+  batchId,
+  status,
   className,
   term,
   teacherName,
@@ -111,7 +114,10 @@ export function ReviewClient({
   fields,
   students,
 }: {
-  templateId: string;
+  batchId: string;
+  // SUBMITTED: under review, scores still editable. APPROVED: scores are
+  // locked and the batch is waiting for the separate publish step.
+  status: "SUBMITTED" | "APPROVED";
   className: string;
   term: string;
   teacherName: string;
@@ -125,7 +131,9 @@ export function ReviewClient({
   );
   const [note, setNote] = useState("");
   const [noteError, setNoteError] = useState<string | null>(null);
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirm, setConfirm] = useState<"approve" | "publish" | null>(null);
+  const [preview, setPreview] = useState<SnapshotPayload | null>(null);
+  const approved = status === "APPROVED";
   const [error, setError] = useState<string | null>(null);
   const [selectedResultId, setSelectedResultId] = useState<string | null>(students[0]?.resultId ?? null);
   const [pending, startTransition] = useTransition();
@@ -165,16 +173,42 @@ export function ReviewClient({
     });
   }
 
+  function handleApprove() {
+    setError(null);
+    startTransition(async () => {
+      const result = await approveBatch(batchId);
+      setConfirm(null);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   function handlePublish() {
     setError(null);
     startTransition(async () => {
-      try {
-        await publishBatch(templateId);
-        setConfirmOpen(false);
-        router.push("/admin/results");
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not publish results.");
+      const result = await publishBatch(batchId);
+      setConfirm(null);
+      if (!result.ok) {
+        setError(result.error);
+        return;
       }
+      router.push("/admin/results");
+    });
+  }
+
+  function handlePreview() {
+    if (!selectedStudent) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await previewBatchPayload(batchId, selectedStudent.resultId);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setPreview(result.payload);
     });
   }
 
@@ -186,12 +220,12 @@ export function ReviewClient({
     setNoteError(null);
     setError(null);
     startTransition(async () => {
-      try {
-        await sendBackBatch(templateId, note);
-        router.push("/admin/results");
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not send results back.");
+      const result = await sendBackBatch(batchId, note);
+      if (!result.ok) {
+        setError(result.error);
+        return;
       }
+      router.push("/admin/results");
     });
   }
 
@@ -234,12 +268,12 @@ export function ReviewClient({
           </button>
           <button
             type="button"
-            onClick={() => setConfirmOpen(true)}
+            onClick={() => setConfirm(approved ? "publish" : "approve")}
             disabled={pending}
             className="inline-flex h-[38px] items-center gap-2 rounded-md border border-primary bg-primary px-3.5 text-caption font-medium text-white disabled:opacity-50"
           >
             <Check size={15} strokeWidth={1.8} />
-            Approve &amp; publish
+            {approved ? "Publish results" : "Approve results"}
           </button>
         </div>
       </div>
@@ -251,15 +285,31 @@ export function ReviewClient({
           <strong className="block text-body font-medium text-text-primary">
             {emptyCount === 0 ? "All fields complete" : `${emptyCount} field(s) still blank`}
           </strong>
-          <p className="mt-1 text-caption text-text-muted">Edit any value directly before approving, or send the batch back.</p>
+          <p className="mt-1 text-caption text-text-muted">
+            {approved
+              ? "Approved — scores are locked. Publish to make them visible to parents, or send the batch back."
+              : "Edit any value directly before approving, or send the batch back."}
+          </p>
         </div>
-        <span
-          className={`whitespace-nowrap rounded-full px-2.5 py-1.5 text-caption ${emptyCount === 0 ? "bg-success-bg text-success" : "bg-warning-bg text-warning"}`}
-        >
-          {emptyCount === 0 ? "Ready" : `${emptyCount} blank`}
-        </span>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={handlePreview}
+            disabled={pending || !selectedStudent}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-bg-card px-3 text-caption font-medium text-text-secondary disabled:opacity-50"
+          >
+            <Eye size={14} strokeWidth={1.8} />
+            Preview as parent
+          </button>
+          <span
+            className={`whitespace-nowrap rounded-full px-2.5 py-1.5 text-caption ${emptyCount === 0 ? "bg-success-bg text-success" : "bg-warning-bg text-warning"}`}
+          >
+            {emptyCount === 0 ? "Ready" : `${emptyCount} blank`}
+          </span>
+        </div>
       </div>
 
+      <fieldset disabled={approved} className="m-0 min-w-0 border-0 p-0">
       {gridField ? (
         <section className="overflow-hidden rounded-md border border-border bg-bg-card">
           <div className="border-b border-border px-5 py-5">
@@ -400,6 +450,8 @@ export function ReviewClient({
         </section>
       )}
 
+      </fieldset>
+
       <section className="mt-5 rounded-md border border-border bg-bg-card p-5">
         <h2 className="m-0 text-body font-medium text-text-primary">Admin notes</h2>
         <p className="mt-1.5 mb-3.5 text-caption text-text-muted">Explain what needs to be corrected before sending results back to the teacher.</p>
@@ -417,29 +469,40 @@ export function ReviewClient({
         </p>
       </section>
 
-      <Modal open={confirmOpen} onClose={() => setConfirmOpen(false)} title="Approve and publish results?" description={`${className} · ${term}`}>
+      <Modal
+        open={confirm !== null}
+        onClose={() => setConfirm(null)}
+        title={confirm === "publish" ? "Publish results to parents?" : "Approve these results?"}
+        description={`${className} · ${term}`}
+      >
         <div className="px-6 pt-5">
           <p className="m-0 text-body leading-relaxed text-text-secondary">
-            This publishes the reviewed results for students in this class and notifies parents. Confirm the values above are correct.
+            {confirm === "publish"
+              ? "This makes each student's result visible to their parents and sends SMS and email notifications immediately. Published results are frozen."
+              : "Approving confirms the scores above are correct and locks them. Nothing is visible to parents yet — publishing is a separate step."}
           </p>
         </div>
         <div className="flex justify-end gap-2 px-6 py-5">
           <button
             type="button"
-            onClick={() => setConfirmOpen(false)}
+            onClick={() => setConfirm(null)}
             className="inline-flex h-9 items-center rounded-md border border-border bg-bg-card px-3.5 text-caption font-medium text-text-secondary"
           >
             Cancel
           </button>
           <button
             type="button"
-            onClick={handlePublish}
+            onClick={confirm === "publish" ? handlePublish : handleApprove}
             disabled={pending}
             className="inline-flex h-9 items-center rounded-md border border-primary bg-primary px-3.5 text-caption font-medium text-white disabled:opacity-60"
           >
-            {pending ? "Publishing…" : "Publish results"}
+            {confirm === "publish" ? (pending ? "Publishing…" : "Publish results") : pending ? "Approving…" : "Approve results"}
           </button>
         </div>
+      </Modal>
+
+      <Modal open={preview !== null} onClose={() => setPreview(null)} title="Preview as parent" description="Exactly what this student's parent will see once published." width={760}>
+        <div className="max-h-[70vh] overflow-y-auto p-5">{preview && <SnapshotView payload={preview} preview />}</div>
       </Modal>
     </>
   );

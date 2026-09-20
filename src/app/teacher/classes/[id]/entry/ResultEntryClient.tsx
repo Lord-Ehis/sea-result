@@ -117,7 +117,7 @@ export function ResultEntryClient({
     const statuses = students.map((s) => s.status).filter(Boolean);
     if (statuses.length === 0) return "Not started";
     if (statuses.some((s) => s === "REJECTED")) return "Sent back for corrections";
-    if (statuses.length === students.length && statuses.every((s) => s === "SUBMITTED" || s === "PUBLISHED")) return "Submitted";
+    if (statuses.length === students.length && statuses.every((s) => s === "SUBMITTED" || s === "APPROVED" || s === "PUBLISHED")) return "Submitted";
     return "In progress";
   }, [students]);
 

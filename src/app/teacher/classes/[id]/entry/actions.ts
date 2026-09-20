@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { computeOwnFields } from "@/lib/template-compute";
 import { expandThisTermFields } from "@/lib/grid-compute";
 import { pickAllowedData, validateStudentEntry, type EntryIssue } from "@/lib/result-validate";
+import { recordResultEvent } from "@/lib/result-events";
 import { UserError, toResult, type ActionResult } from "@/lib/user-error";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
 
@@ -141,6 +142,18 @@ async function saveClassResultsImpl(input: SaveInput): Promise<SaveClassResultsR
             revision: { increment: 1 },
           },
         });
+
+        if (input.submit) {
+          await recordResultEvent(tx, {
+            schoolId: user.schoolId,
+            batchId: batch.id,
+            action: "SUBMITTED",
+            actorUserId: user.id,
+            actorRole: "TEACHER",
+            templateVersionId: batch.templateVersionId,
+            metadata: { students: cleaned.length },
+          });
+        }
 
         for (const entry of cleaned) {
           const row = existingByStudent.get(entry.studentId);
