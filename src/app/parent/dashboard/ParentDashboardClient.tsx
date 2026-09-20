@@ -8,11 +8,14 @@ import { ComparisonReport } from "@/components/results/ComparisonReport";
 import { GridResultTable } from "@/components/results/GridResultTable";
 import { FieldValueRow } from "@/components/results/FieldValueRow";
 import type { GridResultData } from "@/lib/grid-compute";
+import type { AnnualSummaryPayload } from "@/lib/annual-summary";
+import { AnnualSummaryTable } from "@/components/results/AnnualSummaryTable";
 
 type ResultEntry = {
   templateId: string;
   templateName: string;
   term: string | null;
+  session: string | null;
   publishedAt: string | null;
   snapshotId: string;
   verificationCode: string;
@@ -21,6 +24,7 @@ type ResultEntry = {
   intact: boolean;
   fields: { name: string; value: string }[];
   grids: GridResultData[];
+  annual: AnnualSummaryPayload | null;
 };
 
 function ResultFooter({ r }: { r: ResultEntry }) {
@@ -110,7 +114,7 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
         <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-5">
           <div>
             <h2 className="m-0 text-heading font-medium text-text-primary">Most recent result</h2>
-            <p className="mt-1.5 text-caption text-text-muted">{recent?.term ?? "No published results yet"}</p>
+            <p className="mt-1.5 text-caption text-text-muted">{recent ? `${recent.term ?? recent.templateName}${recent.session ? ` · ${recent.session}` : ""}` : "No published results yet"}</p>
           </div>
           {recent && <span className="rounded-full bg-success-bg px-2.5 py-1.5 text-caption text-success">Published</span>}
         </div>
@@ -138,6 +142,7 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
               {recent.grids.map((g, gi) => (
                 <GridResultTable key={gi} grid={g} />
               ))}
+              {recent.annual && <AnnualSummaryTable annual={recent.annual} />}
               <ResultFooter r={recent} />
             </div>
           ) : (
@@ -164,7 +169,7 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
                     <FileText size={16} strokeWidth={1.8} />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <strong className="block text-body font-medium text-text-primary">{r.term ?? r.templateName}</strong>
+                    <strong className="block text-body font-medium text-text-primary">{r.term ?? r.templateName}{r.session ? ` · ${r.session}` : ""}</strong>
                     <span className="mt-1 block text-caption text-text-muted">
                       {r.publishedAt ? `Published ${new Date(r.publishedAt).toLocaleDateString("en-GB")}` : "Published"}
                     </span>
@@ -187,6 +192,7 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
                     {r.grids.map((g, gi) => (
                       <GridResultTable key={gi} grid={g} />
                     ))}
+                    {r.annual && <AnnualSummaryTable annual={r.annual} />}
                     <ResultFooter r={r} />
                   </div>
                 )}

@@ -15,6 +15,7 @@ import { expandThisTermFields, gridRawKeys } from "@/lib/grid-compute";
 import { explicitScoreState } from "@/lib/score-state";
 import { computedAtPublish } from "@/lib/result-field-display";
 import { DROPDOWN_OPTIONS, ratingOptionsFor } from "@/lib/field-options";
+import { AnnualReviewPanel, type AnnualReviewData } from "./AnnualReviewPanel";
 
 type StudentRow = { resultId: string; name: string; studentCode: string; data: Record<string, string> };
 
@@ -113,6 +114,8 @@ export function ReviewClient({
   submittedAt,
   fields,
   students,
+  annual,
+  classes,
 }: {
   batchId: string;
   // SUBMITTED: under review, scores still editable. APPROVED: scores are
@@ -124,6 +127,9 @@ export function ReviewClient({
   submittedAt: string | null;
   fields: TemplateField[];
   students: StudentRow[];
+  // Present only for a 3rd Term batch of an annual-enabled template.
+  annual: AnnualReviewData | null;
+  classes: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const [entries, setEntries] = useState<Record<string, Record<string, string>>>(() =>
@@ -134,6 +140,9 @@ export function ReviewClient({
   const [confirm, setConfirm] = useState<"approve" | "publish" | null>(null);
   const [preview, setPreview] = useState<SnapshotPayload | null>(null);
   const approved = status === "APPROVED";
+  // Approving/publishing is held while the year can't be computed or a
+  // promotion decision is missing — the panel below lists exactly what.
+  const annualBlocked = !!annual && annual.issues.length > 0;
   const [error, setError] = useState<string | null>(null);
   const [selectedResultId, setSelectedResultId] = useState<string | null>(students[0]?.resultId ?? null);
   const [pending, startTransition] = useTransition();
@@ -269,7 +278,8 @@ export function ReviewClient({
           <button
             type="button"
             onClick={() => setConfirm(approved ? "publish" : "approve")}
-            disabled={pending}
+            disabled={pending || annualBlocked}
+            title={annualBlocked ? "Resolve the annual summary issues below first" : undefined}
             className="inline-flex h-[38px] items-center gap-2 rounded-md border border-primary bg-primary px-3.5 text-caption font-medium text-white disabled:opacity-50"
           >
             <Check size={15} strokeWidth={1.8} />
@@ -451,6 +461,8 @@ export function ReviewClient({
       )}
 
       </fieldset>
+
+      {annual && <AnnualReviewPanel batchId={batchId} status={status} annual={annual} classes={classes} onError={setError} />}
 
       <section className="mt-5 rounded-md border border-border bg-bg-card p-5">
         <h2 className="m-0 text-body font-medium text-text-primary">Admin notes</h2>

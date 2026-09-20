@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import type { GridResultData } from "@/lib/grid-compute";
 import { isSnapshotIntact, type SnapshotPayload } from "@/lib/snapshot";
+import type { AnnualSummaryPayload } from "@/lib/annual-summary";
 import { signSnapshotToken } from "@/lib/snapshot-token";
 
 const lookupSchema = z.object({
@@ -19,6 +20,7 @@ export type LookupResult = {
     templateId: string;
     templateName: string;
     term: string | null;
+    session: string | null;
     snapshotId: string;
     verificationCode: string;
     // Opens this one result's printable page for a short time — the lookup
@@ -27,6 +29,7 @@ export type LookupResult = {
     intact: boolean;
     fields: { name: string; value: string }[];
     grids: GridResultData[];
+    annual: AnnualSummaryPayload | null;
   }[];
 };
 
@@ -66,12 +69,14 @@ export async function lookupStudentResult(input: { slug: string; studentCode: st
         templateId: payload.template.id,
         templateName: payload.template.name,
         term: payload.period.term,
+        session: payload.period.session ?? null,
         snapshotId: snap.id,
         verificationCode: snap.verificationCode,
         printToken: signSnapshotToken(snap.id),
         intact,
         fields: intact ? payload.fields : [],
         grids: intact ? payload.grids : [],
+        annual: intact ? (payload.annual ?? null) : null,
       };
     }),
   };

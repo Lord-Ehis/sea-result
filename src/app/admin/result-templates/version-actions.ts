@@ -48,6 +48,7 @@ function serializeVersion(version: VersionWithRelations): TemplateVersionSummary
     createdAt: version.createdAt.toISOString(),
     activatedAt: version.activatedAt?.toISOString() ?? null,
     legacyFields: legacyFieldsFromJson(version.legacyFields) as TemplateField[],
+    includeAnnualSummary: version.includeAnnualSummary,
     sections: version.sections.map((s) => ({
       id: s.id,
       name: s.name,
@@ -130,13 +131,16 @@ export async function createDraftVersion(
       gradingScaleId: source?.gradingScaleId ?? null,
       legacyGridFieldId: source?.legacyGridFieldId ?? null,
       legacyFields: source?.legacyFields ?? [],
+      includeAnnualSummary: source?.includeAnnualSummary ?? false,
       sections: source
         ? {
             create: source.sections.map((s) => ({
               schoolId,
               name: s.name,
               displayOrder: s.displayOrder,
-              legacySourceId: s.legacySourceId,
+              // A subject keeps one id for the life of the template, so it can be
+              // matched across terms (annual summary) and renames stay safe.
+              legacySourceId: s.legacySourceId ?? s.id,
               components: {
                 create: s.components.map((c) => ({
                   schoolId,
@@ -146,7 +150,7 @@ export async function createDraftVersion(
                   weightPercent: c.weightPercent,
                   displayOrder: c.displayOrder,
                   isRequired: c.isRequired,
-                  legacySourceId: c.legacySourceId,
+                  legacySourceId: c.legacySourceId ?? c.id,
                 })),
               },
             })),
@@ -186,7 +190,7 @@ export async function createDraftVersion(
                   name: i.name,
                   displayOrder: i.displayOrder,
                   isEnabled: i.isEnabled,
-                  legacySourceId: i.legacySourceId,
+                  legacySourceId: i.legacySourceId ?? i.id,
                 })),
               },
             })),
@@ -205,6 +209,7 @@ export async function updateVersionDraft(input: {
   sections: SectionInput[];
   ratingCategories: RatingCategoryInput[];
   legacyFields: TemplateField[];
+  includeAnnualSummary?: boolean;
 }) {
   const { schoolId } = await requireSchoolAdmin();
   const parsed = updateVersionDraftSchema.parse(input);
@@ -216,7 +221,7 @@ export async function updateVersionDraft(input: {
   await prisma.$transaction(async (tx) => {
     await tx.templateVersion.update({
       where: { id: version.id },
-      data: { gradingScaleId: parsed.gradingScaleId, legacyFields: parsed.legacyFields },
+      data: { gradingScaleId: parsed.gradingScaleId, legacyFields: parsed.legacyFields, includeAnnualSummary: parsed.includeAnnualSummary },
     });
 
     await replaceSections(tx, schoolId, version.id, version.sections, parsed.sections);
@@ -514,6 +519,7 @@ async function activateVersionImpl(versionId: string, schoolId: string, userId: 
     resolvedGradingScale,
     sections: sectionsFromDb(version.sections),
     ratingCategories: ratingCategoriesFromDb(version.ratingCategories),
+    includeAnnualSummary: version.includeAnnualSummary,
   });
 
   await prisma.$transaction(async (tx) => {
@@ -571,6 +577,7 @@ export async function previewCompiledFields(input: {
   sections: SectionInput[];
   ratingCategories: RatingCategoryInput[];
   legacyFields: TemplateField[];
+  includeAnnualSummary?: boolean;
 }) {
   const { schoolId } = await requireSchoolAdmin();
   const version = await prisma.templateVersion.findFirst({
@@ -586,6 +593,7 @@ export async function previewCompiledFields(input: {
     resolvedGradingScale,
     sections: sectionsFromInput(input.sections),
     ratingCategories: ratingCategoriesFromInput(input.ratingCategories),
+    includeAnnualSummary: input.includeAnnualSummary === true,
   });
 }
 

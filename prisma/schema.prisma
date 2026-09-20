@@ -57,6 +57,28 @@ enum ResultEventAction {
   SENT_BACK
   APPROVED
   PUBLISHED
+  TERM_EXCEPTION_SET
+  TERM_EXCEPTION_CLEARED
+}
+
+// What the annual summary does when a student has no published result for an
+// earlier term (spec §6.2). Either way nothing is ever counted as zero.
+enum IncompleteYearPolicy {
+  BLOCK
+  CALCULATE_AVAILABLE
+}
+
+enum TermExceptionStatus {
+  NOT_ENROLLED
+  EXEMPT
+}
+
+enum PromotionStatus {
+  PROMOTED
+  RETAINED
+  GRADUATED
+  PENDING
+  NOT_APPLICABLE
 }
 
 enum TemplateVersionStatus {
@@ -135,6 +157,8 @@ model School {
   templateAssignments  TemplateAssignment[]
   resultBatches        ResultBatch[]
   resultEvents         ResultEvent[]
+  annualSettings       AnnualSummarySettings?
+  termExceptions       StudentTermException[]
   resultSnapshots      PublishedResultSnapshot[]
 
   @@map("schools")
@@ -289,6 +313,7 @@ model Student {
   results         Result[]
   notifications   Notification[]
   resultSnapshots PublishedResultSnapshot[]
+  termExceptions  StudentTermException[]
 
   @@unique([schoolId, studentCode])
   @@index([schoolId])
@@ -316,23 +341,25 @@ model ParentStudentLink {
 // ---------------------------------------------------------------------------
 
 model ResultTemplate {
-  id        String   @id @default(cuid())
-  schoolId  String
-  classId   String?
+  id         String   @id @default(cuid())
+  schoolId   String
+  classId    String?
   // Targets every class under a level (e.g. "JSS 2") when classId is unset.
   // Falls back further to every class in the school when both are unset.
-  level     String?
-  name      String
-  term      String? // e.g. "Term 2, 2025/2026"
+  level      String?
+  name       String
+  term       String? // e.g. "Term 2, 2025/2026"
+  // 1, 2 or 3 — what makes annual matching possible. `term` above is only a label.
+  termNumber Int?
   // Field definitions are school-configurable (subjects, grading scale,
   // comment fields, etc.) — not a single fixed format across schools.
   // Kept as the compute-facing source of truth: entry/review/publish read
   // this column exactly as before. Once a TemplateVersion is activated,
   // this column is derived (compiled) from it — see version-compile.ts.
-  fields    Json
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  fields     Json
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   // Which version last compiled into `fields`, if any. Null for templates
   // that have never gone through the versioned builder.
@@ -380,6 +407,9 @@ model TemplateVersion {
   // (Text, Dropdown, Computed incl. promotion/resultAnalysis, comment
   // fields) — ids inside this array are never regenerated.
   legacyFields           Json                  @default("[]")
+  // Show the Term 1–3 annual summary on Term 3 results. Part of the immutable
+  // version because it changes what the result contains.
+  includeAnnualSummary   Boolean               @default(false)
   // Snapshot of exactly what was compiled onto ResultTemplate.fields at
   // activation — audit-log-ready even though no audit log exists yet.
   compiledFieldsSnapshot Json?
@@ -561,9 +591,12 @@ model Result {
 
   // Optimistic locking: every write states the revision it read, so two
   // people editing the same record can't silently overwrite each other.
-  revision Int     @default(0)
+  revision          Int              @default(0)
   // Null on rows created before batches existed; set on their next teacher save.
-  batchId  String?
+  batchId           String?
+  // Set by an admin on Term 3 results (spec §4.8); frozen into the snapshot.
+  promotionStatus   PromotionStatus?
+  promotedToClassId String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -597,6 +630,8 @@ model ResultBatch {
   // templates that never went through the versioned builder).
   templateVersionId String?
   term              String
+  // Copied from the template when the batch is created (or parsed from the label).
+  termNumber        Int?
   session           String
   status            ResultStatus @default(DRAFT)
   createdByUserId   String?
@@ -785,4 +820,50 @@ model ResultEvent {
   @@index([schoolId])
   @@index([batchId])
   @@map("result_events")
+}
+
+// ---------------------------------------------------------------------------
+// Annual summary (spec Phase 4)
+// ---------------------------------------------------------------------------
+
+// One row per school; absent means the defaults (equal thirds, hold when a
+// term is missing, no annual position). Weights must total 100 before a
+// Term 3 result can be submitted.
+model AnnualSummarySettings {
+  id                   String               @id @default(cuid())
+  schoolId             String               @unique
+  term1Weight          Decimal              @default(33.33) @db.Decimal(5, 2)
+  term2Weight          Decimal              @default(33.33) @db.Decimal(5, 2)
+  term3Weight          Decimal              @default(33.34) @db.Decimal(5, 2)
+  incompleteYearPolicy IncompleteYearPolicy @default(BLOCK)
+  showAnnualPosition   Boolean              @default(false)
+  updatedByUserId      String?
+  updatedAt            DateTime             @updatedAt
+  createdAt            DateTime             @default(now())
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@map("annual_summary_settings")
+}
+
+// An explicit "this student wasn't there for that term" — the only way to
+// resolve a missing earlier term under the hold policy. The term is dropped
+// from that student's eligible weights; it is never treated as zero.
+model StudentTermException {
+  id              String              @id @default(cuid())
+  schoolId        String
+  studentId       String
+  session         String
+  termNumber      Int
+  status          TermExceptionStatus
+  reason          String
+  createdByUserId String?
+  createdAt       DateTime            @default(now())
+
+  school  School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, session, termNumber])
+  @@index([schoolId])
+  @@map("student_term_exceptions")
 }

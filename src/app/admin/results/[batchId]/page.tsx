@@ -4,6 +4,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ReviewClient } from "./ReviewClient";
+import { getBatchAnnualReview } from "./actions";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
 
 export default async function ReviewBatchPage({ params }: { params: Promise<{ batchId: string }> }) {
@@ -34,6 +35,11 @@ export default async function ReviewBatchPage({ params }: { params: Promise<{ ba
     );
   }
 
+  const [annual, classes] = await Promise.all([
+    getBatchAnnualReview(batch.id),
+    prisma.class.findMany({ where: { schoolId }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+  ]);
+
   const submitter = batch.submittedByUserId
     ? await prisma.user.findUnique({ where: { id: batch.submittedByUserId }, select: { name: true } })
     : null;
@@ -47,6 +53,8 @@ export default async function ReviewBatchPage({ params }: { params: Promise<{ ba
       teacherName={submitter?.name ?? "—"}
       submittedAt={batch.submittedAt?.toISOString() ?? null}
       fields={Array.isArray(batch.template.fields) ? (batch.template.fields as unknown as TemplateField[]) : []}
+      annual={annual}
+      classes={classes}
       students={results.map((r) => ({
         resultId: r.id,
         name: `${r.student.firstName} ${r.student.lastName}`,

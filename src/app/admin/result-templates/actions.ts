@@ -5,6 +5,8 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { fieldSchema, type TemplateField } from "./field-schemas";
+import { isTermNumber, termLabel, termNumberFromLabel } from "@/lib/term-number";
+import { UserError, toResult, type ActionResult } from "@/lib/user-error";
 
 // Re-exported so existing imports (`import type { TemplateField } from
 // "./actions"`) across the app keep working — the real definitions live in
@@ -46,6 +48,7 @@ const templateMetaSchema = z.object({
   classId: z.string().optional(),
   level: z.string().trim().optional(),
   term: z.string().trim().optional(),
+  termNumber: z.number().int().min(1).max(3).nullable().optional(),
 });
 
 // Name/scope/term editing — independent of `fields`, so it works whether or
@@ -57,21 +60,46 @@ export async function updateTemplateMeta(input: {
   classId?: string;
   level?: string;
   term?: string;
-}) {
+  termNumber?: number | null;
+}): Promise<ActionResult> {
   const schoolId = await requireSchoolAdmin();
   const parsed = templateMetaSchema.parse(input);
 
-  await prisma.resultTemplate.update({
-    where: { id: parsed.id, schoolId },
-    data: {
-      name: parsed.name,
-      classId: parsed.classId || null,
-      level: parsed.classId ? null : parsed.level || null,
-      term: parsed.term || null,
-    },
-  });
+  return toResult(async () => {
+    const current = await prisma.resultTemplate.findFirst({ where: { id: parsed.id, schoolId } });
+    if (!current) throw new UserError("Template not found.");
 
-  revalidatePath("/admin/result-templates");
+    // Picking a term number sets the label ("1st Term", "2nd Term", "3rd Term").
+    // Without one, a label the school already uses is left exactly as written
+    // (stored results are filed under it) and its number is read from it.
+    const termNumber = isTermNumber(parsed.termNumber) ? parsed.termNumber : termNumberFromLabel(parsed.term);
+    const term = isTermNumber(parsed.termNumber) ? termLabel(parsed.termNumber) : parsed.term || null;
+
+    // Results are filed under the term label, so changing it while some are
+    // still being worked on would strand them under the old one.
+    if (term !== current.term) {
+      const inProgress = await prisma.result.count({ where: { schoolId, templateId: current.id, status: { not: "PUBLISHED" } } });
+      if (inProgress > 0) {
+        throw new UserError(
+          `Can't change the term yet: ${inProgress} result record(s) for this template are still in progress (draft, submitted or sent back). Publish or clear them first.`,
+        );
+      }
+    }
+
+    await prisma.resultTemplate.update({
+      where: { id: parsed.id, schoolId },
+      data: {
+        name: parsed.name,
+        classId: parsed.classId || null,
+        level: parsed.classId ? null : parsed.level || null,
+        term,
+        termNumber,
+      },
+    });
+
+    revalidatePath("/admin/result-templates");
+    return {};
+  });
 }
 
 const saveTemplateSchema = z.object({
@@ -111,6 +139,7 @@ export async function saveTemplate(input: {
       classId: parsed.classId || null,
       level: parsed.classId ? null : parsed.level || null,
       term: parsed.term || null,
+      termNumber: termNumberFromLabel(parsed.term),
       fields: parsed.fields,
     },
   });

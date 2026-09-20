@@ -9,6 +9,9 @@ import { computeOwnFields } from "@/lib/template-compute";
 import { expandThisTermFields } from "@/lib/grid-compute";
 import { computePublishData, needsPriorRows, type PriorPublishedRow } from "@/lib/publish-compute";
 import { recordResultEvent } from "@/lib/result-events";
+import { computeBatchAnnual, describeIssues } from "@/lib/annual-context";
+import { termLabel, termNumberFromLabel, isTermNumber } from "@/lib/term-number";
+import { findAnnualGrid } from "@/lib/annual-summary";
 import { buildSnapshotPayload, generateVerificationCode, snapshotChecksum, type SnapshotPayload } from "@/lib/snapshot";
 import { pickAllowedData, summarizeIssues, validateSingleValue, validateStudentEntry, type EntryIssue } from "@/lib/result-validate";
 import { UserError, toResult, type ActionResult } from "@/lib/user-error";
@@ -39,6 +42,30 @@ function loadRows(schoolId: string, batchId: string) {
     where: { schoolId, batchId },
     include: { student: { include: { campus: true } } },
     orderBy: { student: { firstName: "asc" } },
+  });
+}
+
+// The annual summary for a 3rd Term batch of an annual-enabled template; null
+// for any other batch. One entry point so approval, publishing and preview
+// can't disagree about what the year looks like.
+async function annualFor(
+  schoolId: string,
+  batch: Awaited<ReturnType<typeof loadBatch>>,
+  rows: Awaited<ReturnType<typeof loadRows>>,
+  dataOverride?: Record<string, string>[],
+) {
+  return computeBatchAnnual({
+    schoolId,
+    batch: { id: batch.id, templateId: batch.templateId, session: batch.session, termNumber: batch.termNumber ?? termNumberFromLabel(batch.term) },
+    fields: templateFields(batch.template),
+    rows: rows.map((r, i) => ({
+      id: r.id,
+      studentId: r.studentId,
+      studentName: `${r.student.firstName} ${r.student.lastName}`,
+      data: dataOverride?.[i] ?? ((r.data as Record<string, string>) ?? {}),
+      promotionStatus: r.promotionStatus,
+      promotedToClassId: r.promotedToClassId,
+    })),
   });
 }
 
@@ -95,6 +122,13 @@ export async function approveBatch(batchId: string): Promise<ActionResult> {
     }
     if (problems.length > 0) throw new UserError(summarizeIssues(`Can't approve — ${problems.length} problem(s) to fix first:`, problems));
 
+    // A 3rd Term with an annual summary also needs its year to be computable
+    // and a promotion decision for every student.
+    const annual = await annualFor(schoolId, batch, rows);
+    if (annual && annual.issues.length > 0) {
+      throw new UserError(`Can't approve — the annual summary isn't ready (${annual.issues.length} issue(s)): ${describeIssues(annual)}`);
+    }
+
     const now = new Date();
     await prisma.$transaction(async (tx) => {
       const claimed = await tx.resultBatch.updateMany({ where: { id: batch.id, status: "SUBMITTED" }, data: { status: "APPROVED" } });
@@ -141,6 +175,13 @@ export async function publishBatch(batchId: string): Promise<ActionResult<{ alre
         prior,
       );
 
+      // Recomputed now, not trusted from approval: a term or exception may
+      // have changed in between.
+      const annual = await annualFor(schoolId, batch, rows, finalData);
+      if (annual && annual.issues.length > 0) {
+        throw new UserError(`Can't publish — the annual summary isn't ready (${annual.issues.length} issue(s)): ${describeIssues(annual)}`);
+      }
+
       const now = new Date();
       // A verification-code collision (1 in ~10^12) just retries with fresh codes.
       for (let attempt = 0; ; attempt++) {
@@ -164,6 +205,7 @@ export async function publishBatch(batchId: string): Promise<ActionResult<{ alre
                 period: { session: r.session, term: r.term },
                 template: { id: batch.templateId, name: batch.template.name, versionId: batch.templateVersionId, fields },
                 data: finalData[i],
+                annual: annual?.students[i]?.payload,
                 publication: { version: 1, verificationCode, publishedAt: now },
               });
               await tx.result.update({ where: { id: r.id }, data: { data: finalData[i], status: "PUBLISHED", publishedAt: now } });
@@ -191,7 +233,7 @@ export async function publishBatch(batchId: string): Promise<ActionResult<{ alre
               actorUserId: userId,
               actorRole: "SCHOOL_ADMIN",
               templateVersionId: batch.templateVersionId,
-              metadata: { students: rows.length, snapshotVersion: 1 },
+              metadata: { students: rows.length, snapshotVersion: 1, ...(annual ? { annualSummary: true, weights: annual.settings.weights, policy: annual.settings.policy } : {}) },
             });
           }, TX_OPTIONS);
           break;
@@ -311,6 +353,7 @@ export async function previewBatchPayload(batchId: string, resultId: string): Pr
       prior,
     );
 
+    const annual = await annualFor(schoolId, batch, rows, finalData);
     const r = rows[index];
     const payload = buildSnapshotPayload({
       school,
@@ -318,9 +361,161 @@ export async function previewBatchPayload(batchId: string, resultId: string): Pr
       period: { session: r.session, term: r.term },
       template: { id: batch.templateId, name: batch.template.name, versionId: batch.templateVersionId, fields },
       data: finalData[index],
+      annual: annual?.students[index]?.payload,
       publication: { version: 1, verificationCode: "PREVIEW", publishedAt: new Date() },
     });
     return { payload };
+  });
+}
+
+// What the review page shows for a 3rd Term annual batch: each student's
+// earlier-term status, what's blocking approval, and their promotion decision.
+export async function getBatchAnnualReview(batchId: string) {
+  const { schoolId } = await requireSchoolAdmin();
+  const batch = await loadBatch(schoolId, batchId);
+  const rows = await loadRows(schoolId, batch.id);
+  const annual = await annualFor(schoolId, batch, rows);
+  if (!annual) return null;
+  return {
+    weightsOk: annual.weightsOk,
+    weights: annual.settings.weights,
+    policy: annual.settings.policy,
+    issues: annual.issues,
+    students: annual.students.map((s, i) => ({
+      studentId: s.studentId,
+      resultId: s.resultId,
+      name: s.studentName,
+      termStates: s.termStates,
+      blockers: s.blockers,
+      annualAverage: s.payload?.overall.average ?? null,
+      incomplete: s.payload?.incomplete ?? false,
+      promotionStatus: rows[i].promotionStatus,
+      promotedToClassId: rows[i].promotedToClassId,
+    })),
+  };
+}
+
+// A student who genuinely wasn't at the school (or was exempt) for an earlier
+// term is marked here, not silently scored zero. Recorded in the audit trail.
+export async function markTermException(input: {
+  batchId: string;
+  studentId: string;
+  termNumber: number;
+  status: "NOT_ENROLLED" | "EXEMPT";
+  reason: string;
+}): Promise<ActionResult> {
+  const { schoolId, userId } = await requireSchoolAdmin();
+  return toResult(async () => {
+    const reason = input.reason.trim();
+    if (!reason) throw new UserError("Give a reason — it's recorded in the audit trail.");
+    if (input.termNumber !== 1 && input.termNumber !== 2) throw new UserError("Only the 1st or 2nd Term can be marked.");
+    if (input.status !== "NOT_ENROLLED" && input.status !== "EXEMPT") throw new UserError("Unknown status.");
+
+    const { batch, row } = await loadAnnualBatchRow(schoolId, input.batchId, input.studentId);
+
+    const published = await prisma.result.count({
+      where: { schoolId, templateId: batch.templateId, session: batch.session, studentId: input.studentId, status: "PUBLISHED", batch: { termNumber: input.termNumber } },
+    });
+    if (published > 0) {
+      throw new UserError(`${row.student.firstName} already has a published ${termLabel(input.termNumber)} result, so it can't be marked ${input.status === "EXEMPT" ? "exempt" : "not enrolled"}.`);
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.studentTermException.upsert({
+        where: { studentId_session_termNumber: { studentId: input.studentId, session: batch.session, termNumber: input.termNumber } },
+        create: { schoolId, studentId: input.studentId, session: batch.session, termNumber: input.termNumber, status: input.status, reason, createdByUserId: userId },
+        update: { status: input.status, reason, createdByUserId: userId },
+      });
+      await recordResultEvent(tx, {
+        schoolId,
+        batchId: batch.id,
+        resultId: row.id,
+        action: "TERM_EXCEPTION_SET",
+        actorUserId: userId,
+        actorRole: "SCHOOL_ADMIN",
+        reason,
+        templateVersionId: batch.templateVersionId,
+        metadata: { studentId: input.studentId, session: batch.session, termNumber: input.termNumber, status: input.status },
+      });
+    });
+
+    revalidateWorkflowPaths(batch.id);
+    return {};
+  });
+}
+
+export async function clearTermException(input: { batchId: string; studentId: string; termNumber: number }): Promise<ActionResult> {
+  const { schoolId, userId } = await requireSchoolAdmin();
+  return toResult(async () => {
+    if (!isTermNumber(input.termNumber) || input.termNumber === 3) throw new UserError("Only the 1st or 2nd Term can be cleared.");
+    const { batch, row } = await loadAnnualBatchRow(schoolId, input.batchId, input.studentId);
+
+    const existing = await prisma.studentTermException.findUnique({
+      where: { studentId_session_termNumber: { studentId: input.studentId, session: batch.session, termNumber: input.termNumber } },
+    });
+    if (!existing || existing.schoolId !== schoolId) return {};
+
+    await prisma.$transaction(async (tx) => {
+      await tx.studentTermException.delete({ where: { id: existing.id } });
+      await recordResultEvent(tx, {
+        schoolId,
+        batchId: batch.id,
+        resultId: row.id,
+        action: "TERM_EXCEPTION_CLEARED",
+        actorUserId: userId,
+        actorRole: "SCHOOL_ADMIN",
+        templateVersionId: batch.templateVersionId,
+        metadata: { studentId: input.studentId, session: batch.session, termNumber: input.termNumber, previousStatus: existing.status },
+      });
+    });
+
+    revalidateWorkflowPaths(batch.id);
+    return {};
+  });
+}
+
+// Term/promotion changes are only allowed while the batch is still open for
+// review — approval freezes the scores, and publishing freezes everything.
+async function loadAnnualBatchRow(schoolId: string, batchId: string, studentId: string) {
+  const batch = await loadBatch(schoolId, batchId);
+  if (batch.status !== "SUBMITTED" && batch.status !== "APPROVED") throw new UserError(`This batch is ${batch.status.toLowerCase()} and can't be changed.`);
+  if (!findAnnualGrid(templateFields(batch.template)) || (batch.termNumber ?? termNumberFromLabel(batch.term)) !== 3) {
+    throw new UserError("This batch has no annual summary.");
+  }
+  const row = await prisma.result.findFirst({ where: { schoolId, batchId: batch.id, studentId }, include: { student: true } });
+  if (!row) throw new UserError("That student isn't in this batch.");
+  return { batch, row };
+}
+
+const PROMOTION_STATUSES = ["PROMOTED", "RETAINED", "GRADUATED", "PENDING", "NOT_APPLICABLE"] as const;
+
+export async function setPromotion(input: {
+  batchId: string;
+  resultId: string;
+  status: (typeof PROMOTION_STATUSES)[number];
+  promotedToClassId: string | null;
+}): Promise<ActionResult> {
+  const { schoolId } = await requireSchoolAdmin();
+  return toResult(async () => {
+    if (!PROMOTION_STATUSES.includes(input.status)) throw new UserError("Unknown promotion status.");
+
+    const batch = await loadBatch(schoolId, input.batchId);
+    if (batch.status !== "SUBMITTED") throw new UserError(`This batch is ${batch.status.toLowerCase()} — promotion decisions are made while it's under review.`);
+
+    const row = await prisma.result.findFirst({ where: { id: input.resultId, schoolId, batchId: batch.id } });
+    if (!row) throw new UserError("That result isn't part of this batch.");
+
+    let promotedToClassId: string | null = null;
+    if (input.status === "PROMOTED") {
+      if (!input.promotedToClassId) throw new UserError("Choose the class the student is promoted to.");
+      const target = await prisma.class.findFirst({ where: { id: input.promotedToClassId, schoolId }, select: { id: true } });
+      if (!target) throw new UserError("That class doesn't exist in this school.");
+      promotedToClassId = target.id;
+    }
+
+    await prisma.result.update({ where: { id: row.id }, data: { promotionStatus: input.status, promotedToClassId } });
+    revalidatePath(`/admin/results/${batch.id}`);
+    return {};
   });
 }
 

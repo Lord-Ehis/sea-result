@@ -64,6 +64,7 @@ export type TemplateVersionSummary = {
   sections: SectionInput[];
   ratingCategories: RatingCategoryInput[];
   legacyFields: TemplateField[];
+  includeAnnualSummary: boolean;
 };
 
 export const PRESETS = {
@@ -134,4 +135,5 @@ export const updateVersionDraftSchema = z.object({
   sections: z.array(sectionSchema),
   ratingCategories: z.array(ratingCategorySchema),
   legacyFields: z.array(fieldSchema),
+  includeAnnualSummary: z.boolean().default(false),
 });

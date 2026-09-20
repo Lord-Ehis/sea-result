@@ -1,6 +1,7 @@
 import { createHash, randomInt } from "node:crypto";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
 import { buildGridResultData, type GridResultData } from "@/lib/grid-compute";
+import type { AnnualSummaryPayload } from "@/lib/annual-summary";
 
 // A published result, frozen. The payload is self-contained — every label,
 // value and table structure a parent sees is baked in — so editing the
@@ -15,6 +16,10 @@ export type SnapshotPayload = {
   template: { id: string; name: string; versionId: string | null };
   fields: { name: string; value: string }[];
   grids: GridResultData[];
+  // Only on a 3rd Term result of an annual-enabled template. Part of the
+  // checksummed payload, so the weights and sources it was built from are
+  // frozen with it.
+  annual?: AnnualSummaryPayload;
   publication: { version: number; verificationCode: string; publishedAt: string };
 };
 
@@ -24,6 +29,7 @@ export function buildSnapshotPayload(input: {
   period: { session: string; term: string };
   template: { id: string; name: string; versionId: string | null; fields: TemplateField[] };
   data: Record<string, string>;
+  annual?: AnnualSummaryPayload | null;
   publication: { version: number; verificationCode: string; publishedAt: Date };
 }): SnapshotPayload {
   const { template, data } = input;
@@ -37,6 +43,9 @@ export function buildSnapshotPayload(input: {
     // keys) — they're carried separately in `grids`.
     fields: template.fields.filter((f) => f.type !== "Grid").map((f) => ({ name: f.name, value: data[f.id] ?? "—" })),
     grids: buildGridResultData(template.fields, data),
+    // Absent (not null) when there's no annual summary, so snapshots without
+    // one keep exactly the shape — and checksum — they were published with.
+    ...(input.annual ? { annual: input.annual } : {}),
     publication: {
       version: input.publication.version,
       verificationCode: input.publication.verificationCode,

@@ -25,6 +25,8 @@ export type GridConfig = {
   // True when every column carries a weight: the subject total becomes
   // sum(raw / max × weight) instead of a flat sum of raw marks.
   weighted?: boolean;
+  // Term 3 only: also show the annual summary (see src/lib/annual-summary.ts).
+  annualSummary?: boolean;
 };
 export type ComputedFormula =
   | { kind: "sum"; of: string[] }
@@ -108,6 +110,7 @@ export const gridConfigSchema = z.object({
   remarksMap: z.array(gridRemarksEntrySchema),
   includeCumulative: z.boolean(),
   weighted: z.boolean().optional(),
+  annualSummary: z.boolean().optional(),
 });
 
 export const fieldSchema = z.object({

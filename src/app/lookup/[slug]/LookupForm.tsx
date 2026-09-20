@@ -5,6 +5,7 @@ import Link from "next/link";
 import { lookupStudentResult, type LookupResult } from "./actions";
 import { ComparisonReport } from "@/components/results/ComparisonReport";
 import { GridResultTable } from "@/components/results/GridResultTable";
+import { AnnualSummaryTable } from "@/components/results/AnnualSummaryTable";
 import { FieldValueRow } from "@/components/results/FieldValueRow";
 
 export function LookupForm({ schoolName, slug }: { schoolName: string; slug: string }) {
@@ -108,7 +109,7 @@ export function LookupForm({ schoolName, slug }: { schoolName: string; slug: str
                       <div key={i} className="grid gap-3 rounded-md border border-border bg-bg-page p-4">
                         <div className="flex items-baseline justify-between gap-2">
                           <strong className="text-body font-medium text-text-primary">{r.templateName}</strong>
-                          <span className="text-caption text-text-muted">{r.term ?? "Term not set"}</span>
+                          <span className="text-caption text-text-muted">{r.term ?? "Term not set"}{r.session ? ` · ${r.session}` : ""}</span>
                         </div>
                         {r.fields.length > 0 && (
                           <div className="grid gap-2">
@@ -120,6 +121,7 @@ export function LookupForm({ schoolName, slug }: { schoolName: string; slug: str
                         {r.grids.map((g, gi2) => (
                           <GridResultTable key={gi2} grid={g} />
                         ))}
+                        {r.annual && <AnnualSummaryTable annual={r.annual} />}
                         {r.intact ? (
                           <div className="flex flex-wrap items-center justify-between gap-2 text-caption text-text-muted">
                             <span>

@@ -48,6 +48,7 @@ export type CompileVersionInput = {
   sections: CompileSection[];
   ratingCategories: CompileRatingCategory[];
   resolvedGradingScale: CompileGradingScale | null;
+  includeAnnualSummary?: boolean;
 };
 
 // The legacy Grid model has ONE shared score-column list applied to every
@@ -103,6 +104,9 @@ function buildGrid(input: CompileVersionInput): GridConfig {
     // Versions are validated to weights summing to 100, so their subject
     // totals are weighted (raw ÷ max × weight) rather than a flat sum.
     weighted: true,
+    // Only written when on, so a version without it compiles to exactly what
+    // it always did.
+    ...(input.includeAnnualSummary ? { annualSummary: true } : {}),
   };
 }
 

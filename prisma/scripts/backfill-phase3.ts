@@ -2,6 +2,7 @@ import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Prisma, PrismaClient, type ResultStatus } from "@prisma/client";
 import { buildSnapshotPayload, generateVerificationCode, snapshotChecksum } from "../../src/lib/snapshot";
+import { termNumberFromLabel } from "../../src/lib/term-number";
 import type { TemplateField } from "../../src/app/admin/result-templates/actions";
 
 // Brings results published (or in flight) before Phase 3 into the new model:
@@ -61,6 +62,7 @@ async function backfillBatches() {
           templateId: first.templateId,
           templateVersionId: template.currentVersionId,
           term: first.term,
+          termNumber: termNumberFromLabel(first.term),
           session: first.session,
           status: derivedStatus(group.map((r) => r.status)),
           submittedByUserId: group.find((r) => r.submittedByUserId)?.submittedByUserId ?? null,

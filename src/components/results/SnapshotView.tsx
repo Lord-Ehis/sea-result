@@ -1,4 +1,5 @@
 import { GridResultTable } from "@/components/results/GridResultTable";
+import { AnnualSummaryTable } from "@/components/results/AnnualSummaryTable";
 import type { SnapshotPayload } from "@/lib/snapshot";
 
 // One published result, rendered purely from its frozen snapshot. Shared by
@@ -6,7 +7,7 @@ import type { SnapshotPayload } from "@/lib/snapshot";
 // whole result is shown, so they can never drift from each other. Safe to
 // render on the server or the client.
 export function SnapshotView({ payload, preview = false }: { payload: SnapshotPayload; preview?: boolean }) {
-  const { school, student, period, template, fields, grids, publication } = payload;
+  const { school, student, period, template, fields, grids, annual, publication } = payload;
   const initials = school.name
     .split(/\s+/)
     .filter(Boolean)
@@ -66,6 +67,12 @@ export function SnapshotView({ payload, preview = false }: { payload: SnapshotPa
           {grids.map((g, i) => (
             <GridResultTable key={`${g.fieldName}-${i}`} grid={g} />
           ))}
+        </div>
+      )}
+
+      {annual && (
+        <div className="mt-5">
+          <AnnualSummaryTable annual={annual} />
         </div>
       )}
 
