@@ -1,29 +1,35 @@
 "use client";
 
+import { memo, useCallback, useEffect, useRef } from "react";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
 import { gridKey } from "@/lib/grid-compute";
-import { EXPLICIT_SCORE_STATES, SCORE_STATE_LABEL, explicitScoreState, formatScore, scoreStateKey } from "@/lib/score-state";
+import { useIsDesktop } from "@/lib/use-is-desktop";
+import { EXPLICIT_SCORE_STATES, SCORE_STATE_LABEL, explicitScoreState, formatScore, scoreStateKey, type ExplicitScoreState } from "@/lib/score-state";
 
 // One score input plus a compact status picker (— / ABS / EXM / N/A). A
 // non-scored status disables the number box, since its value is ignored, and
 // a number outside 0…max is flagged the moment it's typed.
-function ScoreCell({
+//
+// Memoised on primitive props (and a stable `onChange`) so that typing in one
+// cell re-renders that cell, not the ~240 others on screen — a class of 100 ×
+// 20 subjects × 6 components stays responsive.
+const ScoreCell = memo(function ScoreCell({
   cellKey,
   max,
-  data,
+  value,
+  state,
   onChange,
   locked,
   blank,
 }: {
   cellKey: string;
   max: number;
-  data: Record<string, string>;
+  value: string;
+  state: ExplicitScoreState | null;
   onChange: (key: string, value: string) => void;
   locked: boolean;
   blank: boolean;
 }) {
-  const state = explicitScoreState(data, cellKey);
-  const value = data[cellKey] ?? "";
   const n = Number(value);
   // A locked sheet is history, not something to fix: older data can predate
   // maximum enforcement, so only flag cells someone can still change.
@@ -64,7 +70,7 @@ function ScoreCell({
       {invalid && <span className="mt-0.5 block text-[9px] text-danger">Must be 0 to {max}</span>}
     </div>
   );
-}
+});
 
 // Shared editable subjects × columns table for a "Grid" field — used by
 // both teacher entry (editable) and admin review (editable-until-publish),
@@ -88,6 +94,15 @@ export function GridEntryTable({
   blankKeys?: Set<string>;
 }) {
   const grid = field.grid;
+
+  // Callers pass a fresh arrow each render; a stable wrapper keeps the memoised cells from re-rendering.
+  const latestOnChange = useRef(onChange);
+  useEffect(() => {
+    latestOnChange.current = onChange;
+  });
+  const stableOnChange = useCallback((key: string, value: string) => latestOnChange.current(key, value), []);
+  const desktop = useIsDesktop();
+
   if (!grid) return null;
 
   // Subject + rawColumns + Total/Grade/Position/Remarks + (when on) 8 Cumulative Result columns.
@@ -95,7 +110,8 @@ export function GridEntryTable({
 
   return (
     <>
-    <div className="hidden overflow-x-auto rounded-md border border-border lg:block">
+    {desktop && (
+    <div className="overflow-x-auto rounded-md border border-border">
       <table className="w-full border-collapse text-left" style={{ minWidth: 350 + grid.rawColumns.length * 140 + (grid.includeCumulative ? 630 : 0) }}>
         <thead className="bg-[#fafbfb]">
           <tr>
@@ -148,8 +164,9 @@ export function GridEntryTable({
                       <ScoreCell
                         cellKey={key}
                         max={c.maxMark}
-                        data={data}
-                        onChange={onChange}
+                        value={data[key] ?? ""}
+                        state={explicitScoreState(data, key)}
+                        onChange={stableOnChange}
                         locked={locked}
                         blank={(blankKeys?.has(key) ?? false) && !explicitScoreState(data, key)}
                       />
@@ -181,8 +198,10 @@ export function GridEntryTable({
         </tbody>
       </table>
     </div>
+    )}
 
-    <div className="grid gap-3 p-4 lg:hidden">
+    {!desktop && (
+    <div className="grid gap-3 p-4">
       {grid.subjects.length === 0 && (
         <div className="rounded-md border border-border px-5 py-10 text-center text-body text-text-muted">
           No subjects configured on this template yet.
@@ -206,8 +225,9 @@ export function GridEntryTable({
                     <ScoreCell
                       cellKey={key}
                       max={c.maxMark}
-                      data={data}
-                      onChange={onChange}
+                      value={data[key] ?? ""}
+                      state={explicitScoreState(data, key)}
+                      onChange={stableOnChange}
                       locked={locked}
                       blank={(blankKeys?.has(key) ?? false) && !explicitScoreState(data, key)}
                     />
@@ -259,6 +279,7 @@ export function GridEntryTable({
         );
       })}
     </div>
+    )}
     </>
   );
 }

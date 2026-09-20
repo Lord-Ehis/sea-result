@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { memo, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Download, Upload } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Modal } from "@/components/ui/Modal";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { GridEntryTable } from "@/components/results/GridEntryTable";
 import { saveClassResults } from "./actions";
@@ -13,6 +14,31 @@ import { expandThisTermFields } from "@/lib/grid-compute";
 import { computedAtPublish } from "@/lib/result-field-display";
 import { DROPDOWN_OPTIONS, ratingOptionsFor } from "@/lib/field-options";
 import { identicalScoreWarnings, pickAllowedData, validateStudentEntry } from "@/lib/result-validate";
+import { MAX_IMPORT_BYTES, buildErrorReport, buildScoreSheet, parseScoreSheet, type ImportResult } from "@/lib/score-csv";
+
+// A student's data object is replaced only when *that* student is edited, so
+// caching by object identity means a keystroke recomputes one student, not
+// the whole class (spec: 100 students × 20 subjects × 6 components must not
+// freeze the screen). Unedited students hit the cache.
+const NO_DATA: Record<string, string> = {};
+function memoByData<T>(compute: (data: Record<string, string>) => T): (data: Record<string, string>) => T {
+  const cache = new WeakMap<object, T>();
+  return (data) => {
+    if (cache.has(data)) return cache.get(data)!;
+    const value = compute(data);
+    cache.set(data, value);
+    return value;
+  };
+}
+
+function downloadText(filename: string, text: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 type StudentRow = {
   id: string;
@@ -80,6 +106,38 @@ function FlatFieldControl({
   return <input type="text" value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled} className={inputClass} />;
 }
 
+// Memoised: a keystroke changes at most one student's status, so the other 99
+// rows of a big class don't re-render.
+const StudentListItem = memo(function StudentListItem({
+  id,
+  name,
+  studentCode,
+  selected,
+  complete,
+  onSelect,
+}: {
+  id: string;
+  name: string;
+  studentCode: string;
+  selected: boolean;
+  complete: boolean;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(id)}
+      className={`flex w-full items-center justify-between gap-2 px-4 py-3 text-left ${selected ? "bg-primary-bg text-primary" : "text-text-secondary hover:bg-bg-page"}`}
+    >
+      <span className="min-w-0">
+        <strong className="block truncate text-caption font-medium">{name}</strong>
+        <span className="block truncate text-[10px] text-text-muted">{studentCode}</span>
+      </span>
+      <span className={`h-1.5 w-1.5 flex-none rounded-full ${complete ? "bg-success" : "bg-border"}`} />
+    </button>
+  );
+});
+
 export function ResultEntryClient({
   classId,
   className,
@@ -126,17 +184,20 @@ export function ResultEntryClient({
 
   const expandedFields = useMemo(() => expandThisTermFields(fields), [fields]);
 
+  const computeFor = useMemo(() => memoByData((data) => computeOwnFields(expandedFields, data)), [expandedFields]);
+  const validateFor = useMemo(() => memoByData((data) => validateStudentEntry(fields, pickAllowedData(fields, data))), [fields]);
+
   const computedByStudent = useMemo(() => {
     const map = new Map<string, Record<string, string>>();
-    for (const s of students) map.set(s.id, computeOwnFields(expandedFields, entries[s.id] ?? {}));
+    for (const s of students) map.set(s.id, computeFor(entries[s.id] ?? NO_DATA));
     return map;
-  }, [students, expandedFields, entries]);
+  }, [students, computeFor, entries]);
 
   // The same validator the server runs on save/submit, so what the teacher
   // sees blocked here is exactly what the server would refuse.
   const validationByStudent = useMemo(
-    () => new Map(students.map((s) => [s.id, validateStudentEntry(fields, pickAllowedData(fields, entries[s.id] ?? {}))])),
-    [students, fields, entries],
+    () => new Map(students.map((s) => [s.id, validateFor(entries[s.id] ?? NO_DATA)])),
+    [students, validateFor, entries],
   );
   const completedCount = useMemo(
     () =>
@@ -162,8 +223,44 @@ export function ResultEntryClient({
     setEntries((prev) => ({ ...prev, [studentId]: { ...prev[studentId], [key]: value } }));
   }
 
+  const [importReport, setImportReport] = useState<ImportResult | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  function handleDownloadSheet() {
+    const safe = `${className}-${term}`.replace(/[^\w.-]+/g, "_");
+    downloadText(`${safe}-scores.csv`, buildScoreSheet(fields, students, entries));
+  }
+
+  async function handleImportFile(file: File | undefined) {
+    if (!file) return;
+    setError(null);
+    setMessage(null);
+    if (file.size > MAX_IMPORT_BYTES) {
+      setError("That file is too large to import (limit 2 MB).");
+      return;
+    }
+    const report = parseScoreSheet(await file.text(), fields, students);
+    // Clean rows fill the on-screen sheet only; nothing is saved until the
+    // teacher reviews it and presses Save draft (the server checks it again).
+    if (report.rowsApplied > 0) {
+      setEntries((prev) => {
+        const next = { ...prev };
+        for (const [studentId, patch] of Object.entries(report.applied)) next[studentId] = { ...prev[studentId], ...patch };
+        return next;
+      });
+    }
+    setImportReport(report);
+    if (fileInput.current) fileInput.current.value = "";
+  }
+
   function buildEntries() {
-    return students.map((s) => ({ studentId: s.id, data: entries[s.id] ?? {}, revision: revisions[s.id] ?? null }));
+    // Only what a teacher entered, and only cells that have a value: a blank
+    // is the same as absent to the server, and this keeps a full class well
+    // inside the request size limit.
+    return students.map((s) => {
+      const data = pickAllowedData(fields, entries[s.id] ?? {});
+      return { studentId: s.id, data: Object.fromEntries(Object.entries(data).filter(([, v]) => v !== "")), revision: revisions[s.id] ?? null };
+    });
   }
 
   function run(submit: boolean, successMessage: string, fallbackError: string) {
@@ -257,6 +354,38 @@ export function ResultEntryClient({
             style={{ width: `${students.length ? (completedCount / students.length) * 100 : 0}%` }}
           />
         </div>
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[#f0f2f3] pt-4">
+          <button
+            type="button"
+            onClick={handleDownloadSheet}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-bg-card px-3 text-caption font-medium text-text-secondary hover:bg-bg-page"
+          >
+            <Download size={14} strokeWidth={1.8} />
+            Download sheet (CSV)
+          </button>
+          {!locked && (
+            <>
+              <button
+                type="button"
+                onClick={() => fileInput.current?.click()}
+                disabled={pending}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-bg-card px-3 text-caption font-medium text-text-secondary hover:bg-bg-page disabled:opacity-50"
+              >
+                <Upload size={14} strokeWidth={1.8} />
+                Import scores (CSV)
+              </button>
+              <input
+                ref={fileInput}
+                type="file"
+                accept=".csv,text/csv"
+                aria-label="Import scores from a CSV file"
+                className="hidden"
+                onChange={(e) => void handleImportFile(e.target.files?.[0])}
+              />
+              <span className="text-caption text-text-muted">Fill in the downloaded sheet in Excel or Sheets, save as CSV, then import. Blank cells are left as they are.</span>
+            </>
+          )}
+        </div>
       </div>
 
       {gridField ? (
@@ -271,20 +400,15 @@ export function ResultEntryClient({
                 const v = validationByStudent.get(s.id);
                 const complete = !!v && v.errors.length === 0 && v.missing.length === 0;
                 return (
-                  <button
+                  <StudentListItem
                     key={s.id}
-                    type="button"
-                    onClick={() => setSelectedStudentId(s.id)}
-                    className={`flex w-full items-center justify-between gap-2 px-4 py-3 text-left ${
-                      s.id === selectedStudentId ? "bg-primary-bg text-primary" : "text-text-secondary hover:bg-bg-page"
-                    }`}
-                  >
-                    <span className="min-w-0">
-                      <strong className="block truncate text-caption font-medium">{s.name}</strong>
-                      <span className="block truncate text-[10px] text-text-muted">{s.studentCode}</span>
-                    </span>
-                    <span className={`h-1.5 w-1.5 flex-none rounded-full ${complete ? "bg-success" : "bg-border"}`} />
-                  </button>
+                    id={s.id}
+                    name={s.name}
+                    studentCode={s.studentCode}
+                    selected={s.id === selectedStudentId}
+                    complete={complete}
+                    onSelect={setSelectedStudentId}
+                  />
                 );
               })}
             </div>
@@ -421,6 +545,77 @@ export function ResultEntryClient({
           </button>
         </div>
       </div>
+      <Modal
+        open={importReport !== null}
+        onClose={() => setImportReport(null)}
+        title="Import results"
+        description={importReport ? `${importReport.totalRows} row${importReport.totalRows === 1 ? "" : "s"} read` : undefined}
+        width={640}
+      >
+        {importReport && (
+          <div className="grid gap-3 p-6">
+            <p className="m-0 text-body text-text-secondary">
+              <strong className="font-medium text-success">{importReport.rowsApplied} student{importReport.rowsApplied === 1 ? "" : "s"} filled in</strong>
+              {importReport.rowsSkipped > 0 && (
+                <>
+                  {" · "}
+                  <strong className="font-medium text-danger">{importReport.rowsSkipped} row{importReport.rowsSkipped === 1 ? "" : "s"} skipped</strong>
+                </>
+              )}
+              . {importReport.rowsApplied > 0 ? "Review the sheet, then press Save draft — nothing is saved yet." : ""}
+            </p>
+            {importReport.unknownColumns.length > 0 && (
+              <p className="m-0 rounded-md bg-warning-bg px-3 py-2 text-caption text-warning">
+                Ignored columns that aren&apos;t on this result sheet: {importReport.unknownColumns.slice(0, 6).join(", ")}
+                {importReport.unknownColumns.length > 6 ? "…" : ""}
+              </p>
+            )}
+            {importReport.errors.length > 0 && (
+              <div className="max-h-[260px] overflow-auto rounded-md border border-border">
+                <table className="w-full border-collapse text-left text-caption">
+                  <thead className="bg-[#fafbfb]">
+                    <tr>
+                      {["Row", "Student", "Column", "Problem"].map((h) => (
+                        <th key={h} className="border-b border-border px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-text-muted">
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importReport.errors.slice(0, 100).map((e, i) => (
+                      <tr key={i} className="border-b border-[#f0f2f3] last:border-0">
+                        <td className="px-3 py-2 tabular-nums text-text-secondary">{e.row}</td>
+                        <td className="px-3 py-2 text-text-secondary">{e.studentCode || "—"}</td>
+                        <td className="px-3 py-2 text-text-secondary">{e.column || "—"}</td>
+                        <td className="px-3 py-2 text-danger">{e.message}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="flex flex-wrap justify-end gap-2 pt-1">
+              {importReport.errors.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => downloadText("import-errors.csv", buildErrorReport(importReport.errors))}
+                  className="inline-flex h-9 items-center rounded-md border border-border bg-bg-card px-3.5 text-caption font-medium text-text-secondary"
+                >
+                  Download error report
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setImportReport(null)}
+                className="inline-flex h-9 items-center rounded-md border border-primary bg-primary px-3.5 text-caption font-medium text-white"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </>
   );
 }

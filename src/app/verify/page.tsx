@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { isSnapshotIntact, normalizeVerificationCode, type SnapshotPayload } from "@/lib/snapshot";
+import { callerId, hit, waitMessage } from "@/lib/rate-limit";
 
 export const metadata: Metadata = { title: "Verify a result", robots: { index: false, follow: false } };
 
@@ -19,7 +20,11 @@ export default async function VerifyPage({ searchParams }: { searchParams: Promi
   const { code: raw } = await searchParams;
   const code = raw ? normalizeVerificationCode(raw) : "";
 
-  const snapshot = code ? await prisma.publishedResultSnapshot.findUnique({ where: { verificationCode: code } }) : null;
+  // Codes are 32^8 apart, but a public check should still not be scriptable.
+  const limit = code ? await hit(`verify:${await callerId()}`, 30, 600) : null;
+  const limited = limit !== null && !limit.allowed;
+
+  const snapshot = code && !limited ? await prisma.publishedResultSnapshot.findUnique({ where: { verificationCode: code } }) : null;
   const payload = snapshot ? (snapshot.payload as unknown as SnapshotPayload) : null;
   const intact = snapshot ? isSnapshotIntact(snapshot) : false;
 
@@ -41,7 +46,11 @@ export default async function VerifyPage({ searchParams }: { searchParams: Promi
         </button>
       </form>
 
-      {code && !snapshot && (
+      {limited && limit && (
+        <p className="mt-5 rounded-md border border-warning/30 bg-warning-bg px-4 py-3 text-caption text-warning">{waitMessage(limit.retryAfterSec)}</p>
+      )}
+
+      {code && !limited && !snapshot && (
         <p className="mt-5 rounded-md border border-danger/30 bg-danger-bg px-4 py-3 text-caption text-danger">
           No result matches that code. Check it and try again — a document without a matching code should not be trusted.
         </p>
@@ -53,7 +62,14 @@ export default async function VerifyPage({ searchParams }: { searchParams: Promi
         </p>
       )}
 
-      {snapshot && payload && intact && (
+      {snapshot && payload && intact && snapshot.supersededAt && (
+        <p className="mt-5 rounded-md border border-warning/30 bg-warning-bg px-4 py-3 text-caption text-warning">
+          This code was genuinely issued by {payload.school.name}, but that version was superseded by a corrected result on{" "}
+          {new Date(snapshot.supersededAt).toLocaleDateString("en-GB")}. Ask the school or the parent portal for the current version.
+        </p>
+      )}
+
+      {snapshot && payload && intact && !snapshot.supersededAt && (
         <div className="mt-5 rounded-md border border-success/30 bg-success-bg px-4 py-4">
           <strong className="block text-body font-medium text-success">Verified — issued by {payload.school.name}</strong>
           <dl className="mt-3 grid grid-cols-2 gap-3 text-caption">

@@ -1,5 +1,6 @@
 import type { GradeBand, GridRemarksEntry, TemplateField } from "@/app/admin/result-templates/actions";
 import { ordinal } from "@/lib/template-compute";
+import { gradeForValue } from "@/lib/grade-lookup";
 import { termLabel, type TermNumber } from "@/lib/term-number";
 
 // The Term 3 annual summary (spec §6). Pure — the same code produces the
@@ -104,10 +105,8 @@ function toTotal(value: string | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Highest band whose minimum the average reaches — robust to whole-number band boundaries. */
 export function gradeForAverage(value: number, bands: GradeBand[]): string {
-  const band = [...bands].sort((a, b) => b.min - a.min).find((b) => value >= b.min);
-  return band?.label ?? "";
+  return gradeForValue(value, bands);
 }
 
 function listTerms(numbers: number[]): string {

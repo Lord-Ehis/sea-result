@@ -90,7 +90,7 @@ export function LookupForm({ schoolName, slug }: { schoolName: string; slug: str
 
         {result && !result.found && (
           <p className="mt-1 rounded-md border border-primary/20 bg-primary-bg px-3.5 py-3 text-caption leading-relaxed text-primary">
-            No matching result found. Double-check the student code and full name, or contact your school.
+            {result.limitedMessage ?? "No matching result found. Double-check the student code and full name, or contact your school."}
           </p>
         )}
 

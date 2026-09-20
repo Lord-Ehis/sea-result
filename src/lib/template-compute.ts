@@ -1,5 +1,6 @@
 import type { TemplateField, ComputedFormula, WeightedPart } from "@/app/admin/result-templates/actions";
 import { readScoreState } from "@/lib/score-state";
+import { gradeForValue } from "@/lib/grade-lookup";
 
 // Pure computation, safe to import from both client components (live
 // preview as a teacher types) and server actions (authoritative
@@ -104,9 +105,7 @@ export function computeOwnFields(fields: TemplateField[], data: Record<string, s
     } else if (formula.kind === "average") {
       result[field.id] = formula.of.length === 0 ? "" : (formula.of.reduce((sum, id) => sum + toNumber(result[id]), 0) / formula.of.length).toFixed(2);
     } else if (formula.kind === "grade") {
-      const value = toNumber(result[formula.of]);
-      const band = formula.bands.find((b) => value >= b.min && value <= b.max);
-      result[field.id] = band?.label ?? "";
+      result[field.id] = gradeForValue(toNumber(result[formula.of]), formula.bands);
     } else if (formula.kind === "promotion") {
       const offered = formula.subjectFields.filter((id) => (result[id] ?? "").trim() !== "");
       const passed = offered.filter((id) => toNumber(result[id]) >= formula.passMark);
@@ -151,8 +150,10 @@ export function computePositions(fields: TemplateField[], studentsData: Record<s
     if (field.type !== "Computed" || field.formula?.kind !== "position") continue;
     const sourceId = field.formula.of;
 
+    // A blank total (every component exempted, say) is "no result", not a
+    // zero — Number("") is 0, which would otherwise rank the student.
     const ranked = studentsData
-      .map((d, index) => ({ index, value: Number(d[sourceId]) }))
+      .map((d, index) => ({ index, value: (d[sourceId] ?? "").trim() === "" ? NaN : Number(d[sourceId]) }))
       .filter((r) => Number.isFinite(r.value))
       .sort((a, b) => b.value - a.value);
 

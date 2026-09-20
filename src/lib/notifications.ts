@@ -56,16 +56,56 @@ export async function createAndSendNotification(input: {
     notification = await prisma.notification.update({ where: { id: notification.id }, data: { status: "PENDING" } });
   }
 
-  try {
-    if (input.channel === "SMS") {
-      await sendSms({ to: input.recipient, message: input.message });
-    } else {
-      await sendEmail({ to: input.recipient, subject: input.subject ?? "A message from your school", text: input.message });
-    }
-    await prisma.notification.update({ where: { id: notification.id }, data: { status: "SENT", sentAt: new Date() } });
-  } catch {
-    await prisma.notification.update({ where: { id: notification.id }, data: { status: "FAILED" } });
-  }
-
+  await deliver(notification.id, input.channel, input.recipient, input.message, input.subject);
   return notification.id;
+}
+
+async function deliver(id: string, channel: NotificationChannel, recipient: string, message: string, subject?: string) {
+  try {
+    if (channel === "SMS") {
+      await sendSms({ to: recipient, message });
+    } else {
+      await sendEmail({ to: recipient, subject: subject ?? "A message from your school", text: message });
+    }
+    await prisma.notification.update({ where: { id }, data: { status: "SENT", sentAt: new Date() } });
+    return "sent" as const;
+  } catch {
+    await prisma.notification.update({ where: { id }, data: { status: "FAILED" } });
+    return "failed" as const;
+  }
+}
+
+const RETRY_SUBJECT: Partial<Record<NotificationEvent, string>> = {
+  RESULT_PUBLISHED: "Your child's result has been published",
+  RESULT_AMENDED: "A corrected result is available",
+};
+
+/**
+ * Re-sends one notification that failed. Claiming FAILED → PENDING in a
+ * single update means two people clicking Retry (or a double click) can't
+ * send it twice. Only result notifications are retried — anything else
+ * (password resets, say) carries a link that has since expired.
+ */
+export async function resendFailedNotification(id: string, schoolId: string): Promise<"sent" | "failed" | "skipped"> {
+  const row = await prisma.notification.findFirst({ where: { id, schoolId, status: "FAILED" } });
+  if (!row || !RETRY_SUBJECT[row.event]) return "skipped";
+  const claimed = await prisma.notification.updateMany({ where: { id, schoolId, status: "FAILED" }, data: { status: "PENDING" } });
+  if (claimed.count === 0) return "skipped";
+  return deliver(row.id, row.channel, row.recipient, row.message, RETRY_SUBJECT[row.event]);
+}
+
+/** Runs the tasks with at most `limit` in flight — a class's worth of sends without opening a hundred connections at once. */
+export async function runWithConcurrency<T>(tasks: (() => Promise<T>)[], limit: number): Promise<void> {
+  let next = 0;
+  const worker = async () => {
+    while (next < tasks.length) {
+      const task = tasks[next++];
+      try {
+        await task();
+      } catch {
+        // createAndSendNotification records its own failures; one bad recipient must not stop the rest.
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
 }

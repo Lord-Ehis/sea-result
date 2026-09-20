@@ -59,6 +59,7 @@ enum ResultEventAction {
   PUBLISHED
   TERM_EXCEPTION_SET
   TERM_EXCEPTION_CLEARED
+  AMENDED
 }
 
 // What the annual summary does when a student has no published result for an
@@ -109,6 +110,7 @@ enum NotificationEvent {
   PAYMENT_RECEIVED
   ACCOUNT_CREATED
   PASSWORD_RESET
+  RESULT_AMENDED
 }
 
 enum ProviderKind {
@@ -770,24 +772,29 @@ model ProviderSetting {
 // change history. A database trigger rejects any change to the frozen
 // columns — only `supersededAt` may be updated (reserved for amendments).
 model PublishedResultSnapshot {
-  id                String    @id @default(cuid())
-  schoolId          String
-  resultId          String
+  id                   String    @id @default(cuid())
+  schoolId             String
+  resultId             String
   // Plain string, no FK: the snapshot must outlive batch housekeeping.
-  batchId           String?
-  studentId         String
-  version           Int       @default(1)
-  payload           Json
+  batchId              String?
+  studentId            String
+  version              Int       @default(1)
+  payload              Json
   // SHA-256 of the payload's canonical JSON — detects accidental or
   // unauthorised change.
-  checksum          String
+  checksum             String
   // Short public reference for authenticity checks, e.g. R7K4-P2M9.
-  verificationCode  String    @unique
-  templateVersionId String?
-  publishedByUserId String?
-  publishedAt       DateTime
-  supersededAt      DateTime?
-  createdAt         DateTime  @default(now())
+  verificationCode     String    @unique
+  templateVersionId    String?
+  publishedByUserId    String?
+  publishedAt          DateTime
+  supersededAt         DateTime?
+  // Set only on a corrected version (version > 1): why, by whom, and which
+  // snapshot it replaced. Frozen with the rest of the record.
+  amendmentReason      String?
+  amendedByUserId      String?
+  supersedesSnapshotId String?
+  createdAt            DateTime  @default(now())
 
   school  School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -819,7 +826,21 @@ model ResultEvent {
 
   @@index([schoolId])
   @@index([batchId])
+  @@index([schoolId, createdAt])
   @@map("result_events")
+}
+
+// Fixed-window counters for throttling public endpoints (/verify, result
+// lookup). In the database because in-memory counters don't survive across
+// serverless instances.
+model RateLimit {
+  key         String
+  windowStart DateTime
+  count       Int      @default(0)
+
+  @@id([key, windowStart])
+  @@index([windowStart])
+  @@map("rate_limits")
 }
 
 // ---------------------------------------------------------------------------

@@ -14,6 +14,8 @@ import {
   GraduationCap,
   UserPlus,
   Layers,
+  BadgeCheck,
+  ClipboardList,
   type LucideIcon,
 } from "lucide-react";
 import type { IconName } from "./types";
@@ -38,4 +40,6 @@ export const iconRegistry: Record<IconName, LucideIcon> = {
   GraduationCap,
   UserPlus,
   Layers,
+  BadgeCheck,
+  ClipboardList,
 };

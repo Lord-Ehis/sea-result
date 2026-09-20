@@ -50,6 +50,46 @@ export function pickAllowedData(fields: TemplateField[], data: Record<string, st
   return out;
 }
 
+// One checker per teacher-entered key, so a single cell can be validated
+// without walking the whole template (an import checks thousands of cells).
+// `validateStudentEntry` and `validateSingleValue` share these, so the rules
+// live in exactly one place. Cached per template array.
+type ValueChecker = (value: string) => string | null; // value is non-blank and trimmed
+
+const scoreChecker =
+  (max: number): ValueChecker =>
+  (value) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return "Must be a number.";
+    return n < 0 || n > max ? `Must be between 0 and ${max}.` : null;
+  };
+
+function flatChecker(f: TemplateField): ValueChecker {
+  if (f.type === "Number") return (v) => (Number.isFinite(Number(v)) ? null : "Must be a number.");
+  if (f.type === "Dropdown") return (v) => (DROPDOWN_OPTIONS.includes(v) ? null : "Not a valid option.");
+  if (f.type === "Rating scale") return (v) => (ratingOptionsFor(f).includes(v) ? null : "Not a valid rating.");
+  return () => null;
+}
+
+const checkerCache = new WeakMap<TemplateField[], Map<string, ValueChecker>>();
+
+function checkersFor(fields: TemplateField[]): Map<string, ValueChecker> {
+  let map = checkerCache.get(fields);
+  if (!map) {
+    map = new Map();
+    for (const f of fields) {
+      if (f.type === "Computed") continue;
+      if (f.type === "Grid" && f.grid) {
+        for (const s of f.grid.subjects) for (const c of f.grid.rawColumns) map.set(gridKey(f.id, s.id, c.id), scoreChecker(c.maxMark));
+      } else {
+        map.set(f.id, flatChecker(f));
+      }
+    }
+    checkerCache.set(fields, map);
+  }
+  return map;
+}
+
 export function validateStudentEntry(fields: TemplateField[], data: Record<string, string>): EntryValidation {
   const errors: EntryIssue[] = [];
   const missing: EntryIssue[] = [];
@@ -75,9 +115,8 @@ export function validateStudentEntry(fields: TemplateField[], data: Record<strin
             if (c.required !== false) missing.push({ key, label, message: "Score is missing." });
             continue;
           }
-          const n = Number(value);
-          if (!Number.isFinite(n)) errors.push({ key, label, message: "Must be a number." });
-          else if (n < 0 || n > c.maxMark) errors.push({ key, label, message: `Must be between 0 and ${c.maxMark}.` });
+          const problem = scoreChecker(c.maxMark)(value);
+          if (problem) errors.push({ key, label, message: problem });
         }
       }
       continue;
@@ -88,13 +127,8 @@ export function validateStudentEntry(fields: TemplateField[], data: Record<strin
       missing.push({ key: f.id, label: f.name || "Untitled field", message: "Required." });
       continue;
     }
-    if (f.type === "Number" && !Number.isFinite(Number(value))) {
-      errors.push({ key: f.id, label: f.name, message: "Must be a number." });
-    } else if (f.type === "Dropdown" && !DROPDOWN_OPTIONS.includes(value)) {
-      errors.push({ key: f.id, label: f.name, message: "Not a valid option." });
-    } else if (f.type === "Rating scale" && !ratingOptionsFor(f).includes(value)) {
-      errors.push({ key: f.id, label: f.name, message: "Not a valid rating." });
-    }
+    const problem = flatChecker(f)(value);
+    if (problem) errors.push({ key: f.id, label: f.name, message: problem });
   }
 
   return { errors, missing };
@@ -105,10 +139,10 @@ export function validateSingleValue(fields: TemplateField[], key: string, value:
   if (isStateKey(key)) {
     return value === "" || (EXPLICIT_SCORE_STATES as readonly string[]).includes(value) ? null : "Unknown score status.";
   }
-  const allowed = allowedDataKeys(fields);
-  if (!allowed.has(key)) return "That field can't be edited.";
-  const probe = validateStudentEntry(fields, { [key]: value });
-  return probe.errors.find((e) => e.key === key)?.message ?? null;
+  const checker = checkersFor(fields).get(key);
+  if (!checker) return "That field can't be edited.";
+  const trimmed = value.trim();
+  return trimmed === "" ? null : checker(trimmed);
 }
 
 export type ClassWarning = { message: string };

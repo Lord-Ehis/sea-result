@@ -13,7 +13,9 @@ export type IconName =
   | "BarChart3"
   | "GraduationCap"
   | "UserPlus"
-  | "Layers";
+  | "Layers"
+  | "BadgeCheck"
+  | "ClipboardList";
 
 export type NavItem = {
   label: string;

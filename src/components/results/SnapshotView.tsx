@@ -83,7 +83,9 @@ export function SnapshotView({ payload, preview = false }: { payload: SnapshotPa
           <>
             <span>
               Published {new Date(publication.publishedAt).toLocaleDateString("en-GB")}
-              {publication.version > 1 ? ` · version ${publication.version}` : ""}
+              {publication.version > 1
+                ? ` · corrected${publication.amendedAt ? ` ${new Date(publication.amendedAt).toLocaleDateString("en-GB")}` : ""} · version ${publication.version}`
+                : ""}
             </span>
             <span>
               Verification code <strong className="font-mono text-text-secondary">{publication.verificationCode}</strong>
