@@ -34,11 +34,12 @@ export default async function PrintResultPage({
   const { t } = await searchParams;
 
   const snapshot = await prisma.publishedResultSnapshot.findUnique({ where: { id: snapshotId } });
-  if (!snapshot || snapshot.supersededAt) {
+  if (!snapshot) {
     return <Notice title="Result not found">This result doesn&apos;t exist or is no longer current.</Notice>;
   }
 
   let allowed = verifySnapshotToken(snapshot.id, t);
+  let isSchoolAdmin = false;
   if (!allowed) {
     const session = await auth();
     const user = session?.user;
@@ -46,7 +47,13 @@ export default async function PrintResultPage({
       allowed = !!(await prisma.parentStudentLink.findFirst({ where: { parentUserId: user.id, studentId: snapshot.studentId } }));
     } else if (user?.role === "SCHOOL_ADMIN") {
       allowed = user.schoolId === snapshot.schoolId;
+      isSchoolAdmin = allowed;
     }
+  }
+  // A corrected result replaces the earlier version for everyone except the
+  // school's own admin, who keeps access to what was once issued.
+  if (snapshot.supersededAt && !isSchoolAdmin) {
+    return <Notice title="Result not found">This result doesn&apos;t exist or is no longer current.</Notice>;
   }
   if (!allowed) {
     return (
@@ -68,6 +75,11 @@ export default async function PrintResultPage({
         </Link>
         <PrintButton />
       </div>
+      {snapshot.supersededAt && (
+        <p className="mb-3 rounded-md border border-warning/30 bg-warning-bg px-4 py-3 text-caption text-warning">
+          Superseded version — replaced by a corrected result on {new Date(snapshot.supersededAt).toLocaleDateString("en-GB")}. Not valid for issue.
+        </p>
+      )}
       <SnapshotView payload={snapshot.payload as unknown as SnapshotPayload} />
       <p className="mt-3 text-center text-[10px] text-text-muted print:hidden">
         Use your browser&apos;s Print dialog and choose &ldquo;Save as PDF&rdquo; to keep a copy.

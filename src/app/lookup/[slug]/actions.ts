@@ -6,6 +6,7 @@ import type { GridResultData } from "@/lib/grid-compute";
 import { isSnapshotIntact, type SnapshotPayload } from "@/lib/snapshot";
 import type { AnnualSummaryPayload } from "@/lib/annual-summary";
 import { signSnapshotToken } from "@/lib/snapshot-token";
+import { callerId, hit, isOverLimit, waitMessage } from "@/lib/rate-limit";
 
 const lookupSchema = z.object({
   slug: z.string().trim().min(1),
@@ -15,6 +16,8 @@ const lookupSchema = z.object({
 
 export type LookupResult = {
   found: boolean;
+  // Set when the caller has made too many attempts; shown instead of "not found".
+  limitedMessage?: string;
   studentName?: string;
   results?: {
     templateId: string;
@@ -40,6 +43,14 @@ function normalizeName(name: string) {
 export async function lookupStudentResult(input: { slug: string; studentCode: string; fullName: string }): Promise<LookupResult> {
   const parsed = lookupSchema.parse(input);
 
+  // Throttled before any lookup so a student's name can't be guessed: per
+  // caller overall, and per student code for wrong-name attempts.
+  const byCaller = await hit(`lookup:${await callerId()}`, 20, 600);
+  if (!byCaller.allowed) return { found: false, limitedMessage: waitMessage(byCaller.retryAfterSec) };
+  const codeKey = `lookup-code:${parsed.slug.toLowerCase()}:${parsed.studentCode.toLowerCase()}`;
+  const byCode = await isOverLimit(codeKey, 10, 3600);
+  if (!byCode.allowed) return { found: false, limitedMessage: waitMessage(byCode.retryAfterSec) };
+
   const school = await prisma.school.findFirst({
     where: { slug: parsed.slug, status: "ACTIVE", allowResultLookup: true },
   });
@@ -51,7 +62,10 @@ export async function lookupStudentResult(input: { slug: string; studentCode: st
   if (!student) return { found: false };
 
   const fullName = normalizeName(`${student.firstName} ${student.lastName}`);
-  if (fullName !== normalizeName(parsed.fullName)) return { found: false };
+  if (fullName !== normalizeName(parsed.fullName)) {
+    await hit(codeKey, 10, 3600);
+    return { found: false };
+  }
 
   // The frozen snapshot, not the live template — see the parent dashboard.
   const snapshots = await prisma.publishedResultSnapshot.findMany({

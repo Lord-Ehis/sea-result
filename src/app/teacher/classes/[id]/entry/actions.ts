@@ -169,45 +169,58 @@ async function saveClassResultsImpl(input: SaveInput): Promise<SaveClassResultsR
           });
         }
 
+        // Set-based writes: the number of queries no longer grows with the
+        // class (a 100-student class used to cost one round trip per student).
+        const toCreate: Prisma.ResultCreateManyInput[] = [];
+        const toUpdate: { id: string; revision: number; data: Record<string, string>; studentId: string }[] = [];
+        const status = input.submit ? "SUBMITTED" : "DRAFT";
+
         for (const entry of cleaned) {
           const row = existingByStudent.get(entry.studentId);
           const data = computeOwnFields(expandedFields, entry.data);
-          const status = input.submit ? "SUBMITTED" : "DRAFT";
 
           if (row) {
             if (entry.revision !== row.revision) throw new UserError(CONFLICT_MESSAGE);
-            const updated = await tx.result.updateMany({
-              where: { id: row.id, revision: row.revision },
-              data: {
-                data,
-                status,
-                batchId: batch.id,
-                submittedByUserId: user.id,
-                submittedAt: input.submit ? now : undefined,
-                rejectionNote: input.submit ? null : undefined,
-                revision: { increment: 1 },
-              },
-            });
-            if (updated.count === 0) throw new UserError(CONFLICT_MESSAGE);
-            revisions[entry.studentId] = row.revision + 1;
+            toUpdate.push({ id: row.id, revision: row.revision, data, studentId: entry.studentId });
           } else {
             if (entry.revision !== null) throw new UserError(CONFLICT_MESSAGE);
-            await tx.result.create({
-              data: {
-                schoolId: user.schoolId,
-                studentId: entry.studentId,
-                templateId: template.id,
-                term: input.term,
-                session: input.session,
-                data,
-                status,
-                batchId: batch.id,
-                submittedByUserId: user.id,
-                submittedAt: input.submit ? now : null,
-              },
+            toCreate.push({
+              schoolId: user.schoolId,
+              studentId: entry.studentId,
+              templateId: template.id,
+              term: input.term,
+              session: input.session,
+              data,
+              status,
+              batchId: batch.id,
+              submittedByUserId: user.id,
+              submittedAt: input.submit ? now : null,
             });
             revisions[entry.studentId] = 0;
           }
+        }
+
+        if (toCreate.length > 0) await tx.result.createMany({ data: toCreate });
+
+        if (toUpdate.length > 0) {
+          // One UPDATE for every existing row. Each row is matched on the
+          // revision the teacher last saw, so a record someone else changed in
+          // the meantime matches nothing and the count comes up short.
+          const at = Prisma.sql`${now.toISOString()}::timestamptz AT TIME ZONE 'UTC'`;
+          const updated = await tx.$executeRaw`
+            UPDATE "results" AS r SET
+              "data" = v."data"::jsonb,
+              "status" = ${status}::"ResultStatus",
+              "batchId" = ${batch.id},
+              "submittedByUserId" = ${user.id},
+              "submittedAt" = CASE WHEN ${input.submit}::boolean THEN ${at} ELSE r."submittedAt" END,
+              "rejectionNote" = CASE WHEN ${input.submit}::boolean THEN NULL ELSE r."rejectionNote" END,
+              "revision" = r."revision" + 1,
+              "updatedAt" = ${at}
+            FROM unnest(${toUpdate.map((u) => u.id)}::text[], ${toUpdate.map((u) => u.revision)}::int[], ${toUpdate.map((u) => JSON.stringify(u.data))}::text[]) AS v("id", "revision", "data")
+            WHERE r."id" = v."id" AND r."revision" = v."revision"`;
+          if (updated !== toUpdate.length) throw new UserError(CONFLICT_MESSAGE);
+          for (const u of toUpdate) revisions[u.studentId] = u.revision + 1;
         }
       },
       // Each write is a network round trip; a whole class can outlast Prisma's 5s default.

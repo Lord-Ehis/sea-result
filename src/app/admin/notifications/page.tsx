@@ -4,9 +4,11 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { RetryButton } from "./RetryButton";
 
 const EVENT_LABEL: Record<string, string> = {
   RESULT_PUBLISHED: "Result published",
+  RESULT_AMENDED: "Result corrected",
   PAYMENT_RECEIVED: "Payment received",
   ACCOUNT_CREATED: "Account created",
   PASSWORD_RESET: "Password reset",
@@ -22,6 +24,8 @@ export default async function NotificationsPage() {
     orderBy: { createdAt: "desc" },
     take: 100,
   });
+
+  const retryable = notifications.filter((n) => n.status === "FAILED" && (n.event === "RESULT_PUBLISHED" || n.event === "RESULT_AMENDED"));
 
   if (notifications.length === 0) {
     return (
@@ -41,15 +45,18 @@ export default async function NotificationsPage() {
             <h2 className="m-0 text-heading font-medium text-text-primary">Notification log</h2>
             <p className="mt-1.5 text-caption text-text-muted">Most recent 100 notifications</p>
           </div>
-          <span className="rounded-md border border-border bg-bg-page px-2.5 py-1.5 text-caption text-text-secondary">
-            {notifications.length} {notifications.length === 1 ? "notification" : "notifications"}
-          </span>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {retryable.length > 0 && <RetryButton label={`Retry ${retryable.length} failed`} />}
+            <span className="rounded-md border border-border bg-bg-page px-2.5 py-1.5 text-caption text-text-secondary">
+              {notifications.length} {notifications.length === 1 ? "notification" : "notifications"}
+            </span>
+          </div>
         </div>
         <div className="hidden overflow-x-auto lg:block">
           <table className="w-full border-collapse text-left">
             <thead className="bg-[#fafbfb]">
               <tr>
-                {["Date", "Student", "Channel", "Event", "Recipient", "Status"].map((h) => (
+                {["Date", "Student", "Channel", "Event", "Recipient", "Status", ""].map((h) => (
                   <th key={h} className="border-b border-border px-4 py-3.5 text-[10px] font-medium uppercase tracking-wide text-text-muted first:pl-5">
                     {h}
                   </th>
@@ -76,6 +83,9 @@ export default async function NotificationsPage() {
                       label={n.status === "SENT" ? "Sent" : n.status === "PENDING" ? "Pending" : "Failed"}
                       tone={n.status === "SENT" ? "success" : n.status === "PENDING" ? "warning" : "danger"}
                     />
+                  </td>
+                  <td className="px-4 py-4 pr-5 text-right">
+                    {n.status === "FAILED" && (n.event === "RESULT_PUBLISHED" || n.event === "RESULT_AMENDED") && <RetryButton ids={[n.id]} label="Retry" />}
                   </td>
                 </tr>
               ))}

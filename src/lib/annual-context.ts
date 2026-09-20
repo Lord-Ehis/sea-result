@@ -32,6 +32,9 @@ export type BatchAnnualInput = {
   schoolId: string;
   batch: { id: string; templateId: string; session: string; termNumber: number | null };
   fields: TemplateField[];
+  // An amendment recomputes with the weights/policy the result was published
+  // with, not whatever the school has set since.
+  settingsOverride?: AnnualSettings;
   rows: {
     id: string;
     studentId: string;
@@ -67,7 +70,7 @@ export async function computeBatchAnnual(input: BatchAnnualInput): Promise<Batch
 
   const studentIds = input.rows.map((r) => r.studentId);
   const [settings, priorRows, exceptions, classes] = await Promise.all([
-    loadAnnualSettings(input.schoolId),
+    input.settingsOverride ? Promise.resolve(input.settingsOverride) : loadAnnualSettings(input.schoolId),
     prisma.result.findMany({
       where: {
         schoolId: input.schoolId,

@@ -20,7 +20,7 @@ export type SnapshotPayload = {
   // checksummed payload, so the weights and sources it was built from are
   // frozen with it.
   annual?: AnnualSummaryPayload;
-  publication: { version: number; verificationCode: string; publishedAt: string };
+  publication: { version: number; verificationCode: string; publishedAt: string; amendedAt?: string };
 };
 
 export function buildSnapshotPayload(input: {
@@ -30,7 +30,7 @@ export function buildSnapshotPayload(input: {
   template: { id: string; name: string; versionId: string | null; fields: TemplateField[] };
   data: Record<string, string>;
   annual?: AnnualSummaryPayload | null;
-  publication: { version: number; verificationCode: string; publishedAt: Date };
+  publication: { version: number; verificationCode: string; publishedAt: Date; amendedAt?: Date };
 }): SnapshotPayload {
   const { template, data } = input;
   return {
@@ -50,6 +50,7 @@ export function buildSnapshotPayload(input: {
       version: input.publication.version,
       verificationCode: input.publication.verificationCode,
       publishedAt: input.publication.publishedAt.toISOString(),
+      ...(input.publication.amendedAt ? { amendedAt: input.publication.amendedAt.toISOString() } : {}),
     },
   };
 }

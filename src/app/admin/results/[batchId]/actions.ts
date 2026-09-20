@@ -1,10 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { createAndSendNotification } from "@/lib/notifications";
+import { createAndSendNotification, runWithConcurrency } from "@/lib/notifications";
 import { computeOwnFields } from "@/lib/template-compute";
 import { expandThisTermFields } from "@/lib/grid-compute";
 import { computePublishData, needsPriorRows, type PriorPublishedRow } from "@/lib/publish-compute";
@@ -185,46 +186,55 @@ export async function publishBatch(batchId: string): Promise<ActionResult<{ alre
       const now = new Date();
       // A verification-code collision (1 in ~10^12) just retries with fresh codes.
       for (let attempt = 0; ; attempt++) {
+        // Everything a snapshot needs is known before the transaction opens, so
+        // the transaction itself is a handful of set-based statements rather
+        // than two queries per student.
+        const snapshots = rows.map((r, i) => {
+          const verificationCode = generateVerificationCode();
+          const payload = buildSnapshotPayload({
+            school,
+            student: {
+              name: `${r.student.firstName} ${r.student.lastName}`,
+              code: r.student.studentCode,
+              className: batch.class.name,
+              campusName: r.student.campus.name,
+            },
+            period: { session: r.session, term: r.term },
+            template: { id: batch.templateId, name: batch.template.name, versionId: batch.templateVersionId, fields },
+            data: finalData[i],
+            annual: annual?.students[i]?.payload,
+            publication: { version: 1, verificationCode, publishedAt: now },
+          });
+          return { row: r, index: i, verificationCode, payload };
+        });
+
         try {
           await prisma.$transaction(async (tx) => {
             // Claiming the batch first also serialises two people publishing at once.
             const claimed = await tx.resultBatch.updateMany({ where: { id: batch.id, status: "APPROVED" }, data: { status: "PUBLISHED" } });
             if (claimed.count === 0) throw new AlreadyPublished();
 
-            for (let i = 0; i < rows.length; i++) {
-              const r = rows[i];
-              const verificationCode = generateVerificationCode();
-              const payload = buildSnapshotPayload({
-                school,
-                student: {
-                  name: `${r.student.firstName} ${r.student.lastName}`,
-                  code: r.student.studentCode,
-                  className: batch.class.name,
-                  campusName: r.student.campus.name,
-                },
-                period: { session: r.session, term: r.term },
-                template: { id: batch.templateId, name: batch.template.name, versionId: batch.templateVersionId, fields },
-                data: finalData[i],
-                annual: annual?.students[i]?.payload,
-                publication: { version: 1, verificationCode, publishedAt: now },
-              });
-              await tx.result.update({ where: { id: r.id }, data: { data: finalData[i], status: "PUBLISHED", publishedAt: now } });
-              await tx.publishedResultSnapshot.create({
-                data: {
-                  schoolId,
-                  resultId: r.id,
-                  batchId: batch.id,
-                  studentId: r.studentId,
-                  version: 1,
-                  payload: payload as unknown as Prisma.InputJsonValue,
-                  checksum: snapshotChecksum(payload),
-                  verificationCode,
-                  templateVersionId: batch.templateVersionId,
-                  publishedByUserId: userId,
-                  publishedAt: now,
-                },
-              });
-            }
+            await tx.publishedResultSnapshot.createMany({
+              data: snapshots.map((s) => ({
+                schoolId,
+                resultId: s.row.id,
+                batchId: batch.id,
+                studentId: s.row.studentId,
+                version: 1,
+                payload: s.payload as unknown as Prisma.InputJsonValue,
+                checksum: snapshotChecksum(s.payload),
+                verificationCode: s.verificationCode,
+                templateVersionId: batch.templateVersionId,
+                publishedByUserId: userId,
+                publishedAt: now,
+              })),
+            });
+
+            const at = Prisma.sql`${now.toISOString()}::timestamptz AT TIME ZONE 'UTC'`;
+            await tx.$executeRaw`
+              UPDATE "results" AS r SET "data" = v."data"::jsonb, "status" = 'PUBLISHED'::"ResultStatus", "publishedAt" = ${at}, "updatedAt" = ${at}
+              FROM unnest(${rows.map((r) => r.id)}::text[], ${finalData.map((d) => JSON.stringify(d))}::text[]) AS v("id", "data")
+              WHERE r."id" = v."id"`;
 
             await recordResultEvent(tx, {
               schoolId,
@@ -248,48 +258,52 @@ export async function publishBatch(batchId: string): Promise<ActionResult<{ alre
       }
     }
 
-    // Sent after the commit — these are network calls and don't belong in the
-    // transaction. Each is keyed by snapshot + channel, so repeating Publish
-    // never messages anyone twice and only retries sends that failed.
-    const snapshots = await prisma.publishedResultSnapshot.findMany({
-      where: { batchId: batch.id, supersededAt: null },
-      include: { student: true },
-    });
-    await Promise.all(
-      snapshots.flatMap((snap) => {
+    // Sent after the commit, and after the response: these are network calls
+    // (one per guardian per channel) and a class of 100 used to keep the admin
+    // waiting on them. Each is keyed by snapshot + channel, so repeating
+    // Publish never messages anyone twice and only retries sends that failed;
+    // a failure is recorded on its notification row, never lost.
+    after(async () => {
+      const snapshots = await prisma.publishedResultSnapshot.findMany({
+        where: { batchId: batch.id, supersededAt: null },
+        include: { student: true },
+      });
+      const sends = snapshots.flatMap((snap) => {
         const student = snap.student;
         const name = `${student.firstName} ${student.lastName}`;
-        const sends: Promise<string>[] = [];
+        const tasks: (() => Promise<string>)[] = [];
         if (student.guardianPhone) {
-          sends.push(
+          tasks.push(() =>
             createAndSendNotification({
               schoolId,
               studentId: student.id,
               channel: "SMS",
               event: "RESULT_PUBLISHED",
-              recipient: student.guardianPhone,
+              recipient: student.guardianPhone!,
               message: `${name}'s result has been published. Log in or use the result lookup to view it.`,
               dedupeKey: `RESULT_PUBLISHED:${snap.id}:SMS`,
             }),
           );
         }
         if (student.guardianEmail) {
-          sends.push(
+          tasks.push(() =>
             createAndSendNotification({
               schoolId,
               studentId: student.id,
               channel: "EMAIL",
               event: "RESULT_PUBLISHED",
-              recipient: student.guardianEmail,
+              recipient: student.guardianEmail!,
               subject: `${name}'s result has been published`,
               message: `${name}'s result has been published. Log in to your parent account or use the result lookup to view it.`,
               dedupeKey: `RESULT_PUBLISHED:${snap.id}:EMAIL`,
             }),
           );
         }
-        return sends;
-      }),
-    );
+        return tasks;
+      });
+      await runWithConcurrency(sends, 8);
+      revalidatePath("/admin/notifications");
+    });
 
     revalidateWorkflowPaths(batch.id);
     revalidatePath("/admin/notifications");
