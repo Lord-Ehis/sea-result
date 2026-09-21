@@ -14,6 +14,15 @@ async function getConfig(): Promise<TermiiConfig> {
   return { apiKey, baseUrl, senderId: "SEA" };
 }
 
+/** The SMS settings in use, or null when none are set. Used by the Go-live checks. */
+export async function readSmsConfig(): Promise<TermiiConfig | null> {
+  try {
+    return await getConfig();
+  } catch {
+    return null;
+  }
+}
+
 export async function sendSms(input: { to: string; message: string }) {
   const { apiKey, baseUrl, senderId } = await getConfig();
 

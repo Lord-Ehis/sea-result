@@ -7,6 +7,7 @@ import Link from "next/link";
 import { registerParent } from "./actions";
 import { Logo } from "@/components/ui/Logo";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { TermsConsent } from "@/components/TermsConsent";
 
 export function ParentSignupForm({ schoolName, slug }: { schoolName: string; slug: string }) {
   const router = useRouter();
@@ -27,15 +28,21 @@ export function ParentSignupForm({ schoolName, slug }: { schoolName: string; slu
 
     setLoading(true);
     try {
-      await registerParent({
+      const created = await registerParent({
         slug,
         name: String(formData.get("name")),
         email: String(formData.get("email")),
         password,
+        acceptedTerms: formData.get("agree") === "on",
       });
-    } catch (err) {
+      if (!created.ok) {
+        setLoading(false);
+        setError(created.error);
+        return;
+      }
+    } catch {
       setLoading(false);
-      setError(err instanceof Error ? err.message : "Could not create your account.");
+      setError("Could not create your account. Please try again.");
       return;
     }
 
@@ -104,6 +111,7 @@ export function ParentSignupForm({ schoolName, slug }: { schoolName: string; slu
               className="rounded-sm border border-border bg-bg-card px-3 py-2.5 text-body text-text-primary outline-none focus:border-primary"
             />
           </label>
+          <TermsConsent />
           <button
             type="submit"
             disabled={loading}

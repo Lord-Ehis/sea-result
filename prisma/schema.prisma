@@ -208,6 +208,11 @@ model User {
   // `campusAccess`. With no rows they see nothing (fail closed) — never "all".
   // Everyone else (false) is unrestricted, exactly as before.
   campusScoped Boolean  @default(false)
+  // When this person agreed to the Terms and Privacy Policy at sign-up, and which
+  // version of them (src/lib/legal.ts). Empty for accounts made before consent
+  // was collected.
+  termsAcceptedAt DateTime?
+  termsVersion    String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -799,6 +804,16 @@ model PricingSettings {
   updatedById            String?
 
   @@map("pricing_settings")
+}
+
+// The last time something we can only observe from outside happened - a payment
+// notification arriving from Paystack, the daily subscription job running - so
+// the owner's Go-live page can tell "working" from "never seen". One row per key.
+model SystemHeartbeat {
+  key    String   @id
+  lastAt DateTime
+
+  @@map("system_heartbeats")
 }
 
 // Append-only history of price changes: who changed what, and when.

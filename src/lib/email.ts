@@ -14,6 +14,15 @@ async function getConfig(): Promise<ResendConfig> {
   return { apiKey, from };
 }
 
+/** The email settings in use, or null when none are set. Used by the Go-live checks. */
+export async function readEmailConfig(): Promise<ResendConfig | null> {
+  try {
+    return await getConfig();
+  } catch {
+    return null;
+  }
+}
+
 export async function sendEmail(input: { to: string; subject: string; text: string }) {
   const { apiKey, from } = await getConfig();
 

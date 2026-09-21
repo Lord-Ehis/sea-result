@@ -117,6 +117,20 @@ export default function Home() {
           </div>
         </section>
       </main>
+
+      <footer className="border-t border-border bg-bg-card">
+        <div className="mx-auto flex max-w-[1320px] flex-wrap items-center justify-between gap-3 px-5 py-6 text-caption text-text-muted sm:px-8 md:px-12">
+          <span>© {new Date().getFullYear()} Unisoft Technologies · Sophie Educational Assistant</span>
+          <nav aria-label="Legal" className="flex gap-5">
+            <Link href="/terms" className="text-primary hover:text-primary-hover">
+              Terms of Use
+            </Link>
+            <Link href="/privacy" className="text-primary hover:text-primary-hover">
+              Privacy Policy
+            </Link>
+          </nav>
+        </div>
+      </footer>
     </div>
   );
 }
