@@ -6,10 +6,11 @@ import { Sparkles, Tag, Download } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { StatusPill } from "@/components/ui/StatusPill";
+import { PackageOverview } from "@/components/PackageOverview";
 import { initializeSubscriptionPayment } from "./actions";
 
 export type QuoteView =
-  | { ok: true; amount: number; listPrice: number; registrationDiscount: number; credit: number; startDate: string; endDate: string }
+  | { ok: true; amount: number; listPrice: number; registrationDiscount: number; credit: number; pastTermsDiscount: number; startDate: string; endDate: string }
   | { ok: false; reason: string };
 
 type Grid = { session: string; plans: { key: string; label: string; quote: QuoteView }[] }[];
@@ -84,10 +85,12 @@ export function BillingClient({
   const upgrade = grid
     .map((g) => ({ session: g.session, quote: g.plans.find((p) => p.key === "SESSION")?.quote }))
     .find((g): g is { session: string; quote: Extract<QuoteView, { ok: true }> } => !!g.quote && g.quote.ok && g.quote.credit > 0);
-  const firstTermQuote = grid[0].plans.find((p) => p.key === "1")?.quote;
-  const sessionQuote = grid[0].plans.find((p) => p.key === "SESSION")?.quote;
+  // The first term on offer and the first full-session offer, across the sessions a school can pay for.
+  const firstTerm = grid.flatMap((g) => g.plans).find((p) => p.key !== "SESSION" && p.quote.ok);
+  const sessionOffer = grid.flatMap((g) => g.plans.map((p) => ({ session: g.session, ...p }))).find((p) => p.key === "SESSION" && p.quote.ok);
+  const firstOfferSession = grid.find((g) => g.plans.some((p) => p.quote.ok))?.session ?? grid[0].session;
 
-  function open(forSession: string, preferred?: string) {
+  function open(forSession: string = firstOfferSession, preferred?: string) {
     const plans = grid.find((g) => g.session === forSession)?.plans ?? [];
     const pick = (preferred && plans.find((p) => p.key === preferred && p.quote.ok)) || plans.find((p) => p.quote.ok);
     setError(null);
@@ -151,12 +154,12 @@ export function BillingClient({
           <div>
             <h2 className="m-0 text-body font-medium text-success">Finish your registration payment</h2>
             <p className="mt-1 text-caption text-success">
-              Your first term is {firstTermQuote?.ok ? naira(firstTermQuote.amount) : "discounted"} — {naira(10000)} off for registering. This price is for the registration payment only.
+              Your first term is {firstTerm?.quote.ok ? naira(firstTerm.quote.amount) : "discounted"} — {naira(10000)} off for registering. This price is for the registration payment only.
             </p>
           </div>
           <button
             type="button"
-            onClick={() => open(grid[0].session)}
+            onClick={() => open()}
             className="inline-flex h-9 items-center rounded-md border border-primary bg-primary px-3.5 text-caption font-medium text-white hover:bg-primary-hover"
           >
             Finish registration payment
@@ -204,12 +207,12 @@ export function BillingClient({
             <div className="mt-5 flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() => open(grid[0].session)}
+                onClick={() => open()}
                 className="inline-flex h-10 items-center rounded-md border border-primary bg-primary px-4 text-caption font-medium text-white hover:bg-primary-hover"
               >
                 {subscriptions.length === 0 ? "Choose a plan" : "Add coverage"}
               </button>
-              <span className="text-caption text-text-muted">New coverage starts when your current coverage ends — you never lose days by paying early.</span>
+              <span className="text-caption text-text-muted">Terms end when the school term ends (Dec, Apr, Aug). New coverage starts when your current coverage ends, so paying early loses nothing.</span>
             </div>
           </div>
         </section>
@@ -224,18 +227,18 @@ export function BillingClient({
               <p className="m-0 text-caption leading-relaxed text-[#607e94]">
                 {upgrade
                   ? `You've paid ${naira(upgrade.quote.credit)} for ${upgrade.session} terms already. Pay the rest and you're covered to ${day(upgrade.quote.endDate)}.`
-                  : "Pay once for all three terms and spend less than paying term by term."}
+                  : "Pay once for the terms still to come and spend less than paying term by term. Offered while at least two terms of the session remain."}
               </p>
             </div>
           </div>
-          {(upgrade || sessionQuote?.ok) && (
+          {(upgrade || sessionOffer) && (
             <div className="mt-4 flex items-center justify-between gap-3">
               <span className="text-caption font-medium text-[#396989]">
-                {upgrade ? `${naira(upgrade.quote.amount)} to pay` : sessionQuote?.ok ? `${naira(sessionQuote.amount)}/session` : ""}
+                {upgrade ? `${naira(upgrade.quote.amount)} to pay` : sessionOffer?.quote.ok ? `${naira(sessionOffer.quote.amount)} · ${sessionOffer.session}` : ""}
               </span>
               <button
                 type="button"
-                onClick={() => open(upgrade ? upgrade.session : grid[0].session, "SESSION")}
+                onClick={() => open(upgrade ? upgrade.session : sessionOffer!.session, "SESSION")}
                 className="inline-flex h-8 items-center rounded-md border border-primary bg-primary px-3 text-caption font-medium text-white hover:bg-primary-hover"
               >
                 {upgrade ? "Upgrade" : "View offer"}
@@ -343,7 +346,7 @@ export function BillingClient({
         </div>
       </section>
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Choose a plan" description="Each term covers 4 months; a session is 3 terms.">
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Choose a plan" description="Terms end with the school term: 1st Dec, 2nd Apr, 3rd Aug.">
         <div className="grid gap-4 px-6 pt-5">
           <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
             Academic session
@@ -374,7 +377,9 @@ export function BillingClient({
                     <input type="radio" name="plan" value={p.key} checked={planKey === p.key} disabled={!available} onChange={() => setPlanKey(p.key)} />
                     <span>
                       <span className="block text-body font-medium text-text-primary">{p.label}</span>
-                      <span className="block text-caption text-text-muted">{p.quote.ok ? (p.key === "SESSION" ? "3 terms · 12 months" : "4 months") : p.quote.reason}</span>
+                      <span className="block text-caption text-text-muted">
+                        {p.quote.ok ? `${day(p.quote.startDate)} – ${day(p.quote.endDate)}` : p.quote.reason}
+                      </span>
                     </span>
                   </span>
                   {p.quote.ok && <span className="text-body font-medium tabular-nums text-text-primary">{naira(p.quote.amount)}</span>}
@@ -395,6 +400,12 @@ export function BillingClient({
                   <dd className="tabular-nums">−{naira(selected.quote.registrationDiscount)}</dd>
                 </div>
               )}
+              {selected.quote.pastTermsDiscount > 0 && (
+                <div className="flex justify-between text-success">
+                  <dt>Terms already over</dt>
+                  <dd className="tabular-nums">−{naira(selected.quote.pastTermsDiscount)}</dd>
+                </div>
+              )}
               {selected.quote.credit > 0 && (
                 <div className="flex justify-between text-success">
                   <dt>Already paid for {session} terms</dt>
@@ -413,6 +424,13 @@ export function BillingClient({
               </div>
             </dl>
           )}
+
+          <details className="rounded-md border border-border">
+            <summary className="cursor-pointer px-3.5 py-2.5 text-caption font-medium text-primary">What&apos;s included</summary>
+            <div className="px-3.5 pb-3.5">
+              <PackageOverview />
+            </div>
+          </details>
         </div>
         {error && <p className="mx-6 mt-4 rounded-md bg-danger-bg px-3 py-2 text-caption text-danger">{error}</p>}
         <div className="flex justify-end gap-2 px-6 py-5">

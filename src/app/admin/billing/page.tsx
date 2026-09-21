@@ -16,6 +16,7 @@ function quoteView(q: Quote): QuoteView {
     listPrice: q.listPrice,
     registrationDiscount: q.registrationDiscount,
     credit: q.credit,
+    pastTermsDiscount: q.pastTermsDiscount,
     startDate: q.startDate.toISOString(),
     endDate: q.endDate.toISOString(),
   };

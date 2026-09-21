@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn, getSession } from "next-auth/react";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 const DASHBOARD_BY_ROLE: Record<string, string> = {
   PLATFORM_OWNER: "/owner/schools",
@@ -63,9 +64,8 @@ export function LoginForm() {
       </label>
       <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
         Password
-        <input
+        <PasswordInput
           name="password"
-          type="password"
           required
           autoComplete="current-password"
           className="rounded-sm border border-border bg-bg-card px-3 py-2.5 text-body text-text-primary outline-none focus:border-primary"

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { resetPassword } from "./actions";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 export function ResetPasswordForm({ token }: { token: string | null }) {
   const [password, setPassword] = useState("");
@@ -56,8 +57,7 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
       {error && <p className="rounded-sm border border-danger/30 bg-danger-bg px-3 py-2 text-caption text-danger">{error}</p>}
       <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
         New password
-        <input
-          type="password"
+        <PasswordInput
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
@@ -68,8 +68,7 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
       </label>
       <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
         Confirm new password
-        <input
-          type="password"
+        <PasswordInput
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
           required

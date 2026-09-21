@@ -4,18 +4,15 @@ import { UserError } from "@/lib/user-error";
 import { isTermNumber, termLabel, termNumberFromLabel, type TermNumber } from "@/lib/term-number";
 import {
   REGISTRATION_DISCOUNT,
-  SESSION_MONTHS,
   SESSION_PRICE,
-  TERM_MONTHS,
   TERM_PRICE,
-  coverageWindow,
+  paidWindow,
   quoteSubscription,
   registrationDiscountAvailable,
   sessionOptions,
   type HeldSubscription,
   type Plan,
 } from "@/lib/billing-pricing";
-import { addMonths } from "@/lib/add-months";
 
 type Db = Pick<typeof prisma, "subscription" | "payment">;
 
@@ -94,8 +91,8 @@ export async function beginPayment(input: { schoolId: string; email: string; pla
  * reference (e.g. if the user's callback beats the webhook there).
  *
  * Money has already been taken by the time this runs, so it never refuses:
- * if the plan was bought twice in parallel, the second payment simply adds
- * its coverage after the first.
+ * if the term ended while the payment was being made, or the plan was bought
+ * twice in parallel, the payment covers the next term instead (see paidWindow).
  */
 export async function completePayment(reference: string) {
   const payment = await prisma.payment.findUnique({ where: { paystackReference: reference } });
@@ -131,9 +128,7 @@ export async function completePayment(reference: string) {
 
     const held = await loadHeldSubscriptions(payment.schoolId, tx);
     const now = new Date();
-    const window = coverageWindow(plan, session, held, now);
-    const months = plan.kind === "SESSION" ? SESSION_MONTHS : TERM_MONTHS;
-    const endDate = window.endDate.getTime() > window.startDate.getTime() ? window.endDate : addMonths(window.startDate, months);
+    const window = paidWindow(plan, session, held, now);
 
     const credit = plan.kind === "SESSION" ? Math.max(0, SESSION_PRICE - amount) : 0;
     const notes: string[] = [];
@@ -152,7 +147,7 @@ export async function completePayment(reference: string) {
         discountNote: notes.length ? notes.join(" · ") : null,
         status: "ACTIVE",
         startDate: window.startDate,
-        endDate,
+        endDate: window.endDate,
       },
     });
     await tx.payment.update({ where: { id: payment.id }, data: { subscriptionId: subscription.id } });
