@@ -5,6 +5,7 @@ import { CreditCard, MessageSquare, Mail, KeyRound } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { savePaystackConfig, saveTermiiConfig, saveResendConfig, clearProvider } from "./actions";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 type ProviderStatus = { configured: boolean; updatedAt: string | null; envFallback: boolean };
 type Providers = { PAYSTACK: ProviderStatus; SMS_TERMII: ProviderStatus; EMAIL_RESEND: ProviderStatus };
@@ -131,8 +132,7 @@ export function SettingsClient({ providers }: { providers: Providers }) {
               <>
                 <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
                   Secret key
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={fields.secretKey ?? ""}
                     onChange={(e) => setFields((f) => ({ ...f, secretKey: e.target.value }))}
                     placeholder="sk_live_…"
@@ -157,8 +157,7 @@ export function SettingsClient({ providers }: { providers: Providers }) {
               <>
                 <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
                   API key
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={fields.apiKey ?? ""}
                     onChange={(e) => setFields((f) => ({ ...f, apiKey: e.target.value }))}
                     required
@@ -194,8 +193,7 @@ export function SettingsClient({ providers }: { providers: Providers }) {
               <>
                 <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
                   API key
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={fields.apiKey ?? ""}
                     onChange={(e) => setFields((f) => ({ ...f, apiKey: e.target.value }))}
                     required

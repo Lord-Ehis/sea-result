@@ -5,8 +5,9 @@ import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { Building2, CreditCard, UserPlus, Check, ArrowLeft, ArrowRight } from "lucide-react";
 import { checkSlugAvailable, createSchoolSignup } from "./actions";
-import { TERM_NUMBERS, termLabel } from "@/lib/term-number";
 import { Logo } from "@/components/ui/Logo";
+import { PackageOverview, type PlanSummary } from "@/components/PackageOverview";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 const STEPS = [
   { key: 1, label: "School", icon: Building2 },
@@ -24,9 +25,17 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-type Pricing = { perTermPrice: number; termPrice: number; sessionPrice: number };
+const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
-export function SignupWizard({ pricing, sessions, defaultTerm }: { pricing: Pricing; sessions: string[]; defaultTerm: number }) {
+// What a school registering today can start with (worked out on the server).
+export type SignupOffer = {
+  /** The full-session discount, so the card says what it really saves. */
+  savePercent: number;
+  term: { key: string; label: string; session: string; listPrice: number; discount: number; amount: number; start: string; end: string } | null;
+  session: { session: string; listPrice: number; amount: number; start: string; end: string } | null;
+};
+
+export function SignupWizard({ offer }: { offer: SignupOffer }) {
   const [step, setStep] = useState(1);
 
   const [schoolName, setSchoolName] = useState("");
@@ -35,9 +44,7 @@ export function SignupWizard({ pricing, sessions, defaultTerm }: { pricing: Pric
   const slug = slugTouched ? manualSlug : slugify(schoolName);
   const [slugStatus, setSlugStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle");
 
-  const [billingCycle, setBillingCycle] = useState<"PER_TERM" | "FULL_SESSION">("PER_TERM");
-  const [termNumber, setTermNumber] = useState(String(defaultTerm));
-  const [sessionLabel, setSessionLabel] = useState(sessions[0]);
+  const [billingCycle, setBillingCycle] = useState<"PER_TERM" | "FULL_SESSION">(offer.term ? "PER_TERM" : "FULL_SESSION");
 
   const [adminName, setAdminName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
@@ -96,8 +103,8 @@ export function SignupWizard({ pricing, sessions, defaultTerm }: { pricing: Pric
         const result = await createSchoolSignup({
           schoolName,
           slug,
-          plan: billingCycle === "FULL_SESSION" ? "SESSION" : termNumber,
-          session: sessionLabel,
+          plan: billingCycle === "FULL_SESSION" ? "SESSION" : (offer.term?.key ?? ""),
+          session: (billingCycle === "FULL_SESSION" ? offer.session?.session : offer.term?.session) ?? "",
           adminName,
           adminEmail,
           adminPassword,
@@ -118,7 +125,23 @@ export function SignupWizard({ pricing, sessions, defaultTerm }: { pricing: Pric
     });
   }
 
-  const planPrice = billingCycle === "FULL_SESSION" ? pricing.sessionPrice : pricing.perTermPrice;
+  // The plan chosen, described the same way on the plan step and the last step.
+  const summary: PlanSummary | null =
+    billingCycle === "FULL_SESSION" && offer.session
+      ? {
+          title: `Full session ${offer.session.session}`,
+          covers: `${day(offer.session.start)} – ${day(offer.session.end)}`,
+          price: offer.session.amount,
+        }
+      : offer.term
+        ? {
+            title: `${offer.term.label} ${offer.term.session}`,
+            covers: `${day(offer.term.start)} – ${day(offer.term.end)}`,
+            price: offer.term.amount,
+            priceNote: offer.term.discount > 0 ? `${naira(offer.term.listPrice)} less ${naira(offer.term.discount)} for registering` : undefined,
+          }
+        : null;
+  const planPrice = summary?.price ?? 0;
 
   return (
     <div className="grid min-h-screen place-items-center bg-bg-page px-4 py-10">
@@ -191,55 +214,36 @@ export function SignupWizard({ pricing, sessions, defaultTerm }: { pricing: Pric
             <div className="grid gap-4">
               <h1 className="m-0 text-heading font-medium text-text-primary">Choose your plan</h1>
               <div className="grid gap-3 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => setBillingCycle("PER_TERM")}
-                  className={`rounded-md border p-4 text-left ${billingCycle === "PER_TERM" ? "border-primary bg-primary-bg" : "border-border bg-bg-card"}`}
-                >
-                  <div className="text-body font-medium text-text-primary">Per term</div>
-                  <div className="mt-1 text-title font-medium text-text-primary">{naira(pricing.perTermPrice)}</div>
-                  <p className="m-0 mt-1 text-caption text-text-muted">{naira(pricing.termPrice)} less {naira(pricing.termPrice - pricing.perTermPrice)} for registering · one term at a time</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBillingCycle("FULL_SESSION")}
-                  className={`rounded-md border p-4 text-left ${billingCycle === "FULL_SESSION" ? "border-primary bg-primary-bg" : "border-border bg-bg-card"}`}
-                >
-                  <div className="text-body font-medium text-text-primary">Full session</div>
-                  <div className="mt-1 text-title font-medium text-text-primary">{naira(pricing.sessionPrice)}</div>
-                  <p className="m-0 mt-1 text-caption text-text-muted">Save 20% · one payment for all 3 terms</p>
-                </button>
-              </div>
-              {billingCycle === "PER_TERM" && (
-                <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
-                  Term
-                  <select
-                    value={termNumber}
-                    onChange={(e) => setTermNumber(e.target.value)}
-                    className="h-10 rounded-md border border-border bg-bg-card px-3 text-body text-text-primary outline-none focus:border-primary"
+                {offer.term && (
+                  <button
+                    type="button"
+                    onClick={() => setBillingCycle("PER_TERM")}
+                    aria-pressed={billingCycle === "PER_TERM"}
+                    className={`rounded-md border p-4 text-left ${billingCycle === "PER_TERM" ? "border-primary bg-primary-bg" : "border-border bg-bg-card"}`}
                   >
-                    {TERM_NUMBERS.map((n) => (
-                      <option key={n} value={n}>
-                        {termLabel(n)} (4 months)
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
-                Academic session
-                <select
-                  value={sessionLabel}
-                  onChange={(e) => setSessionLabel(e.target.value)}
-                  className="h-10 rounded-md border border-border bg-bg-card px-3 text-body text-text-primary outline-none focus:border-primary"
-                >
-                  {sessions.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                    <div className="text-body font-medium text-text-primary">{offer.term.label} {offer.term.session}</div>
+                    <div className="mt-1 text-title font-medium text-text-primary">{naira(offer.term.amount)}</div>
+                    <p className="m-0 mt-1 text-caption text-text-muted">
+                      {naira(offer.term.listPrice)} less {naira(offer.term.discount)} for registering
+                    </p>
+                    <p className="m-0 mt-1 text-caption text-text-muted">Covers {day(offer.term.start)} – {day(offer.term.end)}</p>
+                  </button>
+                )}
+                {offer.session && (
+                  <button
+                    type="button"
+                    onClick={() => setBillingCycle("FULL_SESSION")}
+                    aria-pressed={billingCycle === "FULL_SESSION"}
+                    className={`rounded-md border p-4 text-left ${billingCycle === "FULL_SESSION" ? "border-primary bg-primary-bg" : "border-border bg-bg-card"}`}
+                  >
+                    <div className="text-body font-medium text-text-primary">Full session {offer.session.session}</div>
+                    <div className="mt-1 text-title font-medium text-text-primary">{naira(offer.session.amount)}</div>
+                    <p className="m-0 mt-1 text-caption text-text-muted">Save {offer.savePercent}% · every term still to come</p>
+                    <p className="m-0 mt-1 text-caption text-text-muted">Covers {day(offer.session.start)} – {day(offer.session.end)}</p>
+                  </button>
+                )}
+              </div>
+              <PackageOverview summary={summary} />
             </div>
           )}
 
@@ -269,8 +273,7 @@ export function SignupWizard({ pricing, sessions, defaultTerm }: { pricing: Pric
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
                   Password
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={adminPassword}
                     onChange={(e) => setAdminPassword(e.target.value)}
                     required
@@ -281,8 +284,7 @@ export function SignupWizard({ pricing, sessions, defaultTerm }: { pricing: Pric
                 </label>
                 <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
                   Confirm password
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={adminConfirm}
                     onChange={(e) => setAdminConfirm(e.target.value)}
                     required
@@ -292,6 +294,7 @@ export function SignupWizard({ pricing, sessions, defaultTerm }: { pricing: Pric
                   />
                 </label>
               </div>
+              <PackageOverview summary={summary} showFeatures={false} />
               <p className="m-0 rounded-md bg-bg-page px-3.5 py-3 text-caption leading-relaxed text-text-secondary">
                 You&apos;ll pay {naira(planPrice)} with Paystack right after this to activate {schoolName || "your school"}.
               </p>

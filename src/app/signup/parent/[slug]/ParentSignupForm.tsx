@@ -6,6 +6,7 @@ import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { registerParent } from "./actions";
 import { Logo } from "@/components/ui/Logo";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 export function ParentSignupForm({ schoolName, slug }: { schoolName: string; slug: string }) {
   const router = useRouter();
@@ -85,9 +86,8 @@ export function ParentSignupForm({ schoolName, slug }: { schoolName: string; slu
           </label>
           <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
             Password
-            <input
+            <PasswordInput
               name="password"
-              type="password"
               required
               minLength={8}
               autoComplete="new-password"
@@ -96,9 +96,8 @@ export function ParentSignupForm({ schoolName, slug }: { schoolName: string; slu
           </label>
           <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
             Confirm password
-            <input
+            <PasswordInput
               name="confirm"
-              type="password"
               required
               minLength={8}
               autoComplete="new-password"

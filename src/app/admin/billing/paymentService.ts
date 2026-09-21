@@ -3,23 +3,19 @@ import { verifyTransaction, initializeTransaction } from "@/lib/paystack";
 import { UserError } from "@/lib/user-error";
 import { isTermNumber, termLabel, termNumberFromLabel, type TermNumber } from "@/lib/term-number";
 import {
-  REGISTRATION_DISCOUNT,
-  SESSION_MONTHS,
-  SESSION_PRICE,
-  TERM_MONTHS,
-  TERM_PRICE,
-  coverageWindow,
+  breakdownFromQuote,
+  paidWindow,
   quoteSubscription,
+  readBreakdown,
   registrationDiscountAvailable,
   sessionOptions,
+  subscriptionNotes,
   type HeldSubscription,
   type Plan,
 } from "@/lib/billing-pricing";
-import { addMonths } from "@/lib/add-months";
+import { getPricing } from "@/lib/pricing-settings";
 
 type Db = Pick<typeof prisma, "subscription" | "payment">;
-
-const naira = (n: number) => `₦${n.toLocaleString("en-NG")}`;
 
 /** What the school already holds, in the shape the pricing rules read. */
 export async function loadHeldSubscriptions(schoolId: string, db: Db = prisma): Promise<HeldSubscription[]> {
@@ -48,13 +44,14 @@ export async function loadHeldSubscriptions(schoolId: string, db: Db = prisma): 
 export async function beginPayment(input: { schoolId: string; email: string; plan: Plan; session: string; registering?: boolean }) {
   const { schoolId, plan, session } = input;
   const now = new Date();
-  const [held, payments] = await Promise.all([
+  const [held, payments, pricing] = await Promise.all([
     loadHeldSubscriptions(schoolId),
     prisma.payment.findMany({ where: { schoolId }, select: { id: true, isRegistration: true, status: true } }),
+    getPricing(),
   ]);
 
   const registration = input.registering === true || registrationDiscountAvailable(payments);
-  const quote = quoteSubscription({ plan, session, held, now, registration });
+  const quote = quoteSubscription({ plan, session, held, now, registration, pricing });
   if (!quote.ok) throw new UserError(quote.reason);
 
   const reference = `SEA-${schoolId.slice(0, 8)}-${Date.now()}`;
@@ -63,6 +60,9 @@ export async function beginPayment(input: { schoolId: string; email: string; pla
     billingCycle: plan.kind === "SESSION" ? ("FULL_SESSION" as const) : ("PER_TERM" as const),
     termNumber: plan.kind === "TERM" ? plan.termNumber : null,
     session,
+    // The price is fixed here: what Paystack charges and what completion honours,
+    // even if the owner changes prices before the school finishes paying.
+    breakdown: breakdownFromQuote(quote),
     status: "PENDING" as const,
     paystackReference: reference,
   };
@@ -94,8 +94,8 @@ export async function beginPayment(input: { schoolId: string; email: string; pla
  * reference (e.g. if the user's callback beats the webhook there).
  *
  * Money has already been taken by the time this runs, so it never refuses:
- * if the plan was bought twice in parallel, the second payment simply adds
- * its coverage after the first.
+ * if the term ended while the payment was being made, or the plan was bought
+ * twice in parallel, the payment covers the next term instead (see paidWindow).
  */
 export async function completePayment(reference: string) {
   const payment = await prisma.payment.findUnique({ where: { paystackReference: reference } });
@@ -131,14 +131,9 @@ export async function completePayment(reference: string) {
 
     const held = await loadHeldSubscriptions(payment.schoolId, tx);
     const now = new Date();
-    const window = coverageWindow(plan, session, held, now);
-    const months = plan.kind === "SESSION" ? SESSION_MONTHS : TERM_MONTHS;
-    const endDate = window.endDate.getTime() > window.startDate.getTime() ? window.endDate : addMonths(window.startDate, months);
+    const window = paidWindow(plan, session, held, now);
 
-    const credit = plan.kind === "SESSION" ? Math.max(0, SESSION_PRICE - amount) : 0;
-    const notes: string[] = [];
-    if (plan.kind === "TERM" && payment.isRegistration && amount < TERM_PRICE) notes.push(`Registration discount: ${naira(REGISTRATION_DISCOUNT)} off`);
-    if (credit > 0) notes.push(`${naira(credit)} credited for terms already paid in ${session}`);
+    const { credit, notes } = subscriptionNotes({ breakdown: readBreakdown(payment.breakdown), plan, session, amount, isRegistration: payment.isRegistration });
 
     const subscription = await tx.subscription.create({
       data: {
@@ -152,7 +147,7 @@ export async function completePayment(reference: string) {
         discountNote: notes.length ? notes.join(" · ") : null,
         status: "ACTIVE",
         startDate: window.startDate,
-        endDate,
+        endDate: window.endDate,
       },
     });
     await tx.payment.update({ where: { id: payment.id }, data: { subscriptionId: subscription.id } });

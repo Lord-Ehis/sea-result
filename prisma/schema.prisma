@@ -707,6 +707,10 @@ model Payment {
   billingCycle      BillingCycle?
   termNumber        Int?
   session           String?
+  // The price breakdown shown when it started (list price, registration discount,
+  // credit for terms already paid) - so the receipt and the subscription's notes
+  // stay right even if the owner changes prices before it completes.
+  breakdown         Json?
   paidAt            DateTime?
   createdAt         DateTime      @default(now())
 
@@ -781,6 +785,31 @@ model ProviderSetting {
   updatedAt DateTime     @updatedAt
 
   @@map("provider_settings")
+}
+
+// The subscription prices the platform owner controls (Global settings).
+// One row, id "default". Read through src/lib/pricing-settings.ts, which falls
+// back to the built-in defaults if the row is missing.
+model PricingSettings {
+  id                     String   @id @default("default")
+  termPrice              Int
+  registrationDiscount   Int
+  sessionDiscountPercent Int
+  updatedAt              DateTime @updatedAt
+  updatedById            String?
+
+  @@map("pricing_settings")
+}
+
+// Append-only history of price changes: who changed what, and when.
+model PricingChange {
+  id          String   @id @default(cuid())
+  changedAt   DateTime @default(now())
+  changedById String?
+  before      Json
+  after       Json
+
+  @@map("pricing_changes")
 }
 
 // ---------------------------------------------------------------------------
