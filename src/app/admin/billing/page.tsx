@@ -3,8 +3,23 @@ import { getAdminAccess } from "@/lib/admin-access";
 import { getSchoolAccess } from "@/lib/school-access-lookup";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { prisma } from "@/lib/prisma";
-import { isNewSubscriber, TERM_PRICE, calculateAmount } from "./paymentService";
-import { BillingClient } from "./BillingClient";
+import { quoteGrid, registrationDiscountAvailable, type Quote } from "@/lib/billing-pricing";
+import { termLabel, isTermNumber } from "@/lib/term-number";
+import { loadHeldSubscriptions } from "./paymentService";
+import { BillingClient, type QuoteView } from "./BillingClient";
+
+function quoteView(q: Quote): QuoteView {
+  if (!q.ok) return q;
+  return {
+    ok: true,
+    amount: q.amount,
+    listPrice: q.listPrice,
+    registrationDiscount: q.registrationDiscount,
+    credit: q.credit,
+    startDate: q.startDate.toISOString(),
+    endDate: q.endDate.toISOString(),
+  };
+}
 
 export default async function BillingPage() {
   // Billing stays reachable when the subscription has lapsed — it is where a school renews.
@@ -21,45 +36,53 @@ export default async function BillingPage() {
       />
     );
   }
-  const school = await prisma.school.findUnique({ where: { id: schoolId } });
 
-  const [subscription, payments, newSubscriber] = await Promise.all([
-    prisma.subscription.findFirst({ where: { schoolId }, orderBy: { createdAt: "desc" } }),
+  const now = new Date();
+  const [school, subscriptions, payments, held, schoolAccess] = await Promise.all([
+    prisma.school.findUnique({ where: { id: schoolId } }),
+    prisma.subscription.findMany({ where: { schoolId, status: { not: "CANCELLED" } }, orderBy: { startDate: "desc" } }),
     prisma.payment.findMany({ where: { schoolId }, orderBy: { createdAt: "desc" } }),
-    isNewSubscriber(schoolId),
+    loadHeldSubscriptions(schoolId),
+    getSchoolAccess(schoolId, { fresh: true }),
   ]);
+
+  const registration = registrationDiscountAvailable(payments);
+  const grid = quoteGrid({ held, now, registration }).map((g) => ({
+    session: g.session,
+    plans: g.plans.map((p) => ({ key: p.key, label: p.label, quote: quoteView(p.quote) })),
+  }));
 
   return (
     <BillingClient
       schoolName={school?.name ?? "Your school"}
-      subscription={
-        subscription
-          ? {
-              billingCycle: subscription.billingCycle,
-              term: subscription.term,
-              session: subscription.session,
-              amount: subscription.amount.toNumber(),
-              status: subscription.status,
-              startDate: subscription.startDate.toISOString(),
-              endDate: subscription.endDate.toISOString(),
-              discountNote: subscription.discountNote,
-            }
-          : null
-      }
+      access={{
+        state: schoolAccess.state,
+        coverageEndsAt: schoolAccess.coverageEndsAt?.toISOString() ?? null,
+        graceEndsAt: schoolAccess.graceEndsAt?.toISOString() ?? null,
+      }}
+      subscriptions={subscriptions.map((s) => ({
+        id: s.id,
+        label: s.isComplimentary ? "Complimentary access" : s.billingCycle === "FULL_SESSION" ? "Full session" : isTermNumber(s.termNumber) ? termLabel(s.termNumber) : (s.term ?? "One term"),
+        session: s.session,
+        amount: s.amount.toNumber(),
+        creditApplied: s.creditApplied.toNumber(),
+        discountNote: s.isComplimentary ? null : s.discountNote,
+        isComplimentary: s.isComplimentary,
+        startDate: s.startDate.toISOString(),
+        endDate: s.endDate.toISOString(),
+        phase: s.startDate > now ? "UPCOMING" : s.endDate > now ? "CURRENT" : "ENDED",
+      }))}
       payments={payments.map((p) => ({
         id: p.id,
         reference: p.paystackReference,
         amount: p.amount.toNumber(),
         status: p.status,
+        isRegistration: p.isRegistration,
         createdAt: p.createdAt.toISOString(),
         paidAt: p.paidAt?.toISOString() ?? null,
       }))}
-      pricing={{
-        termPrice: TERM_PRICE,
-        newSubscriberPrice: calculateAmount("PER_TERM", true),
-        sessionPrice: calculateAmount("FULL_SESSION", false),
-        isNewSubscriber: newSubscriber,
-      }}
+      grid={grid}
+      registration={registration}
     />
   );
 }

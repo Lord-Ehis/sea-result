@@ -31,7 +31,7 @@ export default async function AnalyticsPage() {
     await Promise.all([
       prisma.payment.aggregate({ where: { status: "SUCCESS" }, _sum: { amount: true } }),
       prisma.payment.aggregate({ where: { status: "SUCCESS", paidAt: { gte: startOfMonth } }, _sum: { amount: true } }),
-      prisma.subscription.count({ where: { status: "ACTIVE" } }),
+      prisma.subscription.count({ where: { status: "ACTIVE", startDate: { lte: new Date() }, endDate: { gt: new Date() } } }),
       prisma.school.count(),
       prisma.school.count({ where: { status: "ACTIVE" } }),
       prisma.student.count({ where: { isActive: true } }),
