@@ -2,17 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { getAdminAccess, requireFullAdmin } from "@/lib/admin-access";
+import { campusWhere, classWhere, studentWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 import { defaultSessionLabel } from "@/lib/academic-term";
-
-async function requireSchoolAdmin() {
-  const session = await auth();
-  if (!session?.user.schoolId || session.user.role !== "SCHOOL_ADMIN") {
-    throw new Error("Not authorized.");
-  }
-  return session.user.schoolId;
-}
 
 const createCampusSchema = z.object({
   name: z.string().trim().min(1, "Campus name is required"),
@@ -20,7 +13,7 @@ const createCampusSchema = z.object({
 });
 
 export async function createCampus(formData: FormData) {
-  const schoolId = await requireSchoolAdmin();
+  const { schoolId } = await requireFullAdmin(); // adding a campus is a school-wide decision
   const parsed = createCampusSchema.parse({
     name: formData.get("name"),
     address: formData.get("address") || undefined,
@@ -46,7 +39,8 @@ const createStudentSchema = z.object({
 });
 
 export async function createStudent(formData: FormData) {
-  const schoolId = await requireSchoolAdmin();
+  const access = await getAdminAccess();
+  const { schoolId } = access;
   const parsed = createStudentSchema.parse({
     firstName: formData.get("firstName"),
     lastName: formData.get("lastName"),
@@ -59,12 +53,17 @@ export async function createStudent(formData: FormData) {
     guardianEmail: formData.get("guardianEmail") || undefined,
   });
 
+  // A campus admin can only enrol students into their own campuses.
   const campus = await prisma.campus.findFirst({
-    where: { id: parsed.campusId, schoolId },
+    where: { id: parsed.campusId, schoolId, ...campusWhere(access) },
   });
   if (!campus) throw new Error("Campus not found.");
 
   let classId = parsed.classId;
+  if (classId) {
+    const klass = await prisma.class.findFirst({ where: { id: classId, schoolId, ...classWhere(access) }, select: { id: true } });
+    if (!klass) throw new Error("Class not found.");
+  }
   if (parsed.newClassName) {
     const newClass = await prisma.class.create({
       data: {
@@ -100,10 +99,11 @@ export async function createStudent(formData: FormData) {
 }
 
 export async function setStudentActive(studentId: string, isActive: boolean) {
-  const schoolId = await requireSchoolAdmin();
-  await prisma.student.update({
-    where: { id: studentId, schoolId },
+  const access = await getAdminAccess();
+  const updated = await prisma.student.updateMany({
+    where: { id: studentId, schoolId: access.schoolId, ...studentWhere(access) },
     data: { isActive },
   });
+  if (updated.count === 0) throw new Error("Student not found.");
   revalidatePath("/admin/students");
 }

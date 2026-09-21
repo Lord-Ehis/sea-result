@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { requireFullAdmin } from "@/lib/admin-access";
 import { prisma } from "@/lib/prisma";
 import { fieldSchema, type TemplateField } from "./field-schemas";
 import { isTermNumber, termLabel, termNumberFromLabel } from "@/lib/term-number";
@@ -23,12 +23,9 @@ export type {
   TemplateField,
 } from "./field-schemas";
 
+// School-wide setting: a campus admin is refused (see src/lib/admin-access.ts).
 async function requireSchoolAdmin() {
-  const session = await auth();
-  if (!session?.user.schoolId || session.user.role !== "SCHOOL_ADMIN") {
-    throw new Error("Not authorized.");
-  }
-  return session.user.schoolId;
+  return (await requireFullAdmin()).schoolId;
 }
 
 export async function createTemplate(name: string) {

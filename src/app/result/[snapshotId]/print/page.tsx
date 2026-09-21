@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
+import { getAdminAccess } from "@/lib/admin-access";
+import { canAccessCampus } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 import { SnapshotView } from "@/components/results/SnapshotView";
 import { isSnapshotIntact, type SnapshotPayload } from "@/lib/snapshot";
@@ -46,8 +48,13 @@ export default async function PrintResultPage({
     if (user?.role === "PARENT") {
       allowed = !!(await prisma.parentStudentLink.findFirst({ where: { parentUserId: user.id, studentId: snapshot.studentId } }));
     } else if (user?.role === "SCHOOL_ADMIN") {
-      allowed = user.schoolId === snapshot.schoolId;
-      isSchoolAdmin = allowed;
+      // The school's admins only — and a campus admin only for their own campuses' students.
+      const access = await getAdminAccess().catch(() => null);
+      if (access && access.schoolId === snapshot.schoolId) {
+        const student = await prisma.student.findUnique({ where: { id: snapshot.studentId }, select: { campusId: true } });
+        allowed = canAccessCampus(access, student?.campusId);
+        isSchoolAdmin = allowed;
+      }
     }
   }
   // A corrected result replaces the earlier version for everyone except the

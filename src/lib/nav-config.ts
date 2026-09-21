@@ -16,10 +16,17 @@ export const schoolAdminNavItems: NavItem[] = [
   { label: "Audit log", href: "/admin/audit", icon: "ClipboardList" },
   { label: "Billing", href: "/admin/billing", icon: "CreditCard" },
   { label: "Teachers", href: "/admin/teachers", icon: "UserCog" },
+  { label: "Team", href: "/admin/team", icon: "ShieldCheck" },
   { label: "Notifications", href: "/admin/notifications", icon: "Bell" },
   { label: "Custom domain", href: "/admin/domain", icon: "Globe" },
   { label: "Deletion request", href: "/admin/deletion-request", icon: "Trash2" },
 ];
+
+// What a campus admin sees: their campuses' day-to-day work, none of the
+// school-wide settings (templates, billing, domain, deletion request, team).
+export const campusAdminNavItems: NavItem[] = schoolAdminNavItems.filter((item) =>
+  ["/admin/dashboard", "/admin/students", "/admin/classes", "/admin/results", "/admin/published", "/admin/audit", "/admin/teachers", "/admin/notifications"].includes(item.href),
+);
 
 export const teacherNavItems: NavItem[] = [{ label: "My classes", href: "/teacher/classes", icon: "GraduationCap" }];
 

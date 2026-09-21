@@ -1,29 +1,28 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/lib/auth";
+import { getAdminAccess } from "@/lib/admin-access";
+import { ofStudentWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 import { resendFailedNotification } from "@/lib/notifications";
 
-async function requireSchoolAdmin() {
-  const session = await auth();
-  if (!session?.user.schoolId || session.user.role !== "SCHOOL_ADMIN") {
-    throw new Error("Not authorized.");
-  }
-  return session.user.schoolId;
-}
 
 export type RetryOutcome = { sent: number; failed: number; skipped: number };
 
 // Retries failed result notifications — one row, or every failed one. Safe to
 // repeat: each is claimed atomically, so nothing is ever sent twice.
 export async function retryNotifications(ids?: string[]): Promise<RetryOutcome> {
-  const schoolId = await requireSchoolAdmin();
-  const targets = ids?.length
-    ? ids
+  const access = await getAdminAccess();
+  const { schoolId } = access;
+  // Ids from the browser are only honoured if they are this admin's own.
+  const allowedIds = ids?.length
+    ? (await prisma.notification.findMany({ where: { id: { in: ids }, schoolId, ...ofStudentWhere(access) }, select: { id: true } })).map((n) => n.id)
+    : null;
+  const targets = allowedIds
+    ? allowedIds
     : (
         await prisma.notification.findMany({
-          where: { schoolId, status: "FAILED", event: { in: ["RESULT_PUBLISHED", "RESULT_AMENDED"] } },
+          where: { schoolId, ...ofStudentWhere(access), status: "FAILED", event: { in: ["RESULT_PUBLISHED", "RESULT_AMENDED"] } },
           select: { id: true },
           orderBy: { createdAt: "asc" },
           take: 200,

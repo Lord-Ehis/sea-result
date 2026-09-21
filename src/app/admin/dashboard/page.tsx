@@ -1,61 +1,72 @@
 import Link from "next/link";
 import { Users, FileText, Building2, Check, CreditCard, ArrowRight } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { auth } from "@/lib/auth";
+import { getAdminAccess } from "@/lib/admin-access";
+import { batchWhere, campusWhere, studentWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 
 export default async function AdminDashboardPage() {
-  const session = await auth();
-  const schoolId = session!.user.schoolId!;
+  const access = await getAdminAccess();
+  const { schoolId } = access;
+  const fullAdmin = access.campusIds === null;
 
   const [totalStudents, activeCampuses, subscription, submitted] = await Promise.all([
-    prisma.student.count({ where: { schoolId, isActive: true } }),
-    prisma.campus.count({ where: { schoolId, isActive: true } }),
-    prisma.subscription.findFirst({ where: { schoolId, status: "ACTIVE" }, orderBy: { createdAt: "desc" } }),
-    prisma.result.findMany({
-      where: { schoolId, status: "SUBMITTED" },
-      include: { template: { include: { class: true } }, submittedBy: true },
+    prisma.student.count({ where: { schoolId, isActive: true, ...studentWhere(access) } }),
+    prisma.campus.count({ where: { schoolId, isActive: true, ...campusWhere(access) } }),
+    // The plan is a school-wide matter — a campus admin never sees it.
+    fullAdmin ? prisma.subscription.findFirst({ where: { schoolId, status: "ACTIVE" }, orderBy: { createdAt: "desc" } }) : null,
+    prisma.resultBatch.findMany({
+      where: { schoolId, ...batchWhere(access), status: "SUBMITTED" },
+      include: { class: true, _count: { select: { results: true } } },
       orderBy: { submittedAt: "asc" },
     }),
   ]);
+  const teachers = await prisma.user.findMany({
+    where: { id: { in: submitted.map((b) => b.submittedByUserId).filter((id): id is string => !!id) } },
+    select: { id: true, name: true },
+  });
+  const teacherName = new Map(teachers.map((t) => [t.id, t.name]));
 
-  const batches = new Map<string, { templateId: string; className: string; teacherName: string; submittedAt: Date | null; count: number }>();
-  for (const r of submitted) {
-    const key = r.templateId;
-    if (!batches.has(key)) {
-      batches.set(key, {
-        templateId: key,
-        className: r.template.class?.name ?? "All classes",
-        teacherName: r.submittedBy?.name ?? "—",
-        submittedAt: r.submittedAt,
-        count: 0,
-      });
-    }
-    batches.get(key)!.count++;
-  }
-  const queue = Array.from(batches.values());
+  // One row per submitted batch, linking to that batch's review page.
+  const queue = submitted.map((b) => ({
+    batchId: b.id,
+    className: b.class.name,
+    teacherName: (b.submittedByUserId && teacherName.get(b.submittedByUserId)) || "—",
+    submittedAt: b.submittedAt,
+    count: b._count.results,
+  }));
 
   const metrics = [
     { label: "Total students", value: totalStudents.toLocaleString(), icon: Users },
     { label: "Pending result approvals", value: queue.length.toString(), icon: FileText, tone: "amber" as const },
     { label: "Active campuses", value: activeCampuses.toLocaleString(), icon: Building2 },
-    {
-      label: "Subscription status",
-      value: subscription ? "Active" : "None",
-      icon: Check,
-      tone: subscription ? ("green" as const) : undefined,
-    },
+    ...(fullAdmin
+      ? [
+          {
+            label: "Subscription status",
+            value: subscription ? "Active" : "None",
+            icon: Check,
+            tone: subscription ? ("green" as const) : undefined,
+          },
+        ]
+      : []),
   ];
 
-  const tiles = [
-    { href: "/admin/students", icon: Users, title: "Manage students", desc: "View enrolment and student records" },
-    { href: "/admin/result-templates", icon: FileText, title: "Result templates", desc: "Set up report formats for each class" },
-    { href: "/admin/billing", icon: CreditCard, title: "Billing", desc: "View your plan and payment history" },
-  ];
+  const tiles = fullAdmin
+    ? [
+        { href: "/admin/students", icon: Users, title: "Manage students", desc: "View enrolment and student records" },
+        { href: "/admin/result-templates", icon: FileText, title: "Result templates", desc: "Set up report formats for each class" },
+        { href: "/admin/billing", icon: CreditCard, title: "Billing", desc: "View your plan and payment history" },
+      ]
+    : [
+        { href: "/admin/students", icon: Users, title: "Manage students", desc: "View enrolment and student records" },
+        { href: "/admin/results", icon: FileText, title: "Review results", desc: "Approve and publish submitted results" },
+        { href: "/admin/published", icon: Check, title: "Published results", desc: "View or correct results already published" },
+      ];
 
   return (
     <>
-      <PageHeader eyebrow="School overview" title="Dashboard" intro="Welcome back. Here's what needs your attention across your campuses." />
+      <PageHeader eyebrow="School overview" title="Dashboard" intro={fullAdmin ? "Welcome back. Here's what needs your attention across your campuses." : "Welcome back. Here's what needs your attention in your campuses."} />
 
       <section className="mb-7 grid grid-cols-2 gap-4 lg:grid-cols-4" aria-label="School metrics">
         {metrics.map(({ label, value, icon: Icon, tone }) => (
@@ -103,7 +114,7 @@ export default async function AdminDashboardPage() {
               </thead>
               <tbody>
                 {queue.map((b) => (
-                  <tr key={b.templateId} className="border-b border-[#f0f2f3] last:border-0 hover:bg-[#fbfcfd]">
+                  <tr key={b.batchId} className="border-b border-[#f0f2f3] last:border-0 hover:bg-[#fbfcfd]">
                     <td className="px-4 py-4 pl-5 text-body font-medium text-text-primary">{b.className}</td>
                     <td className="px-4 py-4 text-body text-text-secondary">{b.teacherName}</td>
                     <td className="px-4 py-4 text-body text-text-secondary">
@@ -111,7 +122,7 @@ export default async function AdminDashboardPage() {
                     </td>
                     <td className="px-4 py-4 pr-5 text-right">
                       <Link
-                        href={`/admin/results/${b.templateId}`}
+                        href={`/admin/results/${b.batchId}`}
                         className="inline-flex h-8 items-center rounded-md border border-[#cbdde9] bg-bg-card px-3 text-caption font-medium text-primary hover:bg-primary-bg"
                       >
                         Review

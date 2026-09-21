@@ -2,15 +2,16 @@ import Link from "next/link";
 import { BadgeCheck } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { auth } from "@/lib/auth";
+import { getAdminAccess } from "@/lib/admin-access";
+import { batchWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 
 export default async function PublishedResultsPage() {
-  const session = await auth();
-  const schoolId = session!.user.schoolId!;
+  const access = await getAdminAccess();
+  const { schoolId } = access;
 
   const batches = await prisma.resultBatch.findMany({
-    where: { schoolId, status: "PUBLISHED" },
+    where: { schoolId, ...batchWhere(access), status: "PUBLISHED" },
     include: { class: true, template: true, _count: { select: { results: true } } },
     orderBy: { updatedAt: "desc" },
     take: 200,

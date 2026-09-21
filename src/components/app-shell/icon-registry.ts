@@ -16,6 +16,7 @@ import {
   Layers,
   BadgeCheck,
   ClipboardList,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 import type { IconName } from "./types";
@@ -42,4 +43,5 @@ export const iconRegistry: Record<IconName, LucideIcon> = {
   Layers,
   BadgeCheck,
   ClipboardList,
+  ShieldCheck,
 };

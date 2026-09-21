@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { Prisma, type PromotionStatus } from "@prisma/client";
-import { auth } from "@/lib/auth";
+import { getAdminAccess, type AdminAccess } from "@/lib/admin-access";
+import { classWhere, ofStudentWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 import { createAndSendNotification } from "@/lib/notifications";
 import { computeOwnFields } from "@/lib/template-compute";
@@ -26,11 +27,8 @@ import { UserError, toResult, type ActionResult } from "@/lib/user-error";
 // changes another student's published result.
 
 async function requireSchoolAdmin() {
-  const session = await auth();
-  if (!session?.user.schoolId || session.user.role !== "SCHOOL_ADMIN") {
-    throw new Error("Not authorized.");
-  }
-  return { schoolId: session.user.schoolId, userId: session.user.id };
+  const access = await getAdminAccess();
+  return { schoolId: access.schoolId, userId: access.userId, access };
 }
 
 const TX_OPTIONS = { timeout: 60_000, maxWait: 20_000 };
@@ -50,9 +48,11 @@ export type AmendInput = {
 
 export type AmendChange = { key: string; label: string; from: string; to: string };
 
-async function prepare(schoolId: string, input: AmendInput) {
+async function prepare(access: AdminAccess, input: AmendInput) {
+  const { schoolId } = access;
+  // A result of another campus's student isn't found, however it was reached.
   const result = await prisma.result.findFirst({
-    where: { id: input.resultId, schoolId },
+    where: { id: input.resultId, schoolId, ...ofStudentWhere(access) },
     include: { student: true, batch: { include: { template: true } } },
   });
   if (!result || !result.batch) throw new UserError("Result not found.");
@@ -105,7 +105,7 @@ async function prepare(schoolId: string, input: AmendInput) {
     let target: string | null = null;
     if (input.promotion.status === "PROMOTED") {
       if (!input.promotion.promotedToClassId) throw new UserError("Choose the class the student is promoted to.");
-      const klass = await prisma.class.findFirst({ where: { id: input.promotion.promotedToClassId, schoolId }, select: { id: true } });
+      const klass = await prisma.class.findFirst({ where: { id: input.promotion.promotedToClassId, schoolId, ...classWhere(access) }, select: { id: true } });
       if (!klass) throw new UserError("That class doesn't exist in this school.");
       target = klass.id;
     }
@@ -156,9 +156,9 @@ function payloadFor(p: Awaited<ReturnType<typeof prepare>>, publication: { versi
 // Exactly what parents will see, computed by the same code the correction
 // uses — nothing is saved.
 export async function previewAmendment(input: AmendInput): Promise<ActionResult<{ payload: SnapshotPayload; changes: AmendChange[] }>> {
-  const { schoolId } = await requireSchoolAdmin();
+  const { access } = await requireSchoolAdmin();
   return toResult(async () => {
-    const p = await prepare(schoolId, input);
+    const p = await prepare(access, input);
     const payload = payloadFor(p, { version: p.current.version + 1, verificationCode: "PREVIEW", amendedAt: new Date() });
     return { payload, changes: p.changes };
   });
@@ -167,9 +167,9 @@ export async function previewAmendment(input: AmendInput): Promise<ActionResult<
 class Superseded extends Error {}
 
 export async function amendResult(input: AmendInput): Promise<ActionResult<{ snapshotId: string; version: number }>> {
-  const { schoolId, userId } = await requireSchoolAdmin();
+  const { schoolId, userId, access } = await requireSchoolAdmin();
   return toResult(async () => {
-    const p = await prepare(schoolId, input);
+    const p = await prepare(access, input);
     const version = p.current.version + 1;
     const now = new Date();
 

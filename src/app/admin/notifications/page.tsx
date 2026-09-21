@@ -2,7 +2,8 @@ import { Bell, Mail, MessageSquare } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusPill } from "@/components/ui/StatusPill";
-import { auth } from "@/lib/auth";
+import { getAdminAccess } from "@/lib/admin-access";
+import { ofStudentWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 import { RetryButton } from "./RetryButton";
 
@@ -15,11 +16,13 @@ const EVENT_LABEL: Record<string, string> = {
 };
 
 export default async function NotificationsPage() {
-  const session = await auth();
-  const schoolId = session!.user.schoolId!;
+  const access = await getAdminAccess();
+  const { schoolId } = access;
 
+  // A campus admin sees only messages about their own campuses' students; the
+  // school's account emails (no student) stay with the main admin.
   const notifications = await prisma.notification.findMany({
-    where: { schoolId },
+    where: { schoolId, ...ofStudentWhere(access) },
     include: { student: true },
     orderBy: { createdAt: "desc" },
     take: 100,

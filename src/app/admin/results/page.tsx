@@ -3,15 +3,16 @@ import { FileCheck } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusPill } from "@/components/ui/StatusPill";
-import { auth } from "@/lib/auth";
+import { getAdminAccess } from "@/lib/admin-access";
+import { batchWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 
 export default async function ResultsPage() {
-  const session = await auth();
-  const schoolId = session!.user.schoolId!;
+  const access = await getAdminAccess();
+  const { schoolId } = access;
 
   const batches = await prisma.resultBatch.findMany({
-    where: { schoolId, status: { in: ["SUBMITTED", "APPROVED"] } },
+    where: { schoolId, ...batchWhere(access), status: { in: ["SUBMITTED", "APPROVED"] } },
     include: { class: true, template: true, _count: { select: { results: true } } },
     orderBy: { submittedAt: "asc" },
   });

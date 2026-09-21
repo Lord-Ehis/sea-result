@@ -2,7 +2,8 @@ import Link from "next/link";
 import { ClipboardList } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { auth } from "@/lib/auth";
+import { getAdminAccess } from "@/lib/admin-access";
+import { classWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 import { AUDIT_ACTIONS, AUDIT_PAGE_SIZE, countAudit, loadAudit, parseAuditFilters } from "@/lib/audit-query";
 import { ACTION_LABEL } from "@/lib/audit-describe";
@@ -13,16 +14,20 @@ const fieldClass = "h-9 rounded-md border border-border bg-bg-card px-2 text-cap
 
 export default async function AuditLogPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
-  const session = await auth();
-  const schoolId = session!.user.schoolId!;
+  const access = await getAdminAccess();
+  const { schoolId } = access;
   const filters = parseAuditFilters(sp);
   const page = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
 
   const [total, rows, classes, staff] = await Promise.all([
-    countAudit(schoolId, filters),
-    loadAudit(schoolId, filters, { skip: (page - 1) * AUDIT_PAGE_SIZE, take: AUDIT_PAGE_SIZE }),
-    prisma.class.findMany({ where: { schoolId }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.user.findMany({ where: { schoolId, role: { in: ["SCHOOL_ADMIN", "TEACHER"] } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    countAudit(access, filters),
+    loadAudit(access, filters, { skip: (page - 1) * AUDIT_PAGE_SIZE, take: AUDIT_PAGE_SIZE }),
+    prisma.class.findMany({ where: { schoolId, ...classWhere(access) }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    // The "Done by" list names people across the whole school, so only the main
+    // admin gets it; a campus admin still sees who did each entry in the table.
+    access.campusIds === null
+      ? prisma.user.findMany({ where: { schoolId, role: { in: ["SCHOOL_ADMIN", "TEACHER"] } }, select: { id: true, name: true }, orderBy: { name: "asc" } })
+      : Promise.resolve([] as { id: string; name: string }[]),
   ]);
   const pages = Math.max(1, Math.ceil(total / AUDIT_PAGE_SIZE));
 
@@ -63,17 +68,19 @@ export default async function AuditLogPage({ searchParams }: { searchParams: Pro
             ))}
           </select>
         </label>
-        <label className="grid gap-1 text-[10px] text-text-muted">
-          Done by
-          <select name="actor" defaultValue={sp.actor ?? ""} className={fieldClass}>
-            <option value="">Anyone</option>
-            {staff.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {staff.length > 0 && (
+          <label className="grid gap-1 text-[10px] text-text-muted">
+            Done by
+            <select name="actor" defaultValue={sp.actor ?? ""} className={fieldClass}>
+              <option value="">Anyone</option>
+              {staff.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="grid gap-1 text-[10px] text-text-muted">
           From
           <input type="date" name="from" defaultValue={sp.from ?? ""} className={fieldClass} />
