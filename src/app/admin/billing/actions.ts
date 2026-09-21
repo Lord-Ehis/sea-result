@@ -13,7 +13,7 @@ const initSchema = z.object({
 });
 
 export async function initializeSubscriptionPayment(input: { billingCycle: "PER_TERM" | "FULL_SESSION"; term?: string; session: string }) {
-  const { schoolId, userId } = await requireFullAdmin();
+  const { schoolId, userId } = await requireFullAdmin(true);
   const parsed = initSchema.parse(input);
   const admin = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { email: true } });
 

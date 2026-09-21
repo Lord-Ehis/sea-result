@@ -2,13 +2,17 @@ import { AppShell } from "@/components/app-shell";
 import { campusAdminNavItems, schoolAdminNavItems } from "@/lib/nav-config";
 import { auth } from "@/lib/auth";
 import { getAdminAccess } from "@/lib/admin-access";
+import { getSchoolAccess } from "@/lib/school-access-lookup";
+import { SubscriptionBanner } from "@/components/SubscriptionBanner";
 import { campusWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
-  const access = session?.user.schoolId ? await getAdminAccess().catch(() => null) : null;
+  // allowLapsed: a school whose subscription has ended still needs its navigation and banner (the proxy limits it to Billing).
+  const access = session?.user.schoolId ? await getAdminAccess(true).catch(() => null) : null;
   const scoped = !!access && access.campusIds !== null;
+  const schoolAccess = access ? await getSchoolAccess(access.schoolId).catch(() => null) : null;
 
   const school = session?.user.schoolId
     ? await prisma.school.findUnique({
@@ -30,6 +34,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       userName={session?.user.name ?? "School admin"}
       userRoleLabel={scoped ? "Campus admin" : "School admin"}
     >
+      {schoolAccess && <SubscriptionBanner access={schoolAccess} canRenew={!scoped} />}
       {children}
     </AppShell>
   );

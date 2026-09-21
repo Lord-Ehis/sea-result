@@ -4,7 +4,9 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { prisma } from "@/lib/prisma";
+import { resolveSchoolAccess } from "@/lib/school-access";
 import { SchoolStatusToggle } from "./SchoolStatusToggle";
+import { ComplimentaryAccessPanel } from "./ComplimentaryAccessPanel";
 import { DeletionRequestPanel } from "./DeletionRequestPanel";
 
 const naira = (n: number) => `₦${n.toLocaleString()}`;
@@ -39,6 +41,16 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ i
   }
 
   const activeSubscription = school.subscriptions.find((s) => s.status === "ACTIVE") ?? null;
+  // What the school can actually do right now, from its status and subscriptions.
+  const access = resolveSchoolAccess({ status: school.status, subscriptions: school.subscriptions, now: new Date() });
+  const accessNote =
+    access.state === "GRACE"
+      ? "Subscription ended — in grace period"
+      : access.state === "LAPSED"
+        ? access.coverageEndsAt
+          ? "Subscription ended — staff locked"
+          : "No subscription — staff locked"
+        : null;
   const lifetimeRevenue = school.payments
     .filter((p) => p.status === "SUCCESS")
     .reduce((sum, p) => sum + p.amount.toNumber(), 0);
@@ -56,6 +68,7 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ i
           <div className="flex flex-wrap items-center gap-2.5">
             <h1 className="m-0 text-title font-medium tracking-tight text-text-primary">{school.name}</h1>
             <StatusPill label={SCHOOL_STATUS_LABEL[school.status]} tone={SCHOOL_STATUS_TONE[school.status]} />
+            {accessNote && <StatusPill label={accessNote} tone={access.state === "GRACE" ? "warning" : "danger"} />}
           </div>
           <p className="mt-2 text-body text-text-muted">
             {school.slug} · Joined {new Date(school.createdAt).toLocaleDateString("en-GB")}
@@ -79,6 +92,8 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ i
           }}
         />
       )}
+
+      <ComplimentaryAccessPanel schoolId={school.id} />
 
       <section className="mb-7 grid grid-cols-2 gap-4 lg:grid-cols-4" aria-label="School metrics">
         {[
@@ -126,8 +141,11 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ i
                   <strong className="text-caption font-medium text-text-secondary">{naira(activeSubscription.amount.toNumber())}</strong>
                 </div>
                 <div>
-                  <span className="mb-1.5 block text-[10px] text-text-muted">Renews</span>
-                  <strong className="text-caption font-medium text-text-secondary">{new Date(activeSubscription.endDate).toLocaleDateString("en-GB")}</strong>
+                  <span className="mb-1.5 block text-[10px] text-text-muted">{access.state === "SUSPENDED" ? "Coverage ends" : "Access ends"}</span>
+                  <strong className="text-caption font-medium text-text-secondary">
+                    {(access.coverageEndsAt ?? activeSubscription.endDate).toLocaleDateString("en-GB", { timeZone: "UTC" })}
+                    {activeSubscription.isComplimentary ? " · complimentary" : ""}
+                  </strong>
                 </div>
               </div>
             ) : (
