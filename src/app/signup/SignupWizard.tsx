@@ -5,7 +5,7 @@ import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { Building2, CreditCard, UserPlus, Check, ArrowLeft, ArrowRight } from "lucide-react";
 import { checkSlugAvailable, createSchoolSignup } from "./actions";
-import { defaultSessionLabel, defaultTermLabel } from "@/lib/academic-term";
+import { TERM_NUMBERS, termLabel } from "@/lib/term-number";
 import { Logo } from "@/components/ui/Logo";
 
 const STEPS = [
@@ -26,7 +26,7 @@ function slugify(value: string) {
 
 type Pricing = { perTermPrice: number; termPrice: number; sessionPrice: number };
 
-export function SignupWizard({ pricing }: { pricing: Pricing }) {
+export function SignupWizard({ pricing, sessions, defaultTerm }: { pricing: Pricing; sessions: string[]; defaultTerm: number }) {
   const [step, setStep] = useState(1);
 
   const [schoolName, setSchoolName] = useState("");
@@ -36,8 +36,8 @@ export function SignupWizard({ pricing }: { pricing: Pricing }) {
   const [slugStatus, setSlugStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle");
 
   const [billingCycle, setBillingCycle] = useState<"PER_TERM" | "FULL_SESSION">("PER_TERM");
-  const [term, setTerm] = useState(defaultTermLabel());
-  const [sessionLabel, setSessionLabel] = useState(defaultSessionLabel());
+  const [termNumber, setTermNumber] = useState(String(defaultTerm));
+  const [sessionLabel, setSessionLabel] = useState(sessions[0]);
 
   const [adminName, setAdminName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
@@ -78,10 +78,6 @@ export function SignupWizard({ pricing }: { pricing: Pricing }) {
       if (!schoolName.trim()) return setError("Enter your school's name.");
       if (slugStatus !== "available") return setError("Choose an available URL before continuing.");
     }
-    if (step === 2) {
-      if (billingCycle === "PER_TERM" && !term.trim()) return setError("Enter the term this covers.");
-      if (!sessionLabel.trim()) return setError("Enter the academic session.");
-    }
     setStep((s) => Math.min(3, s + 1));
   }
 
@@ -97,19 +93,20 @@ export function SignupWizard({ pricing }: { pricing: Pricing }) {
 
     startTransition(async () => {
       try {
-        const { authorizationUrl } = await createSchoolSignup({
+        const result = await createSchoolSignup({
           schoolName,
           slug,
-          billingCycle,
-          term: billingCycle === "PER_TERM" ? term : undefined,
+          plan: billingCycle === "FULL_SESSION" ? "SESSION" : termNumber,
           session: sessionLabel,
           adminName,
           adminEmail,
           adminPassword,
         });
+        if (!result.ok) return setError(result.error);
+        const { authorizationUrl } = result;
 
-        const result = await signIn("credentials", { email: adminEmail, password: adminPassword, redirect: false });
-        if (result?.error) {
+        const signedIn = await signIn("credentials", { email: adminEmail, password: adminPassword, redirect: false });
+        if (signedIn?.error) {
           setError("Your account was created, but automatic sign-in failed. Sign in manually to complete payment.");
           return;
         }
@@ -201,7 +198,7 @@ export function SignupWizard({ pricing }: { pricing: Pricing }) {
                 >
                   <div className="text-body font-medium text-text-primary">Per term</div>
                   <div className="mt-1 text-title font-medium text-text-primary">{naira(pricing.perTermPrice)}</div>
-                  <p className="m-0 mt-1 text-caption text-text-muted">New subscriber rate · billed one term at a time</p>
+                  <p className="m-0 mt-1 text-caption text-text-muted">{naira(pricing.termPrice)} less {naira(pricing.termPrice - pricing.perTermPrice)} for registering · one term at a time</p>
                 </button>
                 <button
                   type="button"
@@ -216,22 +213,32 @@ export function SignupWizard({ pricing }: { pricing: Pricing }) {
               {billingCycle === "PER_TERM" && (
                 <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
                   Term
-                  <input
-                    value={term}
-                    onChange={(e) => setTerm(e.target.value)}
-                    placeholder="e.g. Term 1, 2025/2026"
+                  <select
+                    value={termNumber}
+                    onChange={(e) => setTermNumber(e.target.value)}
                     className="h-10 rounded-md border border-border bg-bg-card px-3 text-body text-text-primary outline-none focus:border-primary"
-                  />
+                  >
+                    {TERM_NUMBERS.map((n) => (
+                      <option key={n} value={n}>
+                        {termLabel(n)} (4 months)
+                      </option>
+                    ))}
+                  </select>
                 </label>
               )}
               <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
                 Academic session
-                <input
+                <select
                   value={sessionLabel}
                   onChange={(e) => setSessionLabel(e.target.value)}
-                  placeholder="e.g. 2025/2026"
                   className="h-10 rounded-md border border-border bg-bg-card px-3 text-body text-text-primary outline-none focus:border-primary"
-                />
+                >
+                  {sessions.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
               </label>
             </div>
           )}

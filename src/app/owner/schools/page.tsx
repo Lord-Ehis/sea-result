@@ -6,7 +6,7 @@ export default async function SchoolsPage() {
     prisma.school.findMany({
       orderBy: { createdAt: "desc" },
       include: {
-        subscriptions: { where: { status: "ACTIVE" }, take: 1, orderBy: { createdAt: "desc" } },
+        subscriptions: { where: { status: "ACTIVE", startDate: { lte: new Date() } }, take: 1, orderBy: { endDate: "desc" } },
         _count: { select: { students: true, campuses: true } },
       },
     }),

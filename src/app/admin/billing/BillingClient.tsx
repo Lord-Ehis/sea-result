@@ -7,52 +7,67 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { initializeSubscriptionPayment } from "./actions";
-import { defaultSessionLabel, defaultTermLabel } from "@/lib/academic-term";
 
-type Subscription = {
-  billingCycle: "PER_TERM" | "FULL_SESSION";
-  term: string | null;
+export type QuoteView =
+  | { ok: true; amount: number; listPrice: number; registrationDiscount: number; credit: number; startDate: string; endDate: string }
+  | { ok: false; reason: string };
+
+type Grid = { session: string; plans: { key: string; label: string; quote: QuoteView }[] }[];
+
+type Held = {
+  id: string;
+  label: string;
   session: string;
   amount: number;
-  status: "ACTIVE" | "EXPIRED" | "CANCELLED";
+  creditApplied: number;
+  discountNote: string | null;
+  isComplimentary: boolean;
   startDate: string;
   endDate: string;
-  discountNote: string | null;
-} | null;
+  phase: "CURRENT" | "UPCOMING" | "ENDED";
+};
 
 type Payment = {
   id: string;
   reference: string;
   amount: number;
   status: "PENDING" | "SUCCESS" | "FAILED";
+  isRegistration: boolean;
   createdAt: string;
   paidAt: string | null;
 };
 
+type Access = { state: "ACTIVE" | "GRACE" | "LAPSED" | "SUSPENDED"; coverageEndsAt: string | null; graceEndsAt: string | null };
+
 const naira = (n: number) => `₦${n.toLocaleString()}`;
+const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+
+const PHASE_LABEL = { CURRENT: "Current", UPCOMING: "Up next", ENDED: "Ended" } as const;
+const PHASE_TONE = { CURRENT: "success", UPCOMING: "warning", ENDED: "neutral" } as const;
 
 export function BillingClient({
   schoolName,
-  subscription,
+  access,
+  subscriptions,
   payments,
-  pricing,
+  grid,
+  registration,
 }: {
   schoolName: string;
-  subscription: Subscription;
+  access: Access;
+  subscriptions: Held[];
   payments: Payment[];
-  pricing: { termPrice: number; newSubscriberPrice: number; sessionPrice: number; isNewSubscriber: boolean };
+  grid: Grid;
+  registration: boolean;
 }) {
   const searchParams = useSearchParams();
   const paymentStatus = searchParams.get("payment");
 
-  const [modal, setModal] = useState<"PER_TERM" | "FULL_SESSION" | null>(null);
-  const [term, setTerm] = useState(defaultTermLabel());
-  const [sessionLabel, setSessionLabel] = useState(defaultSessionLabel());
+  const [modalOpen, setModalOpen] = useState(false);
+  const [session, setSession] = useState(grid[0].session);
+  const [planKey, setPlanKey] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-
-  const perTermPrice = pricing.isNewSubscriber ? pricing.newSubscriberPrice : pricing.termPrice;
-  const showFullSessionOffer = !subscription || subscription.billingCycle === "PER_TERM";
 
   const banner = useMemo(() => {
     if (paymentStatus === "success") return { tone: "success" as const, text: "Payment successful — your subscription is active." };
@@ -62,26 +77,41 @@ export function BillingClient({
     return null;
   }, [paymentStatus]);
 
-  function openModal(cycle: "PER_TERM" | "FULL_SESSION") {
+  const sessionPlans = grid.find((g) => g.session === session)?.plans ?? [];
+  const selected = sessionPlans.find((p) => p.key === planKey);
+
+  // Someone who paid for terms and could finish the session for less than a fresh full session.
+  const upgrade = grid
+    .map((g) => ({ session: g.session, quote: g.plans.find((p) => p.key === "SESSION")?.quote }))
+    .find((g): g is { session: string; quote: Extract<QuoteView, { ok: true }> } => !!g.quote && g.quote.ok && g.quote.credit > 0);
+  const firstTermQuote = grid[0].plans.find((p) => p.key === "1")?.quote;
+  const sessionQuote = grid[0].plans.find((p) => p.key === "SESSION")?.quote;
+
+  function open(forSession: string, preferred?: string) {
+    const plans = grid.find((g) => g.session === forSession)?.plans ?? [];
+    const pick = (preferred && plans.find((p) => p.key === preferred && p.quote.ok)) || plans.find((p) => p.quote.ok);
     setError(null);
-    setTerm(defaultTermLabel());
-    setSessionLabel(defaultSessionLabel());
-    setModal(cycle);
+    setSession(forSession);
+    setPlanKey(pick?.key ?? "");
+    setModalOpen(true);
+  }
+
+  function changeSession(next: string) {
+    const plans = grid.find((g) => g.session === next)?.plans ?? [];
+    setSession(next);
+    setPlanKey(plans.find((p) => p.quote.ok)?.key ?? "");
   }
 
   function handlePay() {
-    if (!modal) return;
+    if (!selected?.quote.ok) return;
     setError(null);
     startTransition(async () => {
       try {
-        const { authorizationUrl } = await initializeSubscriptionPayment({
-          billingCycle: modal,
-          term: modal === "PER_TERM" ? term : undefined,
-          session: sessionLabel,
-        });
-        window.location.href = authorizationUrl;
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not start payment.");
+        const result = await initializeSubscriptionPayment({ plan: planKey, session });
+        if (!result.ok) return setError(result.error);
+        window.location.href = result.authorizationUrl;
+      } catch {
+        setError("Could not start payment. Please try again.");
       }
     });
   }
@@ -98,128 +128,121 @@ export function BillingClient({
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  const statusLine =
+    access.state === "ACTIVE" && access.coverageEndsAt
+      ? { tone: "success" as const, label: "Active", text: `Covered until ${day(access.coverageEndsAt)}.` }
+      : access.state === "GRACE" && access.coverageEndsAt && access.graceEndsAt
+        ? { tone: "warning" as const, label: "Ended", text: `Ended on ${day(access.coverageEndsAt)}. Everything keeps working until ${day(access.graceEndsAt)} — renew before then.` }
+        : { tone: "danger" as const, label: "Ended", text: access.coverageEndsAt ? `Ended on ${day(access.coverageEndsAt)}. Renew to restore access for your teachers and staff.` : "No subscription yet. Choose a plan to get started." };
+
   return (
     <>
       <PageHeader eyebrow="Account & payments" title="Billing" intro="Manage your plan and view payment history." />
 
       {banner && (
-        <p
-          className={`mb-5 rounded-md px-4 py-3 text-caption ${banner.tone === "success" ? "bg-success-bg text-success" : "bg-danger-bg text-danger"}`}
-        >
-          {banner.text}
-        </p>
+        <p className={`mb-5 rounded-md px-4 py-3 text-caption ${banner.tone === "success" ? "bg-success-bg text-success" : "bg-danger-bg text-danger"}`}>{banner.text}</p>
+      )}
+      {access.state === "LAPSED" && !banner && (
+        <p className="mb-5 rounded-md bg-danger-bg px-4 py-3 text-caption text-danger">Renew to restore access for your teachers and staff.</p>
+      )}
+
+      {registration && (
+        <section className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-md border border-success bg-success-bg px-5 py-4">
+          <div>
+            <h2 className="m-0 text-body font-medium text-success">Finish your registration payment</h2>
+            <p className="mt-1 text-caption text-success">
+              Your first term is {firstTermQuote?.ok ? naira(firstTermQuote.amount) : "discounted"} — {naira(10000)} off for registering. This price is for the registration payment only.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => open(grid[0].session)}
+            className="inline-flex h-9 items-center rounded-md border border-primary bg-primary px-3.5 text-caption font-medium text-white hover:bg-primary-hover"
+          >
+            Finish registration payment
+          </button>
+        </section>
       )}
 
       <div className="mb-5 grid gap-4 lg:grid-cols-[1.4fr_1fr]">
         <section className="overflow-hidden rounded-md border border-border bg-bg-card">
           <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-5">
             <div>
-              <h2 className="m-0 text-heading font-medium text-text-primary">Current plan</h2>
-              <p className="mt-1.5 text-caption text-text-muted">Your subscription at a glance</p>
+              <h2 className="m-0 text-heading font-medium text-text-primary">Your coverage</h2>
+              <p className="mt-1.5 text-caption text-text-muted">{statusLine.text}</p>
             </div>
-            {subscription && (
-              <StatusPill label={subscription.status === "ACTIVE" ? "Active" : subscription.status} tone={subscription.status === "ACTIVE" ? "success" : "neutral"} />
-            )}
+            <StatusPill label={statusLine.label} tone={statusLine.tone} />
           </div>
           <div className="p-5">
-            {subscription ? (
-              <>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="text-body font-medium text-text-primary">
-                      {subscription.billingCycle === "FULL_SESSION" ? "Full-session billing" : "Per-term billing"}
+            {subscriptions.length > 0 ? (
+              <ul className="m-0 grid list-none gap-2.5 p-0">
+                {subscriptions.map((s) => (
+                  <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3.5 py-3">
+                    <div>
+                      <div className="text-body font-medium text-text-primary">
+                        {s.label}
+                        {!s.isComplimentary && <span className="font-normal text-text-muted"> · {s.session}</span>}
+                      </div>
+                      <div className="mt-0.5 text-caption text-text-muted">
+                        {day(s.startDate)} – {day(s.endDate)}
+                        {!s.isComplimentary && ` · ${naira(s.amount)}`}
+                      </div>
+                      {s.discountNote && (
+                        <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-md bg-success-bg px-2 py-1 text-caption text-success">
+                          <Tag size={12} strokeWidth={1.8} />
+                          {s.discountNote}
+                        </span>
+                      )}
                     </div>
-                    <p className="mt-1.5 text-caption text-text-muted">
-                      {subscription.billingCycle === "FULL_SESSION"
-                        ? "One payment for the full academic session."
-                        : "Flexible billing for your school, one term at a time."}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <strong className="text-title font-medium text-text-primary">{naira(subscription.amount)}</strong>
-                    <div className="text-caption text-text-muted">{subscription.billingCycle === "FULL_SESSION" ? "/session" : "/term"}</div>
-                  </div>
-                </div>
-                <div className="mt-5 grid grid-cols-2 gap-4 border-t border-border pt-4.5">
-                  <div>
-                    <span className="mb-1.5 block text-[10px] text-text-muted">Renewal date</span>
-                    <strong className="text-caption font-medium text-text-secondary">{new Date(subscription.endDate).toLocaleDateString("en-GB")}</strong>
-                  </div>
-                  <div>
-                    <span className="mb-1.5 block text-[10px] text-text-muted">Payment frequency</span>
-                    <strong className="text-caption font-medium text-text-secondary">
-                      {subscription.billingCycle === "FULL_SESSION" ? "Once per session" : "Every term"}
-                    </strong>
-                  </div>
-                </div>
-                {subscription.discountNote && (
-                  <span className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-success-bg px-2.5 py-1.5 text-caption text-success">
-                    <Tag size={13} strokeWidth={1.8} />
-                    {subscription.discountNote}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => openModal(subscription.billingCycle)}
-                  className="mt-5 inline-flex h-9 items-center rounded-md border border-primary bg-primary px-3.5 text-caption font-medium text-white hover:bg-primary-hover"
-                >
-                  Renew now
-                </button>
-              </>
+                    <StatusPill label={PHASE_LABEL[s.phase]} tone={PHASE_TONE[s.phase]} />
+                  </li>
+                ))}
+              </ul>
             ) : (
-              <div>
-                <p className="m-0 mb-4 text-body text-text-muted">No active subscription yet. Choose a plan to get started.</p>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => openModal("PER_TERM")}
-                    className="inline-flex h-10 items-center rounded-md border border-primary bg-primary px-4 text-caption font-medium text-white hover:bg-primary-hover"
-                  >
-                    Subscribe per term ({naira(perTermPrice)})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openModal("FULL_SESSION")}
-                    className="inline-flex h-10 items-center rounded-md border border-border bg-bg-card px-4 text-caption font-medium text-primary hover:bg-primary-bg"
-                  >
-                    Subscribe full session ({naira(pricing.sessionPrice)})
-                  </button>
-                </div>
-                {pricing.isNewSubscriber && (
-                  <p className="mt-3 text-caption text-success">New subscriber: {naira(10000)} off your first term applied automatically.</p>
-                )}
-              </div>
+              <p className="m-0 mb-1 text-body text-text-muted">Nothing here yet. Choose a plan to get started.</p>
             )}
+            <div className="mt-5 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => open(grid[0].session)}
+                className="inline-flex h-10 items-center rounded-md border border-primary bg-primary px-4 text-caption font-medium text-white hover:bg-primary-hover"
+              >
+                {subscriptions.length === 0 ? "Choose a plan" : "Add coverage"}
+              </button>
+              <span className="text-caption text-text-muted">New coverage starts when your current coverage ends — you never lose days by paying early.</span>
+            </div>
           </div>
         </section>
 
-        {showFullSessionOffer && (
-          <section className="rounded-md border border-[#cbdde9] bg-[#f1f7fb] p-5">
-            <div className="flex items-start gap-3">
-              <span className="grid h-9 w-9 flex-none place-items-center rounded-md bg-[#dcecf7] text-primary">
-                <Sparkles size={18} strokeWidth={1.8} />
-              </span>
-              <div>
-                <h2 className="m-0 mb-1.5 text-body font-medium text-[#234c6c]">Switch to full-session (save 20%)</h2>
-                <p className="m-0 text-caption leading-relaxed text-[#607e94]">
-                  Pay once for the full academic session and spend less than paying term by term.
-                </p>
-              </div>
+        <section className="rounded-md border border-[#cbdde9] bg-[#f1f7fb] p-5">
+          <div className="flex items-start gap-3">
+            <span className="grid h-9 w-9 flex-none place-items-center rounded-md bg-[#dcecf7] text-primary">
+              <Sparkles size={18} strokeWidth={1.8} />
+            </span>
+            <div>
+              <h2 className="m-0 mb-1.5 text-body font-medium text-[#234c6c]">{upgrade ? "Complete the full session" : "Full session (save 20%)"}</h2>
+              <p className="m-0 text-caption leading-relaxed text-[#607e94]">
+                {upgrade
+                  ? `You've paid ${naira(upgrade.quote.credit)} for ${upgrade.session} terms already. Pay the rest and you're covered to ${day(upgrade.quote.endDate)}.`
+                  : "Pay once for all three terms and spend less than paying term by term."}
+              </p>
             </div>
+          </div>
+          {(upgrade || sessionQuote?.ok) && (
             <div className="mt-4 flex items-center justify-between gap-3">
               <span className="text-caption font-medium text-[#396989]">
-                {naira(pricing.sessionPrice)}/session · save {naira(pricing.termPrice * 3 - pricing.sessionPrice)}
+                {upgrade ? `${naira(upgrade.quote.amount)} to pay` : sessionQuote?.ok ? `${naira(sessionQuote.amount)}/session` : ""}
               </span>
               <button
                 type="button"
-                onClick={() => openModal("FULL_SESSION")}
+                onClick={() => open(upgrade ? upgrade.session : grid[0].session, "SESSION")}
                 className="inline-flex h-8 items-center rounded-md border border-primary bg-primary px-3 text-caption font-medium text-white hover:bg-primary-hover"
               >
-                View offer
+                {upgrade ? "Upgrade" : "View offer"}
               </button>
             </div>
-          </section>
-        )}
+          )}
+        </section>
       </div>
 
       <section className="overflow-hidden rounded-md border border-border bg-bg-card">
@@ -320,44 +343,82 @@ export function BillingClient({
         </div>
       </section>
 
-      <Modal
-        open={modal !== null}
-        onClose={() => setModal(null)}
-        title={modal === "FULL_SESSION" ? "Subscribe · full session" : "Subscribe · per term"}
-        description={modal === "FULL_SESSION" ? `${naira(pricing.sessionPrice)} for the full session` : `${naira(perTermPrice)} for one term`}
-      >
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Choose a plan" description="Each term covers 4 months; a session is 3 terms.">
         <div className="grid gap-4 px-6 pt-5">
-          {modal === "PER_TERM" && (
-            <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
-              Term
-              <input
-                value={term}
-                onChange={(e) => setTerm(e.target.value)}
-                placeholder="e.g. Term 2, 2025/2026"
-                required
-                className="h-10 rounded-md border border-border bg-bg-card px-3 text-body text-text-primary"
-              />
-            </label>
-          )}
           <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
             Academic session
-            <input
-              value={sessionLabel}
-              onChange={(e) => setSessionLabel(e.target.value)}
-              placeholder="e.g. 2025/2026"
-              required
+            <select
+              value={session}
+              onChange={(e) => changeSession(e.target.value)}
               className="h-10 rounded-md border border-border bg-bg-card px-3 text-body text-text-primary"
-            />
+            >
+              {grid.map((g) => (
+                <option key={g.session} value={g.session}>
+                  {g.session}
+                </option>
+              ))}
+            </select>
           </label>
-          {modal === "PER_TERM" && pricing.isNewSubscriber && (
-            <p className="m-0 rounded-md bg-success-bg px-3 py-2 text-caption text-success">New subscriber discount of ₦10,000 applied.</p>
+
+          <div role="radiogroup" aria-label="Plan" className="grid gap-2">
+            {sessionPlans.map((p) => {
+              const available = p.quote.ok;
+              return (
+                <label
+                  key={p.key}
+                  className={`flex items-center justify-between gap-3 rounded-md border px-3.5 py-3 ${
+                    planKey === p.key ? "border-primary bg-primary-bg" : "border-border bg-bg-card"
+                  } ${available ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}
+                >
+                  <span className="flex items-center gap-3">
+                    <input type="radio" name="plan" value={p.key} checked={planKey === p.key} disabled={!available} onChange={() => setPlanKey(p.key)} />
+                    <span>
+                      <span className="block text-body font-medium text-text-primary">{p.label}</span>
+                      <span className="block text-caption text-text-muted">{p.quote.ok ? (p.key === "SESSION" ? "3 terms · 12 months" : "4 months") : p.quote.reason}</span>
+                    </span>
+                  </span>
+                  {p.quote.ok && <span className="text-body font-medium tabular-nums text-text-primary">{naira(p.quote.amount)}</span>}
+                </label>
+              );
+            })}
+          </div>
+
+          {selected?.quote.ok && (
+            <dl className="m-0 grid gap-1.5 rounded-md bg-bg-page px-3.5 py-3 text-caption text-text-secondary">
+              <div className="flex justify-between">
+                <dt>{selected.label} price</dt>
+                <dd className="tabular-nums">{naira(selected.quote.listPrice)}</dd>
+              </div>
+              {selected.quote.registrationDiscount > 0 && (
+                <div className="flex justify-between text-success">
+                  <dt>Registration discount</dt>
+                  <dd className="tabular-nums">−{naira(selected.quote.registrationDiscount)}</dd>
+                </div>
+              )}
+              {selected.quote.credit > 0 && (
+                <div className="flex justify-between text-success">
+                  <dt>Already paid for {session} terms</dt>
+                  <dd className="tabular-nums">−{naira(selected.quote.credit)}</dd>
+                </div>
+              )}
+              <div className="flex justify-between border-t border-border pt-1.5 text-body font-medium text-text-primary">
+                <dt>You pay</dt>
+                <dd className="tabular-nums">{naira(selected.quote.amount)}</dd>
+              </div>
+              <div className="flex justify-between pt-0.5 text-text-muted">
+                <dt>Covers</dt>
+                <dd>
+                  {day(selected.quote.startDate)} – {day(selected.quote.endDate)}
+                </dd>
+              </div>
+            </dl>
           )}
         </div>
         {error && <p className="mx-6 mt-4 rounded-md bg-danger-bg px-3 py-2 text-caption text-danger">{error}</p>}
         <div className="flex justify-end gap-2 px-6 py-5">
           <button
             type="button"
-            onClick={() => setModal(null)}
+            onClick={() => setModalOpen(false)}
             className="inline-flex h-9 items-center rounded-md border border-border bg-bg-card px-3.5 text-caption font-medium text-text-secondary"
           >
             Cancel
@@ -365,7 +426,7 @@ export function BillingClient({
           <button
             type="button"
             onClick={handlePay}
-            disabled={pending || (modal === "PER_TERM" && !term.trim()) || !sessionLabel.trim()}
+            disabled={pending || !selected?.quote.ok}
             className="inline-flex h-9 items-center rounded-md border border-primary bg-primary px-3.5 text-caption font-medium text-white disabled:opacity-60"
           >
             {pending ? "Redirecting…" : "Pay with Paystack"}
