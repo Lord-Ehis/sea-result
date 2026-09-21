@@ -4,6 +4,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { createPasswordResetToken } from "@/lib/password-reset";
 import { sendEmail } from "@/lib/email";
+import { createHash } from "node:crypto";
+import { callerId, hit } from "@/lib/rate-limit";
 
 const emailSchema = z.string().trim().email();
 
@@ -14,6 +16,13 @@ const emailSchema = z.string().trim().email();
  */
 export async function requestPasswordReset(rawEmail: string) {
   const email = emailSchema.parse(rawEmail);
+
+  // Too many requests from one place, or for one address (someone flooding a person's
+  // inbox), are quietly ignored - the caller shows the same message either way.
+  const byCaller = await hit(`reset:${await callerId()}`, 5, 900);
+  const byEmail = await hit(`reset-email:${createHash("sha256").update(email.toLowerCase()).digest("hex").slice(0, 16)}`, 3, 3600);
+  if (!byCaller.allowed || !byEmail.allowed) return;
+
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) return;
 

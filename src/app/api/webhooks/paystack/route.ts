@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyWebhookSignature } from "@/lib/paystack";
 import { completePayment } from "@/app/admin/billing/paymentService";
+import { touchHeartbeat } from "@/lib/heartbeat";
 
 export async function POST(request: Request) {
   const rawBody = await request.text();
@@ -9,6 +10,9 @@ export async function POST(request: Request) {
   if (!(await verifyWebhookSignature(rawBody, signature))) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
+
+  // A correctly signed notification arrived - the owner's Go-live page shows that Paystack can reach us.
+  await touchHeartbeat("paystack_webhook");
 
   const event = JSON.parse(rawBody) as { event: string; data?: { reference?: string } };
 

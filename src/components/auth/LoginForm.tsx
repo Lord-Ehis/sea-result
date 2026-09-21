@@ -32,7 +32,7 @@ export function LoginForm() {
 
     if (result?.error) {
       setLoading(false);
-      setError("Incorrect email or password.");
+      setError(result.code === "too_many_attempts" ? "Too many failed attempts. Please wait about 15 minutes and try again." : "Incorrect email or password.");
       return;
     }
 

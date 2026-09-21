@@ -7,6 +7,7 @@ import { Building2, CreditCard, UserPlus, Check, ArrowLeft, ArrowRight } from "l
 import { checkSlugAvailable, createSchoolSignup } from "./actions";
 import { Logo } from "@/components/ui/Logo";
 import { PackageOverview, type PlanSummary } from "@/components/PackageOverview";
+import { TermsConsent } from "@/components/TermsConsent";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 
 const STEPS = [
@@ -50,6 +51,7 @@ export function SignupWizard({ offer }: { offer: SignupOffer }) {
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [adminConfirm, setAdminConfirm] = useState("");
+  const [agree, setAgree] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -97,6 +99,7 @@ export function SignupWizard({ offer }: { offer: SignupOffer }) {
     e.preventDefault();
     setError(null);
     if (adminPassword !== adminConfirm) return setError("Passwords don't match.");
+    if (!agree) return setError("Please agree to the Terms of Use and Privacy Policy.");
 
     startTransition(async () => {
       try {
@@ -108,6 +111,7 @@ export function SignupWizard({ offer }: { offer: SignupOffer }) {
           adminName,
           adminEmail,
           adminPassword,
+          acceptedTerms: agree,
         });
         if (!result.ok) return setError(result.error);
         const { authorizationUrl } = result;
@@ -295,6 +299,7 @@ export function SignupWizard({ offer }: { offer: SignupOffer }) {
                 </label>
               </div>
               <PackageOverview summary={summary} showFeatures={false} />
+              <TermsConsent checked={agree} onChange={setAgree} />
               <p className="m-0 rounded-md bg-bg-page px-3.5 py-3 text-caption leading-relaxed text-text-secondary">
                 You&apos;ll pay {naira(planPrice)} with Paystack right after this to activate {schoolName || "your school"}.
               </p>

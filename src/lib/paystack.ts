@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { getProviderConfig } from "@/lib/provider-settings";
+import { paystackKeyMode } from "@/lib/readiness-rules";
 
 const PAYSTACK_BASE = "https://api.paystack.co";
 
@@ -12,6 +13,16 @@ async function getConfig(): Promise<PaystackConfig> {
   const secretKey = process.env.PAYSTACK_SECRET_KEY;
   if (!secretKey) throw new Error("PAYSTACK_SECRET_KEY is not configured.");
   return { secretKey, publicKey: process.env.PAYSTACK_PUBLIC_KEY };
+}
+
+/** Whether Paystack is in test or live mode, from the key's prefix. The key itself never leaves this file. */
+export async function getPaystackKeyMode() {
+  try {
+    const { secretKey } = await getConfig();
+    return paystackKeyMode(secretKey);
+  } catch {
+    return paystackKeyMode(null);
+  }
 }
 
 type InitializeResponse = {

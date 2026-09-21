@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createAndSendNotification } from "@/lib/notifications";
 import { dueMilestones, resolveSchoolAccess, type ReminderMilestone } from "@/lib/school-access";
+import { touchHeartbeat } from "@/lib/heartbeat";
 
 // Runs once a day (see vercel.json). Vercel calls it with
 // `Authorization: Bearer $CRON_SECRET`; anything else is refused, and it never
@@ -98,5 +99,6 @@ export async function GET(request: Request) {
     }
   }
 
+  await touchHeartbeat("cron_subscriptions");
   return NextResponse.json({ ok: true, ...summary });
 }
