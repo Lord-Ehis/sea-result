@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { decideAccess } from "@/lib/school-access";
+import { getSchoolAccess } from "@/lib/school-access-lookup";
 import type { Role } from "@prisma/client";
 
 const roleForPrefix: Record<string, Role> = {
@@ -42,6 +44,24 @@ export default auth(async (req) => {
 
   if (session.user.role !== roleForPrefix[prefix]) {
     return NextResponse.redirect(new URL("/", req.nextUrl.origin));
+  }
+
+  // A suspended school's staff are locked out, and a school whose subscription
+  // has lapsed can only reach Billing. Parents and the platform owner are never
+  // affected. This runs for page loads and server-action posts alike.
+  const { role, schoolId } = session.user;
+  if ((role === "SCHOOL_ADMIN" || role === "TEACHER") && schoolId) {
+    try {
+      const access = await getSchoolAccess(schoolId);
+      const decision = decideAccess(role, access.state, pathname);
+      if (decision === "blocked-suspended") return NextResponse.redirect(new URL("/school-suspended", req.nextUrl.origin));
+      if (decision === "blocked-lapsed") return NextResponse.redirect(new URL("/subscription-ended", req.nextUrl.origin));
+      if (decision === "billing-only") return NextResponse.redirect(new URL("/admin/billing?reason=lapsed", req.nextUrl.origin));
+    } catch (err) {
+      // If the check itself fails (database hiccup) don't lock everyone out;
+      // the server-side checks in the access helpers still apply.
+      console.error("school access check failed", err);
+    }
   }
 
   return NextResponse.next();

@@ -10,6 +10,7 @@ import { RetryButton } from "./RetryButton";
 const EVENT_LABEL: Record<string, string> = {
   RESULT_PUBLISHED: "Result published",
   RESULT_AMENDED: "Result corrected",
+  SUBSCRIPTION_REMINDER: "Subscription reminder",
   PAYMENT_RECEIVED: "Payment received",
   ACCOUNT_CREATED: "Account created",
   PASSWORD_RESET: "Password reset",

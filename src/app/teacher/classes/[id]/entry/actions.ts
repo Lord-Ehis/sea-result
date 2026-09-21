@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getSchoolAccess } from "@/lib/school-access-lookup";
 import { computeOwnFields } from "@/lib/template-compute";
 import { expandThisTermFields } from "@/lib/grid-compute";
 import { pickAllowedData, validateStudentEntry, type EntryIssue } from "@/lib/result-validate";
@@ -19,6 +20,8 @@ async function requireTeacherForClass(classId: string) {
   if (!session?.user.schoolId || session.user.role !== "TEACHER") {
     throw new Error("Not authorized.");
   }
+  const school = await getSchoolAccess(session.user.schoolId);
+  if (school.state === "SUSPENDED" || school.state === "LAPSED") throw new Error("Your school's access is currently unavailable.");
   const assignment = await prisma.teacherClassAssignment.findFirst({
     where: { teacherId: session.user.id, classId },
   });

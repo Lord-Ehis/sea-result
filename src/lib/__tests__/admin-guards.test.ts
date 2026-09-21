@@ -45,7 +45,8 @@ describe("admin pages and actions use the shared access helper", () => {
   it.each(files.map((f) => [f.path, f.text] as const))("%s is either school-wide or campus-scoped", (path, text) => {
     const usesDatabase = /from "@\/lib\/prisma"/.test(text);
     if (!usesDatabase) return;
-    const schoolWide = /requireFullAdmin(Page)?\b/.test(text);
+    // School-wide: requires a full admin, or (Billing, which a lapsed campus admin lands on) checks campusIds itself.
+    const schoolWide = /requireFullAdmin(Page)?\b/.test(text) || /access\.campusIds !== null/.test(text);
     const scopes = /from "@\/lib\/(campus-scope|audit-query)"/.test(text);
     // Pages that only forward to a scoped loader (and don't query campus data themselves) are listed here.
     const forwardsToScopedCode = ["layout.tsx", "notifications/actions.ts"].includes(path);
@@ -60,7 +61,7 @@ describe("admin pages and actions use the shared access helper", () => {
     for (const path of ["result-templates/page.tsx", "result-templates/actions.ts", "result-templates/version-actions.ts", "result-templates/annual-actions.ts", "billing/page.tsx", "billing/actions.ts", "domain/page.tsx", "domain/actions.ts", "deletion-request/page.tsx", "deletion-request/actions.ts", "team/page.tsx", "team/actions.ts"]) {
       const f = files.find((x) => x.path === path);
       expect(f, `${path} should exist`).toBeTruthy();
-      expect(f!.text, `${path} must require a full admin`).toMatch(/requireFullAdmin(Page)?\b/);
+      expect(f!.text, `${path} must refuse campus admins`).toMatch(/requireFullAdmin(Page)?\b|access\.campusIds !== null/);
     }
   });
 });
