@@ -1,23 +1,30 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_PRICING,
   REGISTRATION_DISCOUNT,
   SESSION_PRICE,
   TERM_PRICE,
+  breakdownFromQuote,
   coverageEnd,
+  derivedPrices,
   nextStart,
   paidWindow,
   parseSession,
   planFromKey,
   planKey,
   quoteSubscription,
+  readBreakdown,
   registrationDiscountAvailable,
   sessionCredit,
   sessionEnd,
   sessionOptions,
   startingOffer,
+  subscriptionNotes,
   termSlot,
+  validatePricing,
   type HeldSubscription,
   type Plan,
+  type PricingConfig,
 } from "../billing-pricing";
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
@@ -31,8 +38,8 @@ function heldTerm(n: 1 | 2 | 3, start: Date, end: Date, amount = TERM_PRICE, ses
 }
 const t1 = (amount = TERM_PRICE) => heldTerm(1, d("2026-09-01"), eod("2026-12-31"), amount);
 const t2 = (amount = TERM_PRICE) => heldTerm(2, d("2027-01-01"), eod("2027-04-30"), amount);
-const quote = (plan: Plan, held: HeldSubscription[], now: string, opts: { session?: string; registration?: boolean } = {}) =>
-  quoteSubscription({ plan, session: opts.session ?? SESS, held, now: d(now), registration: opts.registration ?? false });
+const quote = (plan: Plan, held: HeldSubscription[], now: string, opts: { session?: string; registration?: boolean; pricing?: PricingConfig } = {}) =>
+  quoteSubscription({ plan, session: opts.session ?? SESS, held, now: d(now), registration: opts.registration ?? false, pricing: opts.pricing });
 
 describe("prices", () => {
   it("has the agreed numbers", () => {
@@ -174,13 +181,13 @@ describe("full session", () => {
   });
 
   it("is not offered when only one term is left — buy the term instead", () => {
-    expect(quote(session, [], "2027-05-10")).toEqual({ ok: false, reason: "Only 3rd Term is left in 2026/2027 — buy that term instead." });
     expect(quote(session, [t1(), t2()], "2027-02-10")).toEqual({ ok: false, reason: "Only 3rd Term is left in 2026/2027 — buy that term instead." });
+    expect(quote(session, [t1()], "2027-04-25")).toMatchObject({ ok: true }); // still 2nd + 3rd to come in April
   });
 
   it("can't be bought for next session while this one's terms are still owing", () => {
     expect(quote(session, [], "2026-10-15", { session: "2027/2028" }).ok).toBe(false);
-    expect(quote(session, [t1(), t2(), heldTerm(3, d("2027-05-01"), eod("2027-08-31"))], "2027-05-10", { session: "2027/2028" }).ok).toBe(true);
+    expect(quote(session, [t1(), t2(), heldTerm(3, d("2027-05-01"), eod("2027-08-31"))], "2027-08-10", { session: "2027/2028" }).ok).toBe(true);
   });
 
   it("refuses once the session is paid in full, is over, or is covered to its end", () => {
@@ -314,5 +321,141 @@ describe("plan keys", () => {
     for (const key of ["1", "2", "3", "SESSION"]) expect(planKey(planFromKey(key)!)).toBe(key);
     expect(planFromKey("4")).toBeNull();
     expect(planFromKey("abc")).toBeNull();
+  });
+});
+
+describe("no full session in the 3rd Term (May–July)", () => {
+  const CLOSED = "The full session isn't offered during 3rd Term (May–July). It's available again from 1 August.";
+
+  it("is refused in May, June and July — for this session and for the next", () => {
+    for (const day of ["2027-05-01", "2027-05-10", "2027-06-15", "2027-07-31"]) {
+      expect(quote(session, [], day)).toEqual({ ok: false, reason: CLOSED });
+      expect(quote(session, [], day, { session: "2027/2028" })).toEqual({ ok: false, reason: CLOSED });
+    }
+  });
+
+  it("even for a school that has paid every term so far and could otherwise buy next session's", () => {
+    const held = [t1(), t2(), heldTerm(3, d("2027-05-01"), eod("2027-08-31"))];
+    expect(quote(session, held, "2027-06-10", { session: "2027/2028" })).toEqual({ ok: false, reason: CLOSED });
+  });
+
+  it("is offered again from 1 August, and up to the end of April", () => {
+    expect(quote(session, [], "2027-08-01", { session: "2027/2028" }).ok).toBe(true);
+    expect(quote(session, [], "2027-04-30")).toMatchObject({ ok: true, amount: 80_000 }); // 2nd + 3rd Term to come
+    expect(quote(session, [], "2026-09-01").ok).toBe(true);
+  });
+
+  it("does not stop single terms being bought in May–July", () => {
+    expect(quote(term(3), [t1(), t2()], "2027-06-10").ok).toBe(true);
+  });
+
+  it("sign-up doesn't offer the full session in those months", () => {
+    expect(startingOffer(d("2027-06-10")).session).toBeNull();
+    expect(startingOffer(d("2027-08-10")).session).not.toBeNull();
+  });
+});
+
+describe("prices set by the owner", () => {
+  const custom: PricingConfig = { termPrice: 60_000, registrationDiscount: 5_000, sessionDiscountPercent: 25 };
+
+  it("works out the derived prices", () => {
+    expect(derivedPrices(DEFAULT_PRICING)).toEqual({ termPrice: 50_000, registrationDiscount: 10_000, newSchoolTermPrice: 40_000, sessionDiscountPercent: 20, sessionTermPrice: 40_000, sessionPrice: 120_000 });
+    expect(derivedPrices(custom)).toMatchObject({ newSchoolTermPrice: 55_000, sessionTermPrice: 45_000, sessionPrice: 135_000 });
+  });
+
+  it("a new school's first term uses the owner's term price and discount — whichever term it starts with", () => {
+    expect(quote(term(1), [], "2026-10-15", { registration: true, pricing: custom })).toMatchObject({ ok: true, amount: 55_000, listPrice: 60_000, registrationDiscount: 5_000 });
+    expect(quote(term(2), [], "2027-01-20", { registration: true, pricing: custom })).toMatchObject({ ok: true, amount: 55_000 });
+    expect(quote(term(3), [t1(), t2()], "2027-06-10", { registration: true, pricing: custom })).toMatchObject({ ok: true, amount: 55_000 });
+  });
+
+  it("every later payment is the full term price", () => {
+    expect(quote(term(2), [t1()], "2026-10-15", { pricing: custom })).toMatchObject({ ok: true, amount: 60_000, registrationDiscount: 0 });
+  });
+
+  it("the full session uses the owner's percentage", () => {
+    expect(quote(session, [], "2026-09-05", { pricing: custom })).toMatchObject({ ok: true, amount: 135_000, listPrice: 135_000 });
+  });
+
+  it("the full session after a term: capped per remaining term and by credit", () => {
+    expect(quote(session, [t1(55_000)], "2026-10-15", { pricing: custom })).toMatchObject({ ok: true, amount: 80_000, credit: 55_000 }); // 135,000 - 55,000 = 80,000 < 2 x 45,000
+    expect(quote(session, [], "2027-01-20", { pricing: custom })).toMatchObject({ ok: true, amount: 90_000, pastTermsDiscount: 45_000 }); // 2 terms x 45,000
+  });
+
+  it("with no discounts it is simply the term price", () => {
+    const flat: PricingConfig = { termPrice: 50_000, registrationDiscount: 0, sessionDiscountPercent: 0 };
+    expect(quote(term(1), [], "2026-10-15", { registration: true, pricing: flat })).toMatchObject({ amount: 50_000, registrationDiscount: 0 });
+    expect(quote(session, [], "2026-09-05", { pricing: flat })).toMatchObject({ amount: 150_000 });
+  });
+
+  it("sign-up offers the owner's prices", () => {
+    const o = startingOffer(d("2026-10-15"), custom);
+    expect(o.term?.quote.ok && o.term.quote.amount).toBe(55_000);
+    expect(o.session?.quote.ok && o.session.quote.amount).toBe(135_000);
+  });
+
+  it("without an owner setting the defaults apply", () => {
+    expect(quote(term(1), [], "2026-10-15", { registration: true })).toMatchObject({ amount: 40_000 });
+  });
+});
+
+describe("validating the owner's prices", () => {
+  const ok = { termPrice: 50_000, registrationDiscount: 10_000, sessionDiscountPercent: 20 };
+
+  it("accepts sensible values, including zero discounts", () => {
+    expect(validatePricing(ok)).toEqual({ ok: true, value: ok });
+    expect(validatePricing({ ...ok, registrationDiscount: 0, sessionDiscountPercent: 0 }).ok).toBe(true);
+    expect(validatePricing({ ...ok, sessionDiscountPercent: 50 }).ok).toBe(true);
+  });
+
+  it("refuses prices that are out of range or not whole numbers", () => {
+    for (const bad of [0, 999, 1_000_001, -5, 50_000.5, NaN, "50000", null]) expect(validatePricing({ ...ok, termPrice: bad }).ok).toBe(false);
+  });
+
+  it("the new-school discount must leave the price at least ₦1,000", () => {
+    expect(validatePricing({ ...ok, registrationDiscount: 49_000 }).ok).toBe(true);
+    expect(validatePricing({ ...ok, registrationDiscount: 49_001 }).ok).toBe(false);
+    expect(validatePricing({ ...ok, registrationDiscount: -1 }).ok).toBe(false);
+    expect(validatePricing({ ...ok, registrationDiscount: 2.5 }).ok).toBe(false);
+  });
+
+  it("the full-session discount is 0–50%", () => {
+    expect(validatePricing({ ...ok, sessionDiscountPercent: 51 }).ok).toBe(false);
+    expect(validatePricing({ ...ok, sessionDiscountPercent: -1 }).ok).toBe(false);
+    expect(validatePricing({ ...ok, sessionDiscountPercent: 12.5 }).ok).toBe(false);
+  });
+
+  it("explains what is wrong", () => {
+    expect(validatePricing({ ...ok, termPrice: 5 })).toEqual({ ok: false, error: "The term price must be a whole number of naira between ₦1,000 and ₦1,000,000." });
+  });
+});
+
+describe("the breakdown a payment carries", () => {
+  it("round-trips through storage and rejects anything malformed", () => {
+    const q = quote(term(1), [], "2026-10-15", { registration: true });
+    if (!q.ok) throw new Error("expected a quote");
+    const b = breakdownFromQuote(q);
+    expect(b).toEqual({ listPrice: 50_000, registrationDiscount: 10_000, credit: 0, pastTermsDiscount: 0 });
+    expect(readBreakdown(JSON.parse(JSON.stringify(b)))).toEqual(b);
+    for (const bad of [null, undefined, "x", 3, {}, { listPrice: "1", registrationDiscount: 0, credit: 0, pastTermsDiscount: 0 }]) expect(readBreakdown(bad)).toBeNull();
+  });
+
+  it("notes come from the breakdown saved when the payment started — a price change in between can't mislabel it", () => {
+    // started at ₦55,000 (₦60,000 less ₦5,000) under the owner's new prices
+    const breakdown = { listPrice: 60_000, registrationDiscount: 5_000, credit: 0, pastTermsDiscount: 0 };
+    expect(subscriptionNotes({ breakdown, plan: term(1), session: SESS, amount: 55_000, isRegistration: true })).toEqual({ credit: 0, notes: ["Registration discount: ₦5,000 off"] });
+  });
+
+  it("an annual after a term records the credit and any terms already over", () => {
+    const upgrade = { listPrice: 120_000, registrationDiscount: 0, credit: 40_000, pastTermsDiscount: 0 };
+    expect(subscriptionNotes({ breakdown: upgrade, plan: session, session: SESS, amount: 80_000, isRegistration: false })).toEqual({ credit: 40_000, notes: ["₦40,000 credited for terms already paid in 2026/2027"] });
+    const joiner = { listPrice: 120_000, registrationDiscount: 0, credit: 0, pastTermsDiscount: 40_000 };
+    expect(subscriptionNotes({ breakdown: joiner, plan: session, session: SESS, amount: 80_000, isRegistration: false }).notes).toEqual(["₦40,000 off for terms already over in 2026/2027"]);
+  });
+
+  it("payments from before breakdowns were kept fall back to the default prices, as before", () => {
+    expect(subscriptionNotes({ breakdown: null, plan: term(1), session: SESS, amount: 40_000, isRegistration: true })).toEqual({ credit: 0, notes: ["Registration discount: ₦10,000 off"] });
+    expect(subscriptionNotes({ breakdown: null, plan: term(1), session: SESS, amount: 50_000, isRegistration: false })).toEqual({ credit: 0, notes: [] });
+    expect(subscriptionNotes({ breakdown: null, plan: session, session: SESS, amount: 80_000, isRegistration: false })).toEqual({ credit: 40_000, notes: ["₦40,000 credited for terms already paid in 2026/2027"] });
   });
 });

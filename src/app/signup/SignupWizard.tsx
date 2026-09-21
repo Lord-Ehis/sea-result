@@ -29,6 +29,8 @@ const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "n
 
 // What a school registering today can start with (worked out on the server).
 export type SignupOffer = {
+  /** The full-session discount, so the card says what it really saves. */
+  savePercent: number;
   term: { key: string; label: string; session: string; listPrice: number; discount: number; amount: number; start: string; end: string } | null;
   session: { session: string; listPrice: number; amount: number; start: string; end: string } | null;
 };
@@ -236,7 +238,7 @@ export function SignupWizard({ offer }: { offer: SignupOffer }) {
                   >
                     <div className="text-body font-medium text-text-primary">Full session {offer.session.session}</div>
                     <div className="mt-1 text-title font-medium text-text-primary">{naira(offer.session.amount)}</div>
-                    <p className="m-0 mt-1 text-caption text-text-muted">Save 20% · every term still to come</p>
+                    <p className="m-0 mt-1 text-caption text-text-muted">Save {offer.savePercent}% · every term still to come</p>
                     <p className="m-0 mt-1 text-caption text-text-muted">Covers {day(offer.session.start)} – {day(offer.session.end)}</p>
                   </button>
                 )}

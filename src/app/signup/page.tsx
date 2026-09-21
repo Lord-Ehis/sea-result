@@ -1,10 +1,13 @@
-import { startingOffer } from "@/lib/billing-pricing";
+import { derivedPrices, startingOffer } from "@/lib/billing-pricing";
+import { getPricing } from "@/lib/pricing-settings";
 import { SignupWizard, type SignupOffer } from "./SignupWizard";
 
-export default function SignupPage() {
-  // What a school registering today can start with, priced by the same rules Billing uses.
-  const o = startingOffer(new Date());
+export default async function SignupPage() {
+  // What a school registering today can start with, priced by the same rules and prices Billing uses.
+  const pricing = await getPricing();
+  const o = startingOffer(new Date(), pricing);
   const offer: SignupOffer = {
+    savePercent: derivedPrices(pricing).sessionDiscountPercent,
     term:
       o.term && o.term.quote.ok
         ? {

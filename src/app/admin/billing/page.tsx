@@ -3,7 +3,8 @@ import { getAdminAccess } from "@/lib/admin-access";
 import { getSchoolAccess } from "@/lib/school-access-lookup";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { prisma } from "@/lib/prisma";
-import { quoteGrid, registrationDiscountAvailable, type Quote } from "@/lib/billing-pricing";
+import { derivedPrices, quoteGrid, registrationDiscountAvailable, type Quote } from "@/lib/billing-pricing";
+import { getPricing } from "@/lib/pricing-settings";
 import { termLabel, isTermNumber } from "@/lib/term-number";
 import { loadHeldSubscriptions } from "./paymentService";
 import { BillingClient, type QuoteView } from "./BillingClient";
@@ -39,16 +40,18 @@ export default async function BillingPage() {
   }
 
   const now = new Date();
-  const [school, subscriptions, payments, held, schoolAccess] = await Promise.all([
+  const [school, subscriptions, payments, held, schoolAccess, pricing] = await Promise.all([
     prisma.school.findUnique({ where: { id: schoolId } }),
     prisma.subscription.findMany({ where: { schoolId, status: { not: "CANCELLED" } }, orderBy: { startDate: "desc" } }),
     prisma.payment.findMany({ where: { schoolId }, orderBy: { createdAt: "desc" } }),
     loadHeldSubscriptions(schoolId),
     getSchoolAccess(schoolId, { fresh: true }),
+    getPricing(),
   ]);
 
   const registration = registrationDiscountAvailable(payments);
-  const grid = quoteGrid({ held, now, registration }).map((g) => ({
+  const prices = derivedPrices(pricing);
+  const grid = quoteGrid({ held, now, registration, pricing }).map((g) => ({
     session: g.session,
     plans: g.plans.map((p) => ({ key: p.key, label: p.label, quote: quoteView(p.quote) })),
   }));
@@ -84,6 +87,7 @@ export default async function BillingPage() {
       }))}
       grid={grid}
       registration={registration}
+      discounts={{ registration: prices.registrationDiscount, sessionPercent: prices.sessionDiscountPercent }}
     />
   );
 }

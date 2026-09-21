@@ -53,6 +53,7 @@ export function BillingClient({
   payments,
   grid,
   registration,
+  discounts,
 }: {
   schoolName: string;
   access: Access;
@@ -60,6 +61,8 @@ export function BillingClient({
   payments: Payment[];
   grid: Grid;
   registration: boolean;
+  /** The owner's current discounts, so the copy never quotes a stale number. */
+  discounts: { registration: number; sessionPercent: number };
 }) {
   const searchParams = useSearchParams();
   const paymentStatus = searchParams.get("payment");
@@ -88,6 +91,11 @@ export function BillingClient({
   // The first term on offer and the first full-session offer, across the sessions a school can pay for.
   const firstTerm = grid.flatMap((g) => g.plans).find((p) => p.key !== "SESSION" && p.quote.ok);
   const sessionOffer = grid.flatMap((g) => g.plans.map((p) => ({ session: g.session, ...p }))).find((p) => p.key === "SESSION" && p.quote.ok);
+  // Why the full session isn't on offer right now (e.g. 3rd Term), taken from the first session's quote.
+  const sessionUnavailable = (() => {
+    const q = grid[0].plans.find((p) => p.key === "SESSION")?.quote;
+    return q && !q.ok ? q.reason : null;
+  })();
   const firstOfferSession = grid.find((g) => g.plans.some((p) => p.quote.ok))?.session ?? grid[0].session;
 
   function open(forSession: string = firstOfferSession, preferred?: string) {
@@ -154,7 +162,7 @@ export function BillingClient({
           <div>
             <h2 className="m-0 text-body font-medium text-success">Finish your registration payment</h2>
             <p className="mt-1 text-caption text-success">
-              Your first term is {firstTerm?.quote.ok ? naira(firstTerm.quote.amount) : "discounted"} — {naira(10000)} off for registering. This price is for the registration payment only.
+              Your first term is {firstTerm?.quote.ok ? naira(firstTerm.quote.amount) : "discounted"} — {naira(discounts.registration)} off for registering. This price is for the registration payment only.
             </p>
           </div>
           <button
@@ -223,7 +231,7 @@ export function BillingClient({
               <Sparkles size={18} strokeWidth={1.8} />
             </span>
             <div>
-              <h2 className="m-0 mb-1.5 text-body font-medium text-[#234c6c]">{upgrade ? "Complete the full session" : "Full session (save 20%)"}</h2>
+              <h2 className="m-0 mb-1.5 text-body font-medium text-[#234c6c]">{upgrade ? "Complete the full session" : `Full session (save ${discounts.sessionPercent}%)`}</h2>
               <p className="m-0 text-caption leading-relaxed text-[#607e94]">
                 {upgrade
                   ? `You've paid ${naira(upgrade.quote.credit)} for ${upgrade.session} terms already. Pay the rest and you're covered to ${day(upgrade.quote.endDate)}.`
@@ -231,6 +239,7 @@ export function BillingClient({
               </p>
             </div>
           </div>
+          {!upgrade && !sessionOffer && sessionUnavailable && <p className="mt-3 text-caption text-[#607e94]">{sessionUnavailable}</p>}
           {(upgrade || sessionOffer) && (
             <div className="mt-4 flex items-center justify-between gap-3">
               <span className="text-caption font-medium text-[#396989]">

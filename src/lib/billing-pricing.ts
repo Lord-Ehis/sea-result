@@ -12,21 +12,72 @@ import { TERM_NUMBERS, isTermNumber, termLabel, type TermNumber } from "@/lib/te
 //                                   the annual summary can be finished; a 3rd
 //                                   Term can be bought until 31 July)
 //     A session is 1 Sep – 31 Aug.
-//   - A term costs ₦50,000 whatever part of it is left. A full session costs
-//     20% less than three terms: ₦40,000 a term, ₦120,000 in all.
-//   - Only the payment made while registering gets ₦10,000 off a term (₦40,000).
+//   - A term costs the same whatever part of it is left. A full session costs
+//     a set percentage less than three terms (₦50,000 a term and 20% off by
+//     default: ₦40,000 a term, ₦120,000 in all). The platform owner can change
+//     the term price, the new-school discount and that percentage - see
+//     PricingConfig; the figures in these comments are the defaults.
+//   - Only the payment made while registering gets the new-school discount off a
+//     term (₦10,000 by default: ₦40,000). Every later payment is the full price.
+//   - The full session is not offered in May-July (3rd Term); it is offered
+//     again from 1 August.
 //   - Terms are bought in order — you can't pay for 3rd Term while 1st is unpaid
 //     and still running — so coverage never has gaps and no term can be skipped.
 //   - Upgrading to the full session credits what was paid for that session's
 //     terms, and never charges more than ₦40,000 for each term still to come.
 
-export const TERM_PRICE = 50_000;
-export const REGISTRATION_DISCOUNT = 10_000;
-export const SESSION_DISCOUNT_RATE = 0.2;
-export const SESSION_PRICE = Math.round(TERM_PRICE * 3 * (1 - SESSION_DISCOUNT_RATE)); // 120,000
-export const SESSION_TERM_PRICE = SESSION_PRICE / 3; // 40,000
+/** The three numbers the platform owner controls (Global settings). */
+export type PricingConfig = { termPrice: number; registrationDiscount: number; sessionDiscountPercent: number };
+
+export const DEFAULT_PRICING: PricingConfig = { termPrice: 50_000, registrationDiscount: 10_000, sessionDiscountPercent: 20 };
+
+/** What the three numbers work out to. */
+export function derivedPrices(pricing: PricingConfig) {
+  const sessionTermPrice = Math.round((pricing.termPrice * (100 - pricing.sessionDiscountPercent)) / 100);
+  return {
+    termPrice: pricing.termPrice,
+    registrationDiscount: pricing.registrationDiscount,
+    /** A new school's first term. */
+    newSchoolTermPrice: pricing.termPrice - pricing.registrationDiscount,
+    sessionDiscountPercent: pricing.sessionDiscountPercent,
+    /** What each term of the full session costs. */
+    sessionTermPrice,
+    sessionPrice: sessionTermPrice * 3,
+  };
+}
+
+// The defaults, by name - for tests and anywhere no owner setting has been read.
+export const TERM_PRICE = DEFAULT_PRICING.termPrice;
+export const REGISTRATION_DISCOUNT = DEFAULT_PRICING.registrationDiscount;
+export const SESSION_PRICE = derivedPrices(DEFAULT_PRICING).sessionPrice; // 120,000
+
+const TERM_PRICE_MIN = 1_000;
+const TERM_PRICE_MAX = 1_000_000;
+const MAX_SESSION_DISCOUNT_PERCENT = 50;
+const naira = (n: number) => `₦${n.toLocaleString("en-NG")}`;
+
+/** Checks the three numbers before they are saved (the settings form and the server both use it). */
+export function validatePricing(input: { termPrice: unknown; registrationDiscount: unknown; sessionDiscountPercent: unknown }): { ok: true; value: PricingConfig } | { ok: false; error: string } {
+  const { termPrice, registrationDiscount, sessionDiscountPercent } = input;
+  if (!Number.isInteger(termPrice) || (termPrice as number) < TERM_PRICE_MIN || (termPrice as number) > TERM_PRICE_MAX) {
+    return { ok: false, error: `The term price must be a whole number of naira between ${naira(TERM_PRICE_MIN)} and ${naira(TERM_PRICE_MAX)}.` };
+  }
+  const price = termPrice as number;
+  const maxDiscount = price - TERM_PRICE_MIN;
+  if (!Number.isInteger(registrationDiscount) || (registrationDiscount as number) < 0 || (registrationDiscount as number) > maxDiscount) {
+    return { ok: false, error: `The new-school discount must be a whole number of naira from ₦0 to ${naira(maxDiscount)} (the term price less ${naira(TERM_PRICE_MIN)}).` };
+  }
+  if (!Number.isInteger(sessionDiscountPercent) || (sessionDiscountPercent as number) < 0 || (sessionDiscountPercent as number) > MAX_SESSION_DISCOUNT_PERCENT) {
+    return { ok: false, error: `The full-session discount must be a whole percentage from 0 to ${MAX_SESSION_DISCOUNT_PERCENT}.` };
+  }
+  return { ok: true, value: { termPrice: price, registrationDiscount: registrationDiscount as number, sessionDiscountPercent: sessionDiscountPercent as number } };
+}
+
 /** The full session is only worth offering while at least this many terms of it are still to come. */
 export const MIN_TERMS_FOR_SESSION = 2;
+
+/** May, June and July (UTC month numbers) are 3rd Term: the full session is not sold then. */
+const FULL_SESSION_CLOSED_MONTHS = [4, 5, 6];
 
 export type Plan = { kind: "TERM"; termNumber: TermNumber } | { kind: "SESSION" };
 
@@ -173,8 +224,11 @@ export function quoteSubscription(input: {
   now: Date;
   /** True only for the payment made while registering (see registrationDiscountAvailable). */
   registration: boolean;
+  /** The owner's current prices; the defaults when omitted. */
+  pricing?: PricingConfig;
 }): Quote {
   const { plan, session, held, now, registration } = input;
+  const prices = derivedPrices(input.pricing ?? DEFAULT_PRICING);
 
   if (parseSession(session) === null) return { ok: false, reason: "Enter the session like 2026/2027." };
   if (plan.kind === "TERM" && !isTermNumber(plan.termNumber)) return { ok: false, reason: "Choose 1st, 2nd or 3rd Term." };
@@ -195,21 +249,24 @@ export function quoteSubscription(input: {
     const order = precedingTermSettled(held, slot, now);
     if (!order.ok) return order;
 
-    const discount = registration ? REGISTRATION_DISCOUNT : 0;
+    const discount = registration ? prices.registrationDiscount : 0;
     return {
       ok: true,
       plan,
       session,
-      listPrice: TERM_PRICE,
+      listPrice: prices.termPrice,
       registrationDiscount: discount,
       credit: 0,
       pastTermsDiscount: 0,
-      amount: TERM_PRICE - discount,
+      amount: prices.termPrice - discount,
       startDate,
       endDate: slot.coversUntil,
     };
   }
 
+  if (FULL_SESSION_CLOSED_MONTHS.includes(now.getUTCMonth())) {
+    return { ok: false, reason: "The full session isn't offered during 3rd Term (May–July). It's available again from 1 August." };
+  }
   const end = sessionEnd(session)!;
   if (end.getTime() <= now.getTime()) return { ok: false, reason: `The ${session} session has already ended.` };
   if (covered && covered.getTime() >= end.getTime()) return { ok: false, reason: `Your school is already covered to the end of ${session}.` };
@@ -223,15 +280,15 @@ export function quoteSubscription(input: {
   if (!order.ok) return order;
 
   const credit = sessionCredit(held, session);
-  const byCredit = SESSION_PRICE - credit;
-  const byRemaining = SESSION_TERM_PRICE * remaining.length;
+  const byCredit = prices.sessionPrice - credit;
+  const byRemaining = prices.sessionTermPrice * remaining.length;
   const amount = Math.min(byCredit, byRemaining);
   if (amount <= 0) return { ok: false, reason: `The terms you've paid for in ${session} already cover the full session price.` };
   return {
     ok: true,
     plan,
     session,
-    listPrice: SESSION_PRICE,
+    listPrice: prices.sessionPrice,
     registrationDiscount: 0,
     credit,
     pastTermsDiscount: byCredit - amount,
@@ -282,13 +339,13 @@ export function planFromKey(key: string): Plan | null {
 }
 
 /** Every plan for each session a school can pay for, priced — what the Billing page shows. */
-export function quoteGrid(input: { held: HeldSubscription[]; now: Date; registration: boolean }) {
+export function quoteGrid(input: { held: HeldSubscription[]; now: Date; registration: boolean; pricing?: PricingConfig }) {
   return sessionOptions(input.now).map((session) => ({
     session,
     plans: ALL_PLANS.map((plan) => ({
       key: planKey(plan),
       label: planLabel(plan),
-      quote: quoteSubscription({ plan, session, held: input.held, now: input.now, registration: input.registration }),
+      quote: quoteSubscription({ plan, session, held: input.held, now: input.now, registration: input.registration, pricing: input.pricing }),
     })),
   }));
 }
@@ -297,8 +354,8 @@ export function quoteGrid(input: { held: HeldSubscription[]; now: Date; registra
  * What a school with nothing yet can start with: the one term that is next on
  * the calendar, and the full session if enough of it is left. Used by sign-up.
  */
-export function startingOffer(now: Date) {
-  const grid = quoteGrid({ held: [], now, registration: true });
+export function startingOffer(now: Date, pricing: PricingConfig = DEFAULT_PRICING) {
+  const grid = quoteGrid({ held: [], now, registration: true, pricing });
   const termGroup = grid.find((g) => g.plans.some((p) => p.key !== "SESSION" && p.quote.ok));
   const term = termGroup?.plans.find((p) => p.key !== "SESSION" && p.quote.ok);
   const fullSession = grid.find((g) => g.plans.some((p) => p.key === "SESSION" && p.quote.ok));
@@ -306,4 +363,42 @@ export function startingOffer(now: Date) {
     term: term && termGroup ? { key: term.key, label: term.label, session: termGroup.session, quote: term.quote } : null,
     session: fullSession ? { session: fullSession.session, quote: fullSession.plans.find((p) => p.key === "SESSION")!.quote } : null,
   };
+}
+
+// ─── The price breakdown a payment carries ───────────────────────────────────
+
+/** The quote as it stood when the payment started, kept on the payment. */
+export type PaymentBreakdown = { listPrice: number; registrationDiscount: number; credit: number; pastTermsDiscount: number };
+
+export function breakdownFromQuote(q: Extract<Quote, { ok: true }>): PaymentBreakdown {
+  return { listPrice: q.listPrice, registrationDiscount: q.registrationDiscount, credit: q.credit, pastTermsDiscount: q.pastTermsDiscount };
+}
+
+/** Reads a stored breakdown back; null when there is none or it isn't shaped right. */
+export function readBreakdown(value: unknown): PaymentBreakdown | null {
+  if (typeof value !== "object" || value === null) return null;
+  const v = value as Record<string, unknown>;
+  const keys = ["listPrice", "registrationDiscount", "credit", "pastTermsDiscount"] as const;
+  if (!keys.every((k) => typeof v[k] === "number" && Number.isFinite(v[k] as number))) return null;
+  return { listPrice: v.listPrice as number, registrationDiscount: v.registrationDiscount as number, credit: v.credit as number, pastTermsDiscount: v.pastTermsDiscount as number };
+}
+
+/**
+ * The credit and the human-readable notes recorded on the subscription a
+ * payment creates. They come from the breakdown saved when the payment started,
+ * so a price change in between can't mislabel it. Payments from before
+ * breakdowns were kept fall back to the default prices, as they always did.
+ */
+export function subscriptionNotes(input: { breakdown: PaymentBreakdown | null; plan: Plan; session: string; amount: number; isRegistration: boolean }): { credit: number; notes: string[] } {
+  const { plan, session, amount, isRegistration } = input;
+  const b: PaymentBreakdown =
+    input.breakdown ??
+    (plan.kind === "SESSION"
+      ? { listPrice: SESSION_PRICE, registrationDiscount: 0, credit: Math.max(0, SESSION_PRICE - amount), pastTermsDiscount: 0 }
+      : { listPrice: TERM_PRICE, registrationDiscount: isRegistration && amount < TERM_PRICE ? REGISTRATION_DISCOUNT : 0, credit: 0, pastTermsDiscount: 0 });
+  const notes: string[] = [];
+  if (b.registrationDiscount > 0) notes.push(`Registration discount: ${naira(b.registrationDiscount)} off`);
+  if (b.credit > 0) notes.push(`${naira(b.credit)} credited for terms already paid in ${session}`);
+  if (b.pastTermsDiscount > 0) notes.push(`${naira(b.pastTermsDiscount)} off for terms already over in ${session}`);
+  return { credit: b.credit, notes };
 }
