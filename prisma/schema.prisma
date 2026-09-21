@@ -183,6 +183,7 @@ model Campus {
   students            Student[]
   classes             Class[]
   templateAssignments TemplateAssignment[]
+  adminAccess         UserCampusAccess[]
 
   @@index([schoolId])
   @@map("campuses")
@@ -202,10 +203,16 @@ model User {
   phone        String?
   passwordHash String
   isActive     Boolean  @default(true)
+  // A campus admin: a SCHOOL_ADMIN who may only see the campuses listed in
+  // `campusAccess`. With no rows they see nothing (fail closed) — never "all".
+  // Everyone else (false) is unrestricted, exactly as before.
+  campusScoped Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   school School? @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  campusAccess UserCampusAccess[]
 
   // Teacher: classes assigned to this teacher
   teachingAssignments TeacherClassAssignment[]
@@ -828,6 +835,20 @@ model ResultEvent {
   @@index([batchId])
   @@index([schoolId, createdAt])
   @@map("result_events")
+}
+
+// Which campuses a campus admin (User.campusScoped) may access.
+model UserCampusAccess {
+  userId    String
+  campusId  String
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campus Campus @relation(fields: [campusId], references: [id], onDelete: Cascade)
+
+  @@id([userId, campusId])
+  @@index([campusId])
+  @@map("user_campus_access")
 }
 
 // Fixed-window counters for throttling public endpoints (/verify, result

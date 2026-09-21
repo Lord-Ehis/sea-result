@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
-import { auth } from "@/lib/auth";
+import { requireFullAdmin } from "@/lib/admin-access";
 import { prisma } from "@/lib/prisma";
 import { ensureDefaultGradingScale } from "@/lib/grading-scale-defaults";
 import type { TemplateField } from "./field-schemas";
@@ -20,12 +20,10 @@ import {
   type TemplateVersionSummary,
 } from "./version-types";
 
+// School-wide setting: a campus admin is refused (see src/lib/admin-access.ts).
 async function requireSchoolAdmin() {
-  const session = await auth();
-  if (!session?.user.schoolId || session.user.role !== "SCHOOL_ADMIN") {
-    throw new Error("Not authorized.");
-  }
-  return { schoolId: session.user.schoolId, userId: session.user.id };
+  const { schoolId, userId } = await requireFullAdmin();
+  return { schoolId, userId };
 }
 
 const versionInclude = {

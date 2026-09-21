@@ -1,7 +1,8 @@
 import { FileCheck } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { auth } from "@/lib/auth";
+import { getAdminAccess } from "@/lib/admin-access";
+import { batchWhere, classWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 import { ReviewClient } from "./ReviewClient";
 import { getBatchAnnualReview } from "./actions";
@@ -9,11 +10,11 @@ import type { TemplateField } from "@/app/admin/result-templates/actions";
 
 export default async function ReviewBatchPage({ params }: { params: Promise<{ batchId: string }> }) {
   const { batchId } = await params;
-  const session = await auth();
-  const schoolId = session!.user.schoolId!;
+  const access = await getAdminAccess();
+  const { schoolId } = access;
 
   const batch = await prisma.resultBatch.findFirst({
-    where: { id: batchId, schoolId },
+    where: { id: batchId, schoolId, ...batchWhere(access) },
     include: { class: true, template: true },
   });
 
@@ -37,7 +38,7 @@ export default async function ReviewBatchPage({ params }: { params: Promise<{ ba
 
   const [annual, classes] = await Promise.all([
     getBatchAnnualReview(batch.id),
-    prisma.class.findMany({ where: { schoolId }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.class.findMany({ where: { schoolId, ...classWhere(access) }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
 
   const submitter = batch.submittedByUserId

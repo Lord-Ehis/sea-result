@@ -1,5 +1,7 @@
 import type { Prisma, ResultEventAction } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import type { AdminAccess } from "@/lib/admin-access";
+import { batchWhere } from "@/lib/campus-scope";
 import { ACTION_LABEL, describeEvent, eventStudentId } from "@/lib/audit-describe";
 
 // The audit trail as the School Admin sees it and exports it: the
@@ -28,13 +30,20 @@ export function parseAuditFilters(sp: { action?: string; classId?: string; from?
   };
 }
 
-async function where(schoolId: string, f: AuditFilters): Promise<Prisma.ResultEventWhereInput> {
+// Events belong to a batch, and a batch to a class and campus. A campus admin
+// therefore sees only events of batches in their own campuses (an event has no
+// relation to join on, so the in-scope batch ids are resolved first).
+async function where(access: AdminAccess, f: AuditFilters): Promise<Prisma.ResultEventWhereInput> {
+  const { schoolId } = access;
   const clause: Prisma.ResultEventWhereInput = { schoolId };
   if (f.action) clause.action = f.action;
   if (f.actorUserId) clause.actorUserId = f.actorUserId;
   if (f.from || f.to) clause.createdAt = { ...(f.from ? { gte: f.from } : {}), ...(f.to ? { lte: f.to } : {}) };
-  if (f.classId) {
-    const batches = await prisma.resultBatch.findMany({ where: { schoolId, classId: f.classId }, select: { id: true } });
+  if (f.classId || access.campusIds !== null) {
+    const batches = await prisma.resultBatch.findMany({
+      where: { schoolId, ...batchWhere(access), ...(f.classId ? { classId: f.classId } : {}) },
+      select: { id: true },
+    });
     clause.batchId = { in: batches.map((b) => b.id) };
   }
   return clause;
@@ -56,13 +65,13 @@ export type AuditRow = {
   summary: string;
 };
 
-export async function countAudit(schoolId: string, f: AuditFilters): Promise<number> {
-  return prisma.resultEvent.count({ where: await where(schoolId, f) });
+export async function countAudit(access: AdminAccess, f: AuditFilters): Promise<number> {
+  return prisma.resultEvent.count({ where: await where(access, f) });
 }
 
-export async function loadAudit(schoolId: string, f: AuditFilters, opts: { skip: number; take: number }): Promise<AuditRow[]> {
+export async function loadAudit(access: AdminAccess, f: AuditFilters, opts: { skip: number; take: number }): Promise<AuditRow[]> {
   const events = await prisma.resultEvent.findMany({
-    where: await where(schoolId, f),
+    where: await where(access, f),
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     skip: opts.skip,
     take: opts.take,

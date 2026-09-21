@@ -1,18 +1,22 @@
-import { auth } from "@/lib/auth";
+import { getAdminAccess } from "@/lib/admin-access";
+import { classWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 import { TeachersClient } from "./TeachersClient";
 
 export default async function TeachersPage() {
-  const session = await auth();
-  const schoolId = session!.user.schoolId!;
+  const access = await getAdminAccess();
+  const { schoolId } = access;
+  const scope = classWhere(access);
 
+  // A campus admin sees only teachers who teach in their campuses, and only
+  // those assignments — not which classes the same teacher has elsewhere.
   const [teachers, classes] = await Promise.all([
     prisma.user.findMany({
-      where: { schoolId, role: "TEACHER" },
-      include: { teachingAssignments: { include: { class: true } } },
+      where: { schoolId, role: "TEACHER", ...(access.campusIds === null ? {} : { teachingAssignments: { some: { class: scope } } }) },
+      include: { teachingAssignments: { where: { class: scope }, include: { class: true } } },
       orderBy: { createdAt: "desc" },
     }),
-    prisma.class.findMany({ where: { schoolId }, orderBy: { name: "asc" } }),
+    prisma.class.findMany({ where: { schoolId, ...scope }, orderBy: { name: "asc" } }),
   ]);
 
   return (

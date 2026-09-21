@@ -1,14 +1,12 @@
-import { auth } from "@/lib/auth";
+import { getAdminAccess } from "@/lib/admin-access";
 import { AUDIT_EXPORT_CAP, loadAudit, parseAuditFilters } from "@/lib/audit-query";
 import { toCsv } from "@/lib/score-csv";
 
 // The audit log as a CSV, with the same filters as the page (capped so one
 // click can't pull the whole history in a single response).
 export async function GET(request: Request) {
-  const session = await auth();
-  if (!session?.user.schoolId || session.user.role !== "SCHOOL_ADMIN") {
-    return new Response("Not authorized.", { status: 403 });
-  }
+  const access = await getAdminAccess().catch(() => null);
+  if (!access) return new Response("Not authorized.", { status: 403 });
 
   const params = new URL(request.url).searchParams;
   const filters = parseAuditFilters({
@@ -18,7 +16,7 @@ export async function GET(request: Request) {
     to: params.get("to") ?? undefined,
     actor: params.get("actor") ?? undefined,
   });
-  const rows = await loadAudit(session.user.schoolId, filters, { skip: 0, take: AUDIT_EXPORT_CAP });
+  const rows = await loadAudit(access, filters, { skip: 0, take: AUDIT_EXPORT_CAP });
 
   const csv =
     "﻿" +

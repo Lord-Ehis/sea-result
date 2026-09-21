@@ -1,19 +1,20 @@
 import { Users } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { auth } from "@/lib/auth";
+import { getAdminAccess } from "@/lib/admin-access";
+import { campusWhere, classWhere, studentWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 import { StudentsClient } from "./StudentsClient";
 
 export default async function StudentsPage() {
-  const session = await auth();
-  const schoolId = session!.user.schoolId!;
+  const access = await getAdminAccess();
+  const { schoolId } = access;
 
   const [campuses, classes, students] = await Promise.all([
-    prisma.campus.findMany({ where: { schoolId }, orderBy: { name: "asc" } }),
-    prisma.class.findMany({ where: { schoolId }, orderBy: { name: "asc" } }),
+    prisma.campus.findMany({ where: { schoolId, ...campusWhere(access) }, orderBy: { name: "asc" } }),
+    prisma.class.findMany({ where: { schoolId, ...classWhere(access) }, orderBy: { name: "asc" } }),
     prisma.student.findMany({
-      where: { schoolId },
+      where: { schoolId, ...studentWhere(access) },
       include: { campus: true, class: true },
       orderBy: { createdAt: "desc" },
     }),
@@ -29,8 +30,12 @@ export default async function StudentsPage() {
         />
         <EmptyState
           icon={Users}
-          title="Add a campus to get started"
-          description="Students are enrolled into a campus. Add your first campus before adding student records."
+          title={access.campusIds === null ? "Add a campus to get started" : "No campuses assigned to you"}
+          description={
+            access.campusIds === null
+              ? "Students are enrolled into a campus. Add your first campus before adding student records."
+              : "Ask the school's main administrator to give you access to a campus."
+          }
         />
       </>
     );
@@ -38,6 +43,7 @@ export default async function StudentsPage() {
 
   return (
     <StudentsClient
+      canAddCampus={access.campusIds === null}
       campuses={campuses.map((c) => ({ id: c.id, name: c.name }))}
       classes={classes.map((c) => ({ id: c.id, name: c.name }))}
       students={students.map((s) => ({

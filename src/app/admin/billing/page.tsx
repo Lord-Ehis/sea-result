@@ -1,11 +1,10 @@
-import { auth } from "@/lib/auth";
+import { requireFullAdminPage } from "@/lib/admin-access";
 import { prisma } from "@/lib/prisma";
 import { isNewSubscriber, TERM_PRICE, calculateAmount } from "./paymentService";
 import { BillingClient } from "./BillingClient";
 
 export default async function BillingPage() {
-  const session = await auth();
-  const schoolId = session!.user.schoolId!;
+  const { schoolId } = await requireFullAdminPage();
   const school = await prisma.school.findUnique({ where: { id: schoolId } });
 
   const [subscription, payments, newSubscriber] = await Promise.all([

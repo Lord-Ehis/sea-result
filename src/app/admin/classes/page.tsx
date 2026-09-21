@@ -1,18 +1,19 @@
 import { Layers } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { auth } from "@/lib/auth";
+import { getAdminAccess } from "@/lib/admin-access";
+import { campusWhere, classWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 import { ClassesClient } from "./ClassesClient";
 
 export default async function ClassesPage() {
-  const session = await auth();
-  const schoolId = session!.user.schoolId!;
+  const access = await getAdminAccess();
+  const { schoolId } = access;
 
   const [campuses, classes] = await Promise.all([
-    prisma.campus.findMany({ where: { schoolId }, orderBy: { name: "asc" } }),
+    prisma.campus.findMany({ where: { schoolId, ...campusWhere(access) }, orderBy: { name: "asc" } }),
     prisma.class.findMany({
-      where: { schoolId },
+      where: { schoolId, ...classWhere(access) },
       include: { campus: true, _count: { select: { students: true } } },
       orderBy: [{ level: "asc" }, { name: "asc" }],
     }),
@@ -24,8 +25,12 @@ export default async function ClassesPage() {
         <PageHeader eyebrow="School management" title="Classes" intro="Set up the classes and levels your school uses." />
         <EmptyState
           icon={Layers}
-          title="Add a campus first"
-          description="Classes belong to a campus. Add a campus from the Students page before setting up classes."
+          title={access.campusIds === null ? "Add a campus first" : "No campuses assigned to you"}
+          description={
+            access.campusIds === null
+              ? "Classes belong to a campus. Add a campus from the Students page before setting up classes."
+              : "Ask the school's main administrator to give you access to a campus."
+          }
         />
       </>
     );

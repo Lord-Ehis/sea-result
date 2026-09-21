@@ -2,16 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { getAdminAccess } from "@/lib/admin-access";
+import { campusWhere, classWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
-
-async function requireSchoolAdmin() {
-  const session = await auth();
-  if (!session?.user.schoolId || session.user.role !== "SCHOOL_ADMIN") {
-    throw new Error("Not authorized.");
-  }
-  return session.user.schoolId;
-}
 
 const createClassesSchema = z.object({
   level: z.string().trim().min(1, "Level is required"),
@@ -21,10 +14,11 @@ const createClassesSchema = z.object({
 });
 
 export async function createClasses(input: { level: string; arms?: string; campusId: string; session: string }) {
-  const schoolId = await requireSchoolAdmin();
+  const access = await getAdminAccess();
+  const { schoolId } = access;
   const parsed = createClassesSchema.parse(input);
 
-  const campus = await prisma.campus.findFirst({ where: { id: parsed.campusId, schoolId } });
+  const campus = await prisma.campus.findFirst({ where: { id: parsed.campusId, schoolId, ...campusWhere(access) } });
   if (!campus) throw new Error("Campus not found.");
 
   const arms = (parsed.arms ?? "")
@@ -57,12 +51,15 @@ const updateClassSchema = z.object({
 });
 
 export async function updateClass(input: { classId: string; name: string; level: string; campusId: string; session: string }) {
-  const schoolId = await requireSchoolAdmin();
+  const access = await getAdminAccess();
+  const { schoolId } = access;
   const parsed = updateClassSchema.parse(input);
 
+  // Both where the class is now and where it's going must be the admin's own
+  // campuses, so a class can't be moved out of (or into) someone else's.
   const [existing, campus] = await Promise.all([
-    prisma.class.findFirst({ where: { id: parsed.classId, schoolId } }),
-    prisma.campus.findFirst({ where: { id: parsed.campusId, schoolId } }),
+    prisma.class.findFirst({ where: { id: parsed.classId, schoolId, ...classWhere(access) } }),
+    prisma.campus.findFirst({ where: { id: parsed.campusId, schoolId, ...campusWhere(access) } }),
   ]);
   if (!existing) throw new Error("Class not found.");
   if (!campus) throw new Error("Campus not found.");
@@ -77,10 +74,11 @@ export async function updateClass(input: { classId: string; name: string; level:
 }
 
 export async function deleteClass(classId: string) {
-  const schoolId = await requireSchoolAdmin();
+  const access = await getAdminAccess();
+  const { schoolId } = access;
 
   const existing = await prisma.class.findFirst({
-    where: { id: classId, schoolId },
+    where: { id: classId, schoolId, ...classWhere(access) },
     include: { _count: { select: { students: true, resultTemplates: true } } },
   });
   if (!existing) throw new Error("Class not found.");

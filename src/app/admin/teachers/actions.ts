@@ -4,17 +4,29 @@ import crypto from "crypto";
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { getAdminAccess, type AdminAccess } from "@/lib/admin-access";
+import { classWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 import { createAndSendNotification } from "@/lib/notifications";
 import { createPasswordResetToken } from "@/lib/password-reset";
 
-async function requireSchoolAdmin() {
-  const session = await auth();
-  if (!session?.user.schoolId || session.user.role !== "SCHOOL_ADMIN") {
-    throw new Error("Not authorized.");
-  }
-  return session.user.schoolId;
+// Every class id must be a real class of this school that this admin may manage.
+async function assertClassesInScope(access: AdminAccess, classIds: string[]) {
+  const unique = [...new Set(classIds)];
+  const found = await prisma.class.count({ where: { id: { in: unique }, schoolId: access.schoolId, ...classWhere(access) } });
+  if (found !== unique.length) throw new Error("One of those classes isn't available to you.");
+}
+
+// A campus admin manages teachers only where they teach in their own campuses.
+async function findTeacherInScope(access: AdminAccess, teacherId: string) {
+  return prisma.user.findFirst({
+    where: {
+      id: teacherId,
+      schoolId: access.schoolId,
+      role: "TEACHER",
+      ...(access.campusIds === null ? {} : { teachingAssignments: { some: { class: classWhere(access) } } }),
+    },
+  });
 }
 
 /**
@@ -33,8 +45,10 @@ const inviteSchema = z.object({
 });
 
 export async function inviteTeacher(input: { name: string; email: string; classIds: string[] }) {
-  const schoolId = await requireSchoolAdmin();
+  const access = await getAdminAccess();
+  const { schoolId } = access;
   const parsed = inviteSchema.parse(input);
+  await assertClassesInScope(access, parsed.classIds);
 
   const existing = await prisma.user.findUnique({ where: { email: parsed.email } });
   if (existing) throw new Error("An account with this email already exists.");
@@ -78,16 +92,19 @@ const assignmentsSchema = z.object({
 });
 
 export async function updateTeacherAssignments(input: { teacherId: string; classIds: string[] }) {
-  const schoolId = await requireSchoolAdmin();
+  const access = await getAdminAccess();
   const parsed = assignmentsSchema.parse(input);
 
-  const teacher = await prisma.user.findFirst({ where: { id: parsed.teacherId, schoolId, role: "TEACHER" } });
+  const teacher = await findTeacherInScope(access, parsed.teacherId);
   if (!teacher) throw new Error("Teacher not found.");
+  await assertClassesInScope(access, parsed.classIds);
 
+  // Only this admin's own campuses are replaced; assignments the teacher has in
+  // other campuses belong to someone else and are left exactly as they are.
   await prisma.$transaction([
-    prisma.teacherClassAssignment.deleteMany({ where: { teacherId: parsed.teacherId } }),
+    prisma.teacherClassAssignment.deleteMany({ where: { teacherId: parsed.teacherId, class: classWhere(access) } }),
     prisma.teacherClassAssignment.createMany({
-      data: parsed.classIds.map((classId) => ({ teacherId: parsed.teacherId, classId })),
+      data: [...new Set(parsed.classIds)].map((classId) => ({ teacherId: parsed.teacherId, classId })),
     }),
   ]);
 
@@ -95,10 +112,17 @@ export async function updateTeacherAssignments(input: { teacherId: string; class
 }
 
 export async function setTeacherActive(teacherId: string, isActive: boolean) {
-  const schoolId = await requireSchoolAdmin();
-  await prisma.user.update({
-    where: { id: teacherId, schoolId, role: "TEACHER" },
-    data: { isActive },
-  });
+  const access = await getAdminAccess();
+  const teacher = await findTeacherInScope(access, teacherId);
+  if (!teacher) throw new Error("Teacher not found.");
+
+  // Switching an account off affects every campus the teacher works in, so a
+  // campus admin may only do it for a teacher who works nowhere else.
+  if (access.campusIds !== null) {
+    const elsewhere = await prisma.teacherClassAssignment.count({ where: { teacherId, NOT: { class: classWhere(access) } } });
+    if (elsewhere > 0) throw new Error("This teacher also teaches at another campus. Ask the school's main administrator to change their account.");
+  }
+
+  await prisma.user.update({ where: { id: teacher.id }, data: { isActive } });
   revalidatePath("/admin/teachers");
 }

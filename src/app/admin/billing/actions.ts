@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { requireFullAdmin } from "@/lib/admin-access";
 import { prisma } from "@/lib/prisma";
 import { initializeTransaction } from "@/lib/paystack";
 import { calculateAmount, isNewSubscriber } from "./paymentService";
@@ -13,12 +13,9 @@ const initSchema = z.object({
 });
 
 export async function initializeSubscriptionPayment(input: { billingCycle: "PER_TERM" | "FULL_SESSION"; term?: string; session: string }) {
-  const session = await auth();
-  if (!session?.user.schoolId || session.user.role !== "SCHOOL_ADMIN") {
-    throw new Error("Not authorized.");
-  }
+  const { schoolId, userId } = await requireFullAdmin();
   const parsed = initSchema.parse(input);
-  const schoolId = session.user.schoolId;
+  const admin = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { email: true } });
 
   const newSubscriber = parsed.billingCycle === "PER_TERM" ? await isNewSubscriber(schoolId) : false;
   const amount = calculateAmount(parsed.billingCycle, newSubscriber);
@@ -30,7 +27,7 @@ export async function initializeSubscriptionPayment(input: { billingCycle: "PER_
 
   const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
   const { authorization_url } = await initializeTransaction({
-    email: session.user.email,
+    email: admin.email,
     amountNaira: amount,
     reference,
     // Paystack appends its own ?reference=&trxref= to this URL on redirect —

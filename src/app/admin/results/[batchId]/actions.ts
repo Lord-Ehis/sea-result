@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { Prisma } from "@prisma/client";
-import { auth } from "@/lib/auth";
+import { getAdminAccess, type AdminAccess } from "@/lib/admin-access";
+import { batchWhere, classWhere, ofStudentWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 import { createAndSendNotification, runWithConcurrency } from "@/lib/notifications";
 import { computeOwnFields } from "@/lib/template-compute";
@@ -19,17 +20,19 @@ import { UserError, toResult, type ActionResult } from "@/lib/user-error";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
 
 async function requireSchoolAdmin() {
-  const session = await auth();
-  if (!session?.user.schoolId || session.user.role !== "SCHOOL_ADMIN") {
-    throw new Error("Not authorized.");
-  }
-  return { schoolId: session.user.schoolId, userId: session.user.id };
+  const access = await getAdminAccess();
+  return { schoolId: access.schoolId, userId: access.userId, access };
 }
 
 const TX_OPTIONS = { timeout: 120_000, maxWait: 20_000 };
 
-async function loadBatch(schoolId: string, batchId: string) {
-  const batch = await prisma.resultBatch.findFirst({ where: { id: batchId, schoolId }, include: { class: true, template: true } });
+// The one door to a batch: an id from another campus simply isn't found, so
+// approve / publish / send back / preview / corrections all inherit the campus scope.
+async function loadBatch(access: AdminAccess, batchId: string) {
+  const batch = await prisma.resultBatch.findFirst({
+    where: { id: batchId, schoolId: access.schoolId, ...batchWhere(access) },
+    include: { class: true, template: true },
+  });
   if (!batch) throw new UserError("This batch no longer exists.");
   return batch;
 }
@@ -78,9 +81,9 @@ async function loadPriorPublished(templateId: string, studentIds: string[]): Pro
 // Corrections during review. Problems the admin can act on come back as
 // `{ ok: false, error }` (see user-error.ts) so the message survives production.
 export async function updateResultValue(resultId: string, fieldId: string, value: string): Promise<ActionResult> {
-  const { schoolId } = await requireSchoolAdmin();
+  const { schoolId, access } = await requireSchoolAdmin();
   return toResult(async () => {
-    const result = await prisma.result.findFirst({ where: { id: resultId, schoolId }, include: { template: true } });
+    const result = await prisma.result.findFirst({ where: { id: resultId, schoolId, ...ofStudentWhere(access) }, include: { template: true } });
     if (!result) throw new UserError("Result not found.");
 
     // Corrections are only for the review stage: a draft belongs to the
@@ -104,9 +107,9 @@ export async function updateResultValue(resultId: string, fieldId: string, value
 // reviewer's "these are correct" and freezes the scores; publishing is the
 // separate, explicit step that makes them visible to parents.
 export async function approveBatch(batchId: string): Promise<ActionResult> {
-  const { schoolId, userId } = await requireSchoolAdmin();
+  const { schoolId, userId, access } = await requireSchoolAdmin();
   return toResult(async () => {
-    const batch = await loadBatch(schoolId, batchId);
+    const batch = await loadBatch(access, batchId);
     if (batch.status !== "SUBMITTED") throw new UserError(`This batch is ${batch.status.toLowerCase()} and can't be approved.`);
 
     const rows = await loadRows(schoolId, batch.id);
@@ -154,9 +157,9 @@ export async function approveBatch(batchId: string): Promise<ActionResult> {
 class AlreadyPublished extends Error {}
 
 export async function publishBatch(batchId: string): Promise<ActionResult<{ alreadyPublished: boolean }>> {
-  const { schoolId, userId } = await requireSchoolAdmin();
+  const { schoolId, userId, access } = await requireSchoolAdmin();
   return toResult(async () => {
-    const batch = await loadBatch(schoolId, batchId);
+    const batch = await loadBatch(access, batchId);
     let alreadyPublished = batch.status === "PUBLISHED";
 
     if (!alreadyPublished) {
@@ -312,12 +315,12 @@ export async function publishBatch(batchId: string): Promise<ActionResult<{ alre
 }
 
 export async function sendBackBatch(batchId: string, note: string): Promise<ActionResult> {
-  const { schoolId, userId } = await requireSchoolAdmin();
+  const { schoolId, userId, access } = await requireSchoolAdmin();
   return toResult(async () => {
     const reason = note.trim();
     if (!reason) throw new UserError("A note is required when sending results back.");
 
-    const batch = await loadBatch(schoolId, batchId);
+    const batch = await loadBatch(access, batchId);
     if (batch.status !== "SUBMITTED" && batch.status !== "APPROVED") {
       throw new UserError(`This batch is ${batch.status.toLowerCase()} and can't be sent back.`);
     }
@@ -349,9 +352,9 @@ export async function sendBackBatch(batchId: string, note: string): Promise<Acti
 // computation and snapshot builder that publishing uses (the code shows as
 // PREVIEW and nothing is saved).
 export async function previewBatchPayload(batchId: string, resultId: string): Promise<ActionResult<{ payload: SnapshotPayload }>> {
-  const { schoolId } = await requireSchoolAdmin();
+  const { schoolId, access } = await requireSchoolAdmin();
   return toResult(async () => {
-    const batch = await loadBatch(schoolId, batchId);
+    const batch = await loadBatch(access, batchId);
     if (batch.status !== "SUBMITTED" && batch.status !== "APPROVED") throw new UserError("Only batches awaiting publication can be previewed.");
 
     const rows = await loadRows(schoolId, batch.id);
@@ -385,8 +388,8 @@ export async function previewBatchPayload(batchId: string, resultId: string): Pr
 // What the review page shows for a 3rd Term annual batch: each student's
 // earlier-term status, what's blocking approval, and their promotion decision.
 export async function getBatchAnnualReview(batchId: string) {
-  const { schoolId } = await requireSchoolAdmin();
-  const batch = await loadBatch(schoolId, batchId);
+  const { schoolId, access } = await requireSchoolAdmin();
+  const batch = await loadBatch(access, batchId);
   const rows = await loadRows(schoolId, batch.id);
   const annual = await annualFor(schoolId, batch, rows);
   if (!annual) return null;
@@ -418,14 +421,14 @@ export async function markTermException(input: {
   status: "NOT_ENROLLED" | "EXEMPT";
   reason: string;
 }): Promise<ActionResult> {
-  const { schoolId, userId } = await requireSchoolAdmin();
+  const { schoolId, userId, access } = await requireSchoolAdmin();
   return toResult(async () => {
     const reason = input.reason.trim();
     if (!reason) throw new UserError("Give a reason — it's recorded in the audit trail.");
     if (input.termNumber !== 1 && input.termNumber !== 2) throw new UserError("Only the 1st or 2nd Term can be marked.");
     if (input.status !== "NOT_ENROLLED" && input.status !== "EXEMPT") throw new UserError("Unknown status.");
 
-    const { batch, row } = await loadAnnualBatchRow(schoolId, input.batchId, input.studentId);
+    const { batch, row } = await loadAnnualBatchRow(access, input.batchId, input.studentId);
 
     const published = await prisma.result.count({
       where: { schoolId, templateId: batch.templateId, session: batch.session, studentId: input.studentId, status: "PUBLISHED", batch: { termNumber: input.termNumber } },
@@ -459,10 +462,10 @@ export async function markTermException(input: {
 }
 
 export async function clearTermException(input: { batchId: string; studentId: string; termNumber: number }): Promise<ActionResult> {
-  const { schoolId, userId } = await requireSchoolAdmin();
+  const { schoolId, userId, access } = await requireSchoolAdmin();
   return toResult(async () => {
     if (!isTermNumber(input.termNumber) || input.termNumber === 3) throw new UserError("Only the 1st or 2nd Term can be cleared.");
-    const { batch, row } = await loadAnnualBatchRow(schoolId, input.batchId, input.studentId);
+    const { batch, row } = await loadAnnualBatchRow(access, input.batchId, input.studentId);
 
     const existing = await prisma.studentTermException.findUnique({
       where: { studentId_session_termNumber: { studentId: input.studentId, session: batch.session, termNumber: input.termNumber } },
@@ -490,8 +493,9 @@ export async function clearTermException(input: { batchId: string; studentId: st
 
 // Term/promotion changes are only allowed while the batch is still open for
 // review — approval freezes the scores, and publishing freezes everything.
-async function loadAnnualBatchRow(schoolId: string, batchId: string, studentId: string) {
-  const batch = await loadBatch(schoolId, batchId);
+async function loadAnnualBatchRow(access: AdminAccess, batchId: string, studentId: string) {
+  const { schoolId } = access;
+  const batch = await loadBatch(access, batchId);
   if (batch.status !== "SUBMITTED" && batch.status !== "APPROVED") throw new UserError(`This batch is ${batch.status.toLowerCase()} and can't be changed.`);
   if (!findAnnualGrid(templateFields(batch.template)) || (batch.termNumber ?? termNumberFromLabel(batch.term)) !== 3) {
     throw new UserError("This batch has no annual summary.");
@@ -509,11 +513,11 @@ export async function setPromotion(input: {
   status: (typeof PROMOTION_STATUSES)[number];
   promotedToClassId: string | null;
 }): Promise<ActionResult> {
-  const { schoolId } = await requireSchoolAdmin();
+  const { schoolId, access } = await requireSchoolAdmin();
   return toResult(async () => {
     if (!PROMOTION_STATUSES.includes(input.status)) throw new UserError("Unknown promotion status.");
 
-    const batch = await loadBatch(schoolId, input.batchId);
+    const batch = await loadBatch(access, input.batchId);
     if (batch.status !== "SUBMITTED") throw new UserError(`This batch is ${batch.status.toLowerCase()} — promotion decisions are made while it's under review.`);
 
     const row = await prisma.result.findFirst({ where: { id: input.resultId, schoolId, batchId: batch.id } });
@@ -522,7 +526,7 @@ export async function setPromotion(input: {
     let promotedToClassId: string | null = null;
     if (input.status === "PROMOTED") {
       if (!input.promotedToClassId) throw new UserError("Choose the class the student is promoted to.");
-      const target = await prisma.class.findFirst({ where: { id: input.promotedToClassId, schoolId }, select: { id: true } });
+      const target = await prisma.class.findFirst({ where: { id: input.promotedToClassId, schoolId, ...classWhere(access) }, select: { id: true } });
       if (!target) throw new UserError("That class doesn't exist in this school.");
       promotedToClassId = target.id;
     }

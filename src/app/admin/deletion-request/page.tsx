@@ -1,11 +1,10 @@
-import { auth } from "@/lib/auth";
+import { requireFullAdminPage } from "@/lib/admin-access";
 import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DeletionRequestClient } from "./DeletionRequestClient";
 
 export default async function DeletionRequestPage() {
-  const session = await auth();
-  const schoolId = session!.user.schoolId!;
+  const { schoolId } = await requireFullAdminPage();
 
   const [latestRequest, studentCount, resultCount] = await Promise.all([
     prisma.deletionRequest.findFirst({

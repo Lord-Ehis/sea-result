@@ -2,7 +2,8 @@ import Link from "next/link";
 import { ArrowLeft, BadgeCheck } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { auth } from "@/lib/auth";
+import { getAdminAccess } from "@/lib/admin-access";
+import { classWhere, ofStudentWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 import { fieldsAsPublished } from "@/lib/published-fields";
 import { findAnnualGrid } from "@/lib/annual-summary";
@@ -12,11 +13,11 @@ import { AmendClient } from "./AmendClient";
 
 export default async function AmendResultPage({ params }: { params: Promise<{ resultId: string }> }) {
   const { resultId } = await params;
-  const session = await auth();
-  const schoolId = session!.user.schoolId!;
+  const access = await getAdminAccess();
+  const { schoolId } = access;
 
   const result = await prisma.result.findFirst({
-    where: { id: resultId, schoolId, status: "PUBLISHED" },
+    where: { id: resultId, schoolId, ...ofStudentWhere(access), status: "PUBLISHED" },
     include: { student: true, batch: { include: { class: true, template: true } } },
   });
   const snapshots = result
@@ -38,7 +39,7 @@ export default async function AmendResultPage({ params }: { params: Promise<{ re
   const annualEnabled = !!findAnnualGrid(fields);
 
   const [classes, users] = await Promise.all([
-    prisma.class.findMany({ where: { schoolId }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.class.findMany({ where: { schoolId, ...classWhere(access) }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.user.findMany({ where: { id: { in: snapshots.map((s) => s.amendedByUserId).filter((id): id is string => !!id) } }, select: { id: true, name: true } }),
   ]);
   const userName = new Map(users.map((u) => [u.id, u.name]));

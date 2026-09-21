@@ -3,15 +3,16 @@ import { ArrowLeft, BadgeCheck } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusPill } from "@/components/ui/StatusPill";
-import { auth } from "@/lib/auth";
+import { getAdminAccess } from "@/lib/admin-access";
+import { batchWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 
 export default async function PublishedBatchPage({ params }: { params: Promise<{ batchId: string }> }) {
   const { batchId } = await params;
-  const session = await auth();
-  const schoolId = session!.user.schoolId!;
+  const access = await getAdminAccess();
+  const { schoolId } = access;
 
-  const batch = await prisma.resultBatch.findFirst({ where: { id: batchId, schoolId, status: "PUBLISHED" }, include: { class: true, template: true } });
+  const batch = await prisma.resultBatch.findFirst({ where: { id: batchId, schoolId, ...batchWhere(access), status: "PUBLISHED" }, include: { class: true, template: true } });
   if (!batch) {
     return (
       <>

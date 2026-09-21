@@ -23,6 +23,8 @@ type Student = {
 };
 
 type StudentsClientProps = {
+  // Only the main School Admin may add campuses; a campus admin never sees the button.
+  canAddCampus: boolean;
   campuses: Campus[];
   classes: ClassOption[];
   students: Student[];
@@ -30,7 +32,7 @@ type StudentsClientProps = {
 
 const ALL = "all";
 
-export function StudentsClient({ campuses, classes, students }: StudentsClientProps) {
+export function StudentsClient({ campuses, classes, students, canAddCampus }: StudentsClientProps) {
   const [campusFilter, setCampusFilter] = useState(ALL);
   const [classFilter, setClassFilter] = useState(ALL);
   const [statusFilter, setStatusFilter] = useState(ALL);
@@ -97,14 +99,16 @@ export function StudentsClient({ campuses, classes, students }: StudentsClientPr
           <p className="mt-2 text-body text-text-muted">Manage student records across every campus in one place.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setCampusModalOpen(true)}
-            className="inline-flex h-[39px] items-center gap-2 rounded-md border border-border bg-bg-card px-3.5 text-caption font-medium text-text-secondary hover:bg-bg-page"
-          >
-            <Building2 size={16} strokeWidth={1.8} />
-            New campus
-          </button>
+          {canAddCampus && (
+            <button
+              type="button"
+              onClick={() => setCampusModalOpen(true)}
+              className="inline-flex h-[39px] items-center gap-2 rounded-md border border-border bg-bg-card px-3.5 text-caption font-medium text-text-secondary hover:bg-bg-page"
+            >
+              <Building2 size={16} strokeWidth={1.8} />
+              New campus
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setAddOpen(true)}

@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { requireFullAdminPage } from "@/lib/admin-access";
 import { prisma } from "@/lib/prisma";
 import { TemplateBuilderClient } from "./TemplateBuilderClient";
 import { listGradingScales } from "./version-actions";
@@ -6,8 +6,7 @@ import type { TemplateField } from "./actions";
 import { loadAnnualSettings } from "@/lib/annual-context";
 
 export default async function ResultTemplatesPage() {
-  const session = await auth();
-  const schoolId = session!.user.schoolId!;
+  const { schoolId } = await requireFullAdminPage();
 
   const [templates, classes, gradingScales, annualSettings] = await Promise.all([
     prisma.resultTemplate.findMany({

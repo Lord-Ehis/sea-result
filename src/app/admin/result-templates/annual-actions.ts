@@ -2,17 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { requireFullAdmin } from "@/lib/admin-access";
 import { prisma } from "@/lib/prisma";
 import { weightsAreValid, weightsTotal } from "@/lib/annual-summary";
 import { UserError, toResult, type ActionResult } from "@/lib/user-error";
 
+// School-wide setting: a campus admin is refused (see src/lib/admin-access.ts).
 async function requireSchoolAdmin() {
-  const session = await auth();
-  if (!session?.user.schoolId || session.user.role !== "SCHOOL_ADMIN") {
-    throw new Error("Not authorized.");
-  }
-  return { schoolId: session.user.schoolId, userId: session.user.id };
+  const { schoolId, userId } = await requireFullAdmin();
+  return { schoolId, userId };
 }
 
 const weight = z.number().min(0, "Weights can't be negative.").max(100, "A weight can't exceed 100.");
