@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { Bell, Menu, LogOut, ChevronDown } from "lucide-react";
 
@@ -28,7 +28,6 @@ export function Topbar({
   onToggleSidebar,
   onOpenMobileNav,
 }: TopbarProps) {
-  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const initials = userName
     .split(" ")
@@ -74,15 +73,14 @@ export function Topbar({
       </div>
       <div className="flex items-center gap-2.5 sm:gap-[17px]">
         {notificationsHref && (
-          <button
-            type="button"
-            onClick={() => router.push(notificationsHref)}
+          <Link
+            href={notificationsHref}
             aria-label="Notifications"
             className="relative grid place-items-center rounded-[7px] p-1.5 text-text-secondary hover:bg-bg-page"
           >
             <Bell size={19} strokeWidth={1.8} />
             {hasAlerts && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full border-2 border-white bg-danger" />}
-          </button>
+          </Link>
         )}
         <div className="relative">
           <button

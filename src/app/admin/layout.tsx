@@ -22,9 +22,16 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     : null;
   const campusCount = school?.campuses.length ?? 0;
 
+  // Mirrors the "retryable" definition on /admin/notifications so the dot only
+  // lights up for failures the Retry button there can actually act on.
   const failedNotifications = access
     ? await prisma.notification.count({
-        where: { schoolId: access.schoolId, ...ofStudentWhere(access), status: "FAILED" },
+        where: {
+          schoolId: access.schoolId,
+          ...ofStudentWhere(access),
+          status: "FAILED",
+          event: { in: ["RESULT_PUBLISHED", "RESULT_AMENDED"] },
+        },
       })
     : 0;
 
