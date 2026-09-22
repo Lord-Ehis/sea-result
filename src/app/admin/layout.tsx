@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { getAdminAccess } from "@/lib/admin-access";
 import { getSchoolAccess } from "@/lib/school-access-lookup";
 import { SubscriptionBanner } from "@/components/SubscriptionBanner";
-import { campusWhere } from "@/lib/campus-scope";
+import { campusWhere, ofStudentWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -22,6 +22,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     : null;
   const campusCount = school?.campuses.length ?? 0;
 
+  const failedNotifications = access
+    ? await prisma.notification.count({
+        where: { schoolId: access.schoolId, ...ofStudentWhere(access), status: "FAILED" },
+      })
+    : 0;
+
   return (
     <AppShell
       // Campus admins never see the school-wide items, and the pages behind
@@ -33,6 +39,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       schoolName={school?.name}
       userName={session?.user.name ?? "School admin"}
       userRoleLabel={scoped ? "Campus admin" : "School admin"}
+      notificationsHref="/admin/notifications"
+      hasAlerts={failedNotifications > 0}
     >
       {schoolAccess && <SubscriptionBanner access={schoolAccess} canRenew={!scoped} />}
       {children}
