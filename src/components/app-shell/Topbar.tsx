@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { Bell, Menu, LogOut, ChevronDown } from "lucide-react";
 
@@ -10,6 +11,8 @@ type TopbarProps = {
   termBadge?: string;
   userName: string;
   userRoleLabel: string;
+  notificationsHref?: string;
+  hasAlerts?: boolean;
   onToggleSidebar: () => void;
   onOpenMobileNav: () => void;
 };
@@ -20,6 +23,8 @@ export function Topbar({
   termBadge,
   userName,
   userRoleLabel,
+  notificationsHref,
+  hasAlerts,
   onToggleSidebar,
   onOpenMobileNav,
 }: TopbarProps) {
@@ -67,14 +72,16 @@ export function Topbar({
         )}
       </div>
       <div className="flex items-center gap-2.5 sm:gap-[17px]">
-        <button
-          type="button"
-          aria-label="Notifications"
-          className="relative grid place-items-center p-1.5 text-text-secondary"
-        >
-          <Bell size={19} strokeWidth={1.8} />
-          <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full border-2 border-white bg-danger" />
-        </button>
+        {notificationsHref && (
+          <Link
+            href={notificationsHref}
+            aria-label="Notifications"
+            className="relative grid place-items-center rounded-[7px] p-1.5 text-text-secondary hover:bg-bg-page"
+          >
+            <Bell size={19} strokeWidth={1.8} />
+            {hasAlerts && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full border-2 border-white bg-danger" />}
+          </Link>
+        )}
         <div className="relative">
           <button
             type="button"

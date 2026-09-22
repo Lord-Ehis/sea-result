@@ -14,6 +14,8 @@ type AppShellProps = {
   termBadge?: string;
   userName: string;
   userRoleLabel: string;
+  notificationsHref?: string;
+  hasAlerts?: boolean;
   children: ReactNode;
 };
 
@@ -26,6 +28,8 @@ export function AppShell({
   termBadge,
   userName,
   userRoleLabel,
+  notificationsHref,
+  hasAlerts,
   children,
 }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
@@ -48,6 +52,8 @@ export function AppShell({
           termBadge={termBadge}
           userName={userName}
           userRoleLabel={userRoleLabel}
+          notificationsHref={notificationsHref}
+          hasAlerts={hasAlerts}
           onToggleSidebar={() => setCollapsed((value) => !value)}
           onOpenMobileNav={() => setMobileNavOpen(true)}
         />
