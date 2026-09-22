@@ -8,9 +8,18 @@ import type { AnnualSummaryPayload } from "@/lib/annual-summary";
 // template afterwards cannot change what was published. `fields` and `grids`
 // are the same shapes the parent dashboard and lookup already render.
 
+export type SnapshotSchool = {
+  name: string;
+  slug: string;
+  logoUrl?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  supportEmail?: string | null;
+};
+
 export type SnapshotPayload = {
   schemaVersion: 1;
-  school: { name: string; slug: string };
+  school: SnapshotSchool;
   student: { name: string; code: string; className: string; campusName: string };
   period: { session: string; term: string };
   template: { id: string; name: string; versionId: string | null };
@@ -24,7 +33,7 @@ export type SnapshotPayload = {
 };
 
 export function buildSnapshotPayload(input: {
-  school: { name: string; slug: string };
+  school: SnapshotSchool;
   student: { name: string; code: string; className: string; campusName: string };
   period: { session: string; term: string };
   template: { id: string; name: string; versionId: string | null; fields: TemplateField[] };

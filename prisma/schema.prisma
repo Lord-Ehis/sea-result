@@ -134,6 +134,12 @@ model School {
   customDomain         String?      @unique
   customDomainVerified Boolean      @default(false)
   resultFormatConfig   Json?
+  // Printed on results and the school's public pages. All optional — filled
+  // in from School settings, not required at sign-up.
+  logoUrl              String?
+  address              String?
+  phone                String?
+  supportEmail         String?
   allowParentAccounts  Boolean      @default(true)
   allowResultLookup    Boolean      @default(true)
   createdAt            DateTime     @default(now())

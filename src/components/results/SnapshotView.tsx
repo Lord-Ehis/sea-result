@@ -17,10 +17,19 @@ export function SnapshotView({ payload, preview = false }: { payload: SnapshotPa
 
   return (
     <article className="rounded-md border border-border bg-bg-card p-6 text-text-primary print:border-0 print:p-0">
-      <header className="flex items-center gap-3 border-b border-border pb-4">
-        <div className="grid h-10 w-10 flex-none place-items-center rounded bg-primary text-caption font-medium text-white">{initials}</div>
-        <div>
+      <header className="flex items-start gap-3 border-b border-border pb-4">
+        {school.logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- arbitrary external URL set by the school, not an optimizable local asset
+          <img src={school.logoUrl} alt="" className="h-10 w-10 flex-none rounded object-contain" />
+        ) : (
+          <div className="grid h-10 w-10 flex-none place-items-center rounded bg-primary text-caption font-medium text-white">{initials}</div>
+        )}
+        <div className="min-w-0">
           <strong className="block text-heading font-medium">{school.name}</strong>
+          {school.address && <span className="block text-caption text-text-muted">{school.address}</span>}
+          {(school.phone || school.supportEmail) && (
+            <span className="block text-caption text-text-muted">{[school.phone, school.supportEmail].filter(Boolean).join(" · ")}</span>
+          )}
           <span className="text-caption text-text-muted">{template.name}</span>
         </div>
       </header>
