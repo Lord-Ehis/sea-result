@@ -17,10 +17,26 @@ export type SnapshotSchool = {
   supportEmail?: string | null;
 };
 
+export type SnapshotStudent = {
+  name: string;
+  code: string;
+  className: string;
+  campusName: string;
+  gender?: string | null;
+  admissionNumber?: string | null;
+  dateOfBirth?: string | null;
+  age?: number | null;
+  height?: string | null;
+  weight?: string | null;
+  favouriteColour?: string | null;
+  clubOrSociety?: string | null;
+  photoUrl?: string | null;
+};
+
 export type SnapshotPayload = {
   schemaVersion: 1;
   school: SnapshotSchool;
-  student: { name: string; code: string; className: string; campusName: string };
+  student: SnapshotStudent;
   period: { session: string; term: string };
   template: { id: string; name: string; versionId: string | null };
   fields: { name: string; value: string }[];
@@ -34,7 +50,7 @@ export type SnapshotPayload = {
 
 export function buildSnapshotPayload(input: {
   school: SnapshotSchool;
-  student: { name: string; code: string; className: string; campusName: string };
+  student: SnapshotStudent;
   period: { session: string; term: string };
   template: { id: string; name: string; versionId: string | null; fields: TemplateField[] };
   data: Record<string, string>;

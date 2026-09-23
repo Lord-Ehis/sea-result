@@ -48,6 +48,8 @@ export default async function StudentsPage() {
       classes={classes.map((c) => ({ id: c.id, name: c.name }))}
       students={students.map((s) => ({
         id: s.id,
+        firstName: s.firstName,
+        lastName: s.lastName,
         name: `${s.firstName} ${s.lastName}`,
         studentCode: s.studentCode,
         className: s.class?.name ?? "—",
@@ -56,7 +58,16 @@ export default async function StudentsPage() {
         campusId: s.campusId,
         guardianName: s.guardianName,
         guardianPhone: s.guardianPhone,
+        guardianEmail: s.guardianEmail,
         isActive: s.isActive,
+        dateOfBirth: s.dateOfBirth ? s.dateOfBirth.toISOString().slice(0, 10) : null,
+        gender: s.gender,
+        admissionNumber: s.admissionNumber,
+        height: s.height,
+        weight: s.weight,
+        favouriteColour: s.favouriteColour,
+        clubOrSociety: s.clubOrSociety,
+        photoUrl: s.photoUrl,
       }))}
     />
   );

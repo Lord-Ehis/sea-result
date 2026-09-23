@@ -1,7 +1,17 @@
 import { GridResultTable } from "@/components/results/GridResultTable";
 import { AnnualSummaryTable } from "@/components/results/AnnualSummaryTable";
 import { SchoolLogo } from "@/components/results/SchoolLogo";
+import { StudentPhoto } from "@/components/results/StudentPhoto";
 import type { SnapshotPayload } from "@/lib/snapshot";
+
+function initialsOf(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase())
+    .join("");
+}
 
 // One published result, rendered purely from its frozen snapshot. Shared by
 // the printable page, the admin's "preview as parent" and anywhere else a
@@ -9,12 +19,18 @@ import type { SnapshotPayload } from "@/lib/snapshot";
 // render on the server or the client.
 export function SnapshotView({ payload, preview = false }: { payload: SnapshotPayload; preview?: boolean }) {
   const { school, student, period, template, fields, grids, annual, publication } = payload;
-  const initials = school.name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase())
-    .join("");
+  const initials = initialsOf(school.name);
+  const studentInitials = initialsOf(student.name);
+  const bioData = [
+    { label: "Gender", value: student.gender },
+    { label: "Admission No", value: student.admissionNumber },
+    { label: "Date of birth", value: student.dateOfBirth ? new Date(student.dateOfBirth).toLocaleDateString("en-GB") : null },
+    { label: "Age", value: student.age != null ? `${student.age} yrs` : null },
+    { label: "Height", value: student.height },
+    { label: "Weight", value: student.weight },
+    { label: "Favourite colour", value: student.favouriteColour },
+    { label: "Club/Society", value: student.clubOrSociety },
+  ].filter((f): f is { label: string; value: string } => !!f.value);
 
   return (
     <article className="rounded-md border border-border bg-bg-card p-6 text-text-primary print:border-0 print:p-0">
@@ -41,24 +57,38 @@ export function SnapshotView({ payload, preview = false }: { payload: SnapshotPa
         </span>
       </div>
 
-      <dl className="grid grid-cols-2 gap-3 rounded-md bg-bg-page p-3 text-caption sm:grid-cols-4">
-        <div>
-          <dt className="text-[10px] text-text-muted">Student</dt>
-          <dd className="font-medium">{student.name}</dd>
-        </div>
-        <div>
-          <dt className="text-[10px] text-text-muted">Student code</dt>
-          <dd className="font-medium">{student.code}</dd>
-        </div>
-        <div>
-          <dt className="text-[10px] text-text-muted">Class</dt>
-          <dd className="font-medium">{student.className}</dd>
-        </div>
-        <div>
-          <dt className="text-[10px] text-text-muted">Campus</dt>
-          <dd className="font-medium">{student.campusName}</dd>
-        </div>
-      </dl>
+      <div className="flex items-start gap-3">
+        {student.photoUrl && <StudentPhoto photoUrl={student.photoUrl} initials={studentInitials} />}
+        <dl className="grid flex-1 grid-cols-2 gap-3 rounded-md bg-bg-page p-3 text-caption sm:grid-cols-4">
+          <div>
+            <dt className="text-[10px] text-text-muted">Student</dt>
+            <dd className="font-medium">{student.name}</dd>
+          </div>
+          <div>
+            <dt className="text-[10px] text-text-muted">Student code</dt>
+            <dd className="font-medium">{student.code}</dd>
+          </div>
+          <div>
+            <dt className="text-[10px] text-text-muted">Class</dt>
+            <dd className="font-medium">{student.className}</dd>
+          </div>
+          <div>
+            <dt className="text-[10px] text-text-muted">Campus</dt>
+            <dd className="font-medium">{student.campusName}</dd>
+          </div>
+        </dl>
+      </div>
+
+      {bioData.length > 0 && (
+        <dl className="mt-3 grid grid-cols-2 gap-3 rounded-md border border-border p-3 text-caption sm:grid-cols-4">
+          {bioData.map((f) => (
+            <div key={f.label}>
+              <dt className="text-[10px] text-text-muted">{f.label}</dt>
+              <dd className="font-medium">{f.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
 
       {fields.length > 0 && (
         <dl className="mt-4 grid gap-2 sm:grid-cols-2">

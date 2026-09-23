@@ -1,16 +1,18 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Plus, Building2 } from "lucide-react";
+import { Plus, Building2, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { StatusPill } from "@/components/ui/StatusPill";
-import { createCampus, createStudent } from "./actions";
+import { createCampus, createStudent, updateStudent } from "./actions";
 
 type Campus = { id: string; name: string };
 type ClassOption = { id: string; name: string };
 type Student = {
   id: string;
+  firstName: string;
+  lastName: string;
   name: string;
   studentCode: string;
   className: string;
@@ -19,7 +21,16 @@ type Student = {
   campusId: string;
   guardianName: string | null;
   guardianPhone: string | null;
+  guardianEmail: string | null;
   isActive: boolean;
+  dateOfBirth: string | null;
+  gender: string | null;
+  admissionNumber: string | null;
+  height: string | null;
+  weight: string | null;
+  favouriteColour: string | null;
+  clubOrSociety: string | null;
+  photoUrl: string | null;
 };
 
 type StudentsClientProps = {
@@ -38,6 +49,7 @@ export function StudentsClient({ campuses, classes, students, canAddCampus }: St
   const [statusFilter, setStatusFilter] = useState(ALL);
   const [addOpen, setAddOpen] = useState(false);
   const [campusModalOpen, setCampusModalOpen] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -60,6 +72,19 @@ export function StudentsClient({ campuses, classes, students, canAddCampus }: St
         setAddOpen(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not add student.");
+      }
+    });
+  }
+
+  function handleUpdateStudent(formData: FormData) {
+    if (!editingStudent) return;
+    setError(null);
+    startTransition(async () => {
+      try {
+        await updateStudent(editingStudent.id, formData);
+        setEditingStudent(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not save changes.");
       }
     });
   }
@@ -181,7 +206,7 @@ export function StudentsClient({ campuses, classes, students, canAddCampus }: St
           <table className="w-full min-w-[830px] border-collapse text-left">
             <thead className="bg-[#fafbfb]">
               <tr>
-                {["Student name", "Student ID/code", "Class", "Campus", "Parent contact", "Status"].map((h) => (
+                {["Student name", "Student ID/code", "Class", "Campus", "Parent contact", "Status", ""].map((h) => (
                   <th key={h} className="border-b border-border px-4 py-3.5 text-[10px] font-medium uppercase tracking-wide text-text-muted first:pl-5 last:pr-5">
                     {h}
                   </th>
@@ -191,7 +216,7 @@ export function StudentsClient({ campuses, classes, students, canAddCampus }: St
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-10 text-center text-body text-text-muted">
+                  <td colSpan={7} className="px-5 py-10 text-center text-body text-text-muted">
                     No students match these filters.
                   </td>
                 </tr>
@@ -218,8 +243,19 @@ export function StudentsClient({ campuses, classes, students, canAddCampus }: St
                       <span className="block text-body text-text-primary">{s.guardianName ?? "—"}</span>
                       {s.guardianPhone && <span className="mt-1 block text-caption text-text-muted">{s.guardianPhone}</span>}
                     </td>
-                    <td className="px-4 py-4 pr-5">
+                    <td className="px-4 py-4">
                       <StatusPill label={s.isActive ? "Active" : "Inactive"} tone={s.isActive ? "success" : "neutral"} />
+                    </td>
+                    <td className="px-4 py-4 pr-5 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setEditingStudent(s)}
+                        aria-label={`Edit ${s.name}`}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-bg-card px-2.5 text-caption font-medium text-text-secondary hover:bg-bg-page"
+                      >
+                        <Pencil size={13} strokeWidth={1.8} />
+                        Edit
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -250,6 +286,14 @@ export function StudentsClient({ campuses, classes, students, canAddCampus }: St
                     <span className="block text-caption text-text-muted">{s.studentCode}</span>
                   </div>
                   <StatusPill label={s.isActive ? "Active" : "Inactive"} tone={s.isActive ? "success" : "neutral"} />
+                  <button
+                    type="button"
+                    onClick={() => setEditingStudent(s)}
+                    aria-label={`Edit ${s.name}`}
+                    className="grid h-8 w-8 flex-none place-items-center rounded-md border border-border bg-bg-card text-text-secondary"
+                  >
+                    <Pencil size={13} strokeWidth={1.8} />
+                  </button>
                 </div>
                 <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-[#f0f2f3] pt-3 text-caption">
                   <div>
@@ -322,6 +366,7 @@ export function StudentsClient({ campuses, classes, students, canAddCampus }: St
               <input name="guardianEmail" type="email" placeholder="parent@example.com" className={inputClass} />
             </Field>
           </div>
+          <ProfileFieldInputs />
           {error && <p className="mx-6 mt-4 rounded-md bg-danger-bg px-3 py-2 text-caption text-danger">{error}</p>}
           <div className="flex justify-end gap-2 px-6 py-5">
             <button
@@ -340,6 +385,72 @@ export function StudentsClient({ campuses, classes, students, canAddCampus }: St
             </button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        open={editingStudent !== null}
+        onClose={() => setEditingStudent(null)}
+        title="Edit student"
+        description={editingStudent ? `Update ${editingStudent.name}'s record.` : undefined}
+      >
+        {editingStudent && (
+          <form action={handleUpdateStudent} className="contents">
+            <div className="grid grid-cols-1 gap-4 px-6 pt-5 sm:grid-cols-2">
+              <Field label="Student first name">
+                <input name="firstName" required defaultValue={editingStudent.firstName} className={inputClass} />
+              </Field>
+              <Field label="Student last name">
+                <input name="lastName" required defaultValue={editingStudent.lastName} className={inputClass} />
+              </Field>
+              <Field label="Student ID/code">
+                <input value={editingStudent.studentCode} disabled className={`${inputClass} bg-bg-page text-text-muted`} />
+              </Field>
+              <Field label="Class">
+                <select name="classId" defaultValue={editingStudent.classId ?? ""} className={inputClass}>
+                  <option value="">No class yet</option>
+                  {classes.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Parent/guardian name">
+                <input name="guardianName" defaultValue={editingStudent.guardianName ?? ""} placeholder="Full name" className={inputClass} />
+              </Field>
+              <Field label="Parent/guardian phone">
+                <input name="guardianPhone" defaultValue={editingStudent.guardianPhone ?? ""} placeholder="+234 800 000 0000" className={inputClass} />
+              </Field>
+              <Field label="Parent/guardian email">
+                <input
+                  name="guardianEmail"
+                  type="email"
+                  defaultValue={editingStudent.guardianEmail ?? ""}
+                  placeholder="parent@example.com"
+                  className={inputClass}
+                />
+              </Field>
+            </div>
+            <ProfileFieldInputs defaults={editingStudent} />
+            {error && <p className="mx-6 mt-4 rounded-md bg-danger-bg px-3 py-2 text-caption text-danger">{error}</p>}
+            <div className="flex justify-end gap-2 px-6 py-5">
+              <button
+                type="button"
+                onClick={() => setEditingStudent(null)}
+                className="inline-flex h-9 items-center rounded-md border border-border bg-bg-card px-3.5 text-caption font-medium text-text-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={pending}
+                className="inline-flex h-9 items-center rounded-md border border-primary bg-primary px-3.5 text-caption font-medium text-white disabled:opacity-60"
+              >
+                {pending ? "Saving…" : "Save changes"}
+              </button>
+            </div>
+          </form>
+        )}
       </Modal>
 
       <Modal open={campusModalOpen} onClose={() => setCampusModalOpen(false)} title="Add campus" description="Create a new campus for this school.">
@@ -383,5 +494,54 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {label}
       {children}
     </label>
+  );
+}
+
+type ProfileDefaults = {
+  dateOfBirth: string | null;
+  gender: string | null;
+  admissionNumber: string | null;
+  height: string | null;
+  weight: string | null;
+  favouriteColour: string | null;
+  clubOrSociety: string | null;
+  photoUrl: string | null;
+};
+
+// Shared by the Add and Edit forms — everything printed on a result's
+// bio-data row, beyond the basics already above it. All optional.
+function ProfileFieldInputs({ defaults }: { defaults?: ProfileDefaults }) {
+  return (
+    <div className="mt-1 grid grid-cols-1 gap-4 border-t border-[#f0f2f3] px-6 pt-5 sm:grid-cols-2">
+      <p className="col-span-full m-0 text-caption font-medium text-text-secondary">Student profile (shown on results)</p>
+      <Field label="Date of birth">
+        <input name="dateOfBirth" type="date" defaultValue={defaults?.dateOfBirth ?? ""} className={inputClass} />
+      </Field>
+      <Field label="Gender">
+        <select name="gender" defaultValue={defaults?.gender ?? ""} className={inputClass}>
+          <option value="">Not set</option>
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+        </select>
+      </Field>
+      <Field label="Admission number">
+        <input name="admissionNumber" defaultValue={defaults?.admissionNumber ?? ""} placeholder="e.g. 03/1640" className={inputClass} />
+      </Field>
+      <Field label="Height">
+        <input name="height" defaultValue={defaults?.height ?? ""} placeholder="e.g. 76 cm" className={inputClass} />
+      </Field>
+      <Field label="Weight">
+        <input name="weight" defaultValue={defaults?.weight ?? ""} placeholder="e.g. 48 kg" className={inputClass} />
+      </Field>
+      <Field label="Favourite colour">
+        <input name="favouriteColour" defaultValue={defaults?.favouriteColour ?? ""} placeholder="e.g. Lilac" className={inputClass} />
+      </Field>
+      <Field label="Club/Society">
+        <input name="clubOrSociety" defaultValue={defaults?.clubOrSociety ?? ""} placeholder="e.g. Cultural dance, choir" className={inputClass} />
+      </Field>
+      <Field label="Photo URL">
+        <input name="photoUrl" defaultValue={defaults?.photoUrl ?? ""} placeholder="https://.../photo.jpg" className={inputClass} />
+      </Field>
+    </div>
   );
 }

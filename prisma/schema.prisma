@@ -310,22 +310,31 @@ model TeacherClassAssignment {
 // ---------------------------------------------------------------------------
 
 model Student {
-  id            String    @id @default(cuid())
-  schoolId      String
-  campusId      String
-  classId       String?
-  studentCode   String // unique per school, used for no-login result lookup
-  firstName     String
-  lastName      String
-  dateOfBirth   DateTime?
+  id              String    @id @default(cuid())
+  schoolId        String
+  campusId        String
+  classId         String?
+  studentCode     String // unique per school, used for no-login result lookup
+  firstName       String
+  lastName        String
+  dateOfBirth     DateTime?
   // Plain contact details for notifications — not a linked parent account.
   // See ParentStudentLink for actual parent/student login access.
-  guardianName  String?
-  guardianPhone String?
-  guardianEmail String?
-  isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  guardianName    String?
+  guardianPhone   String?
+  guardianEmail   String?
+  // Printed on results (bio-data row). All optional, filled in by an admin
+  // after enrolment — never required to create a student.
+  gender          String?
+  admissionNumber String?
+  height          String?
+  weight          String?
+  favouriteColour String?
+  clubOrSociety   String?
+  photoUrl        String?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   school          School                    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   campus          Campus                    @relation(fields: [campusId], references: [id], onDelete: Cascade)
