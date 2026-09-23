@@ -8,11 +8,15 @@ import { prisma } from "@/lib/prisma";
 // School-wide branding shown on printed results and (later) other public
 // pages. A campus admin is refused (see src/lib/admin-access.ts).
 
+// Trimmed before validation, so a stray space left behind while clearing a
+// field is treated as empty rather than rejected as an invalid URL/email.
+const trim = (v: unknown) => (typeof v === "string" ? v.trim() : v);
+
 const profileSchema = z.object({
-  logoUrl: z.string().trim().url("Enter a valid image URL, e.g. https://...").max(2048).optional().or(z.literal("")),
-  address: z.string().trim().max(300).optional().or(z.literal("")),
-  phone: z.string().trim().max(50).optional().or(z.literal("")),
-  supportEmail: z.string().trim().toLowerCase().email("Enter a valid email address").max(255).optional().or(z.literal("")),
+  logoUrl: z.preprocess(trim, z.union([z.literal(""), z.string().url("Enter a valid image URL, e.g. https://...").max(2048)])),
+  address: z.preprocess(trim, z.string().max(300)),
+  phone: z.preprocess(trim, z.string().max(50)),
+  supportEmail: z.preprocess(trim, z.union([z.literal(""), z.string().toLowerCase().email("Enter a valid email address").max(255)])),
 });
 
 export type SchoolProfileInput = z.infer<typeof profileSchema>;
