@@ -171,7 +171,7 @@ export async function publishBatch(batchId: string): Promise<ActionResult<{ alre
       }
 
       const fields = templateFields(batch.template);
-      const school = await prisma.school.findUniqueOrThrow({ where: { id: schoolId }, select: { name: true, slug: true } });
+      const school = await prisma.school.findUniqueOrThrow({ where: { id: schoolId }, select: { name: true, slug: true, logoUrl: true, address: true, phone: true, supportEmail: true } });
       const prior = needsPriorRows(fields) ? await loadPriorPublished(batch.templateId, rows.map((r) => r.studentId)) : [];
       const finalData = computePublishData(
         rows.map((r) => ({ studentId: r.studentId, session: r.session, data: (r.data as Record<string, string>) ?? {} })),
@@ -362,7 +362,7 @@ export async function previewBatchPayload(batchId: string, resultId: string): Pr
     if (index < 0) throw new UserError("That result isn't part of this batch.");
 
     const fields = templateFields(batch.template);
-    const school = await prisma.school.findUniqueOrThrow({ where: { id: schoolId }, select: { name: true, slug: true } });
+    const school = await prisma.school.findUniqueOrThrow({ where: { id: schoolId }, select: { name: true, slug: true, logoUrl: true, address: true, phone: true, supportEmail: true } });
     const prior = needsPriorRows(fields) ? await loadPriorPublished(batch.templateId, rows.map((r) => r.studentId)) : [];
     const finalData = computePublishData(
       rows.map((r) => ({ studentId: r.studentId, session: r.session, data: (r.data as Record<string, string>) ?? {} })),

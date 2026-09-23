@@ -1,5 +1,6 @@
 import { GridResultTable } from "@/components/results/GridResultTable";
 import { AnnualSummaryTable } from "@/components/results/AnnualSummaryTable";
+import { SchoolLogo } from "@/components/results/SchoolLogo";
 import type { SnapshotPayload } from "@/lib/snapshot";
 
 // One published result, rendered purely from its frozen snapshot. Shared by
@@ -17,10 +18,18 @@ export function SnapshotView({ payload, preview = false }: { payload: SnapshotPa
 
   return (
     <article className="rounded-md border border-border bg-bg-card p-6 text-text-primary print:border-0 print:p-0">
-      <header className="flex items-center gap-3 border-b border-border pb-4">
-        <div className="grid h-10 w-10 flex-none place-items-center rounded bg-primary text-caption font-medium text-white">{initials}</div>
-        <div>
+      <header className="flex items-start gap-3 border-b border-border pb-4">
+        {school.logoUrl ? (
+          <SchoolLogo logoUrl={school.logoUrl} initials={initials} />
+        ) : (
+          <div className="grid h-10 w-10 flex-none place-items-center rounded bg-primary text-caption font-medium text-white">{initials}</div>
+        )}
+        <div className="min-w-0">
           <strong className="block text-heading font-medium">{school.name}</strong>
+          {school.address && <span className="block text-caption text-text-muted">{school.address}</span>}
+          {(school.phone || school.supportEmail) && (
+            <span className="block text-caption text-text-muted">{[school.phone, school.supportEmail].filter(Boolean).join(" · ")}</span>
+          )}
           <span className="text-caption text-text-muted">{template.name}</span>
         </div>
       </header>

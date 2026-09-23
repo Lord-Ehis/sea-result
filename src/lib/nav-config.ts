@@ -11,6 +11,7 @@ export const schoolAdminNavItems: NavItem[] = [
   { label: "Dashboard", href: "/admin/dashboard", icon: "LayoutGrid" },
   { label: "Students", href: "/admin/students", icon: "Users" },
   { label: "Classes", href: "/admin/classes", icon: "Layers" },
+  { label: "School profile", href: "/admin/school-profile", icon: "Building2" },
   { label: "Result templates", href: "/admin/result-templates", icon: "FileText" },
   { label: "Results", href: "/admin/results", icon: "FileCheck" },
   { label: "Published results", href: "/admin/published", icon: "BadgeCheck" },
