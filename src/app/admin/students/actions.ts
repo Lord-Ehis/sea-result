@@ -31,6 +31,10 @@ export async function createCampus(formData: FormData) {
 // school profile form).
 const trim = (v: unknown) => (typeof v === "string" ? v.trim() : v);
 
+// Same trim-then-validate shape as photoUrl below — an email/URL validator
+// otherwise rejects a stray space instead of treating it as cleared.
+const optionalEmail = z.preprocess(trim, z.union([z.literal(""), z.string().email("Enter a valid email address")])).optional();
+
 const profileFields = {
   dateOfBirth: z.preprocess(trim, z.union([z.literal(""), z.iso.date("Enter a valid date")])).optional(),
   gender: z.preprocess(trim, z.string().max(30)).optional(),
@@ -51,7 +55,7 @@ const createStudentSchema = z.object({
   newClassName: z.string().trim().optional(),
   guardianName: z.string().trim().optional(),
   guardianPhone: z.string().trim().optional(),
-  guardianEmail: z.string().trim().email("Enter a valid email address").optional(),
+  guardianEmail: optionalEmail,
   ...profileFields,
 });
 
@@ -122,7 +126,7 @@ export async function createStudent(formData: FormData) {
       lastName: parsed.lastName,
       guardianName: parsed.guardianName,
       guardianPhone: parsed.guardianPhone,
-      guardianEmail: parsed.guardianEmail,
+      guardianEmail: emptyToNull(parsed.guardianEmail),
       dateOfBirth: parsed.dateOfBirth ? new Date(parsed.dateOfBirth) : null,
       gender: emptyToNull(parsed.gender),
       admissionNumber: emptyToNull(parsed.admissionNumber),
@@ -143,7 +147,7 @@ const updateStudentSchema = z.object({
   classId: z.string().optional(),
   guardianName: z.string().trim().optional(),
   guardianPhone: z.string().trim().optional(),
-  guardianEmail: z.string().trim().email("Enter a valid email address").optional(),
+  guardianEmail: optionalEmail,
   ...profileFields,
 });
 

@@ -201,26 +201,26 @@ model Campus {
 // ---------------------------------------------------------------------------
 
 model User {
-  id              String    @id @default(cuid())
+  id           String   @id @default(cuid())
   // Nullable — Platform Owner accounts are not scoped to a school.
-  schoolId        String?
-  role            Role
-  name            String
-  email           String    @unique
-  phone           String?
-  passwordHash    String
-  isActive        Boolean   @default(true)
+  schoolId     String?
+  role         Role
+  name         String
+  email        String   @unique
+  phone        String?
+  passwordHash String
+  isActive     Boolean  @default(true)
   // A campus admin: a SCHOOL_ADMIN who may only see the campuses listed in
   // `campusAccess`. With no rows they see nothing (fail closed) — never "all".
   // Everyone else (false) is unrestricted, exactly as before.
-  campusScoped    Boolean   @default(false)
+  campusScoped Boolean  @default(false)
   // When this person agreed to the Terms and Privacy Policy at sign-up, and which
   // version of them (src/lib/legal.ts). Empty for accounts made before consent
   // was collected.
   termsAcceptedAt DateTime?
   termsVersion    String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   school School? @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
