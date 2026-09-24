@@ -11,18 +11,30 @@ export function SchoolProfileClient({
   address,
   phone,
   supportEmail,
+  principalName,
+  principalSignatureUrl,
+  stampUrl,
+  nextTermBegins,
 }: {
   schoolName: string;
   logoUrl: string | null;
   address: string | null;
   phone: string | null;
   supportEmail: string | null;
+  principalName: string | null;
+  principalSignatureUrl: string | null;
+  stampUrl: string | null;
+  nextTermBegins: string | null;
 }) {
   const [fields, setFields] = useState({
     logoUrl: logoUrl ?? "",
     address: address ?? "",
     phone: phone ?? "",
     supportEmail: supportEmail ?? "",
+    principalName: principalName ?? "",
+    principalSignatureUrl: principalSignatureUrl ?? "",
+    stampUrl: stampUrl ?? "",
+    nextTermBegins: nextTermBegins ?? "",
   });
   const [logoError, setLogoError] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +119,46 @@ export function SchoolProfileClient({
                 onChange={(e) => set("supportEmail", e.target.value)}
                 placeholder="school@yourschool.com"
                 autoComplete="off"
+                className="h-10 rounded-md border border-border bg-bg-card px-3 text-body text-text-primary"
+              />
+            </label>
+            <p className="m-0 border-t border-border pt-4 text-caption font-medium text-text-secondary">Sign-off (bottom of each result)</p>
+            <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
+              Principal&apos;s name <span className="font-normal text-text-muted">(optional)</span>
+              <input
+                value={fields.principalName}
+                onChange={(e) => set("principalName", e.target.value)}
+                placeholder="e.g. Mr Owolabi Badmos"
+                autoComplete="off"
+                className="h-10 rounded-md border border-border bg-bg-card px-3 text-body text-text-primary"
+              />
+            </label>
+            <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
+              Principal&apos;s signature image URL <span className="font-normal text-text-muted">(optional)</span>
+              <input
+                value={fields.principalSignatureUrl}
+                onChange={(e) => set("principalSignatureUrl", e.target.value)}
+                placeholder="https://yourschool.com/signature.png"
+                autoComplete="off"
+                className="h-10 rounded-md border border-border bg-bg-card px-3 text-body text-text-primary"
+              />
+            </label>
+            <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
+              School stamp image URL <span className="font-normal text-text-muted">(optional)</span>
+              <input
+                value={fields.stampUrl}
+                onChange={(e) => set("stampUrl", e.target.value)}
+                placeholder="https://yourschool.com/stamp.png"
+                autoComplete="off"
+                className="h-10 rounded-md border border-border bg-bg-card px-3 text-body text-text-primary"
+              />
+            </label>
+            <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
+              Next term begins <span className="font-normal text-text-muted">(update each term)</span>
+              <input
+                type="date"
+                value={fields.nextTermBegins}
+                onChange={(e) => set("nextTermBegins", e.target.value)}
                 className="h-10 rounded-md border border-border bg-bg-card px-3 text-body text-text-primary"
               />
             </label>
