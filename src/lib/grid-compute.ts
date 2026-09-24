@@ -343,17 +343,19 @@ export function performanceSummary(fields: TemplateField[], data: Record<string,
 
 export type GradeAnalysis = {
   counts: { grade: string; count: number }[];
+  totalStudents: number;
   totalSubjects: number;
 };
 
 /**
- * "Grade analysis": how many of this student's subjects earned each grade on
- * the grid's scale (highest band first, zero counts kept so the table has a
- * stable shape), plus the number of subjects offered. Like the performance
- * summary, only subjects with a numeric Term Total count — an exempted or
- * unscored subject isn't "offered". null when there is nothing to analyse.
+ * Class-wide "Grade analysis": how many students in the batch earned each
+ * grade overall (their performance-summary grade, highest band first, zero
+ * counts kept so the table has a stable shape), and how many subjects were
+ * offered — a subject counts once anyone in the class has a numeric Term
+ * Total for it. Batch-wide, so it is computed once at publish time and the
+ * same object goes on every student's result. null when nothing is graded.
  */
-export function gradeAnalysis(fields: TemplateField[], data: Record<string, string>): GradeAnalysis | null {
+export function classGradeAnalysis(fields: TemplateField[], studentsData: Record<string, string>[]): GradeAnalysis | null {
   const field = fields.find((f) => f.type === "Grid" && !!f.grid);
   const grid = field?.grid;
   if (!field || !grid || grid.gradeBands.length === 0) return null;
@@ -362,15 +364,21 @@ export function gradeAnalysis(fields: TemplateField[], data: Record<string, stri
   for (const band of [...grid.gradeBands].sort((a, b) => b.min - a.min)) if (!labels.includes(band.label)) labels.push(band.label);
   const tally = new Map(labels.map((l) => [l, 0]));
 
-  let totalSubjects = 0;
-  for (const subject of grid.subjects) {
-    const raw = (data[gridKey(field.id, subject.id, "termTotal")] ?? "").trim();
-    if (raw === "" || !Number.isFinite(Number(raw))) continue;
-    totalSubjects++;
-    const grade = data[gridKey(field.id, subject.id, "grade")] ?? "";
-    if (tally.has(grade)) tally.set(grade, (tally.get(grade) ?? 0) + 1);
+  let totalStudents = 0;
+  for (const data of studentsData) {
+    const grade = performanceSummary(fields, data)?.grade ?? "";
+    if (!tally.has(grade)) continue;
+    tally.set(grade, (tally.get(grade) ?? 0) + 1);
+    totalStudents++;
   }
-  if (totalSubjects === 0) return null;
+  if (totalStudents === 0) return null;
 
-  return { counts: labels.map((grade) => ({ grade, count: tally.get(grade) ?? 0 })), totalSubjects };
+  const totalSubjects = grid.subjects.filter((subject) =>
+    studentsData.some((d) => {
+      const raw = (d[gridKey(field.id, subject.id, "termTotal")] ?? "").trim();
+      return raw !== "" && Number.isFinite(Number(raw));
+    }),
+  ).length;
+
+  return { counts: labels.map((grade) => ({ grade, count: tally.get(grade) ?? 0 })), totalStudents, totalSubjects };
 }
