@@ -256,3 +256,21 @@ export function buildGridResultData(fields: TemplateField[], data: Record<string
       };
     });
 }
+
+export type GradingScaleLegendEntry = { gradeCode: string; minScore: number; maxScore: number; remark: string };
+
+/**
+ * The grading scale legend (e.g. "70–100 = A (Excellent)") for a template's
+ * first Grid field, highest band first — the same bands/remarks already
+ * compiled onto the grid for live grading (src/lib/version-compile.ts), just
+ * read back out for display rather than computation. A template with no Grid
+ * field, or a Grid with no configured bands, has no legend to show.
+ */
+export function gradingScaleLegend(fields: TemplateField[]): GradingScaleLegendEntry[] {
+  const grid = fields.find((f) => f.type === "Grid" && !!f.grid)?.grid;
+  if (!grid || grid.gradeBands.length === 0) return [];
+  const remarkFor = new Map(grid.remarksMap.map((r) => [r.grade, r.remarks]));
+  return [...grid.gradeBands]
+    .sort((a, b) => b.min - a.min)
+    .map((b) => ({ gradeCode: b.label, minScore: b.min, maxScore: b.max, remark: remarkFor.get(b.label) ?? "" }));
+}

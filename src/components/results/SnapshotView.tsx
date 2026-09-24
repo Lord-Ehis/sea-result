@@ -18,7 +18,7 @@ function initialsOf(name: string) {
 // whole result is shown, so they can never drift from each other. Safe to
 // render on the server or the client.
 export function SnapshotView({ payload, preview = false }: { payload: SnapshotPayload; preview?: boolean }) {
-  const { school, student, period, template, fields, grids, annual, publication } = payload;
+  const { school, student, period, template, fields, grids, gradingScale, annual, publication } = payload;
   const initials = initialsOf(school.name);
   const studentInitials = initialsOf(student.name);
   const bioData = [
@@ -106,6 +106,27 @@ export function SnapshotView({ payload, preview = false }: { payload: SnapshotPa
           {grids.map((g, i) => (
             <GridResultTable key={`${g.fieldName}-${i}`} grid={g} />
           ))}
+        </div>
+      )}
+
+      {gradingScale && gradingScale.length > 0 && (
+        <div className="mt-4 overflow-hidden rounded-md border border-border">
+          <div className="border-b border-border bg-bg-page px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-text-muted">
+            Grade scale
+          </div>
+          <table className="w-full border-collapse text-left text-caption">
+            <tbody>
+              {gradingScale.map((b) => (
+                <tr key={b.gradeCode} className="border-b border-border last:border-0">
+                  <td className="px-3 py-1.5 font-medium">
+                    {b.minScore}–{b.maxScore}%
+                  </td>
+                  <td className="px-3 py-1.5 font-medium">{b.gradeCode}</td>
+                  <td className="px-3 py-1.5 text-text-secondary">{b.remark}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
