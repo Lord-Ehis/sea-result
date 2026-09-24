@@ -55,6 +55,7 @@ const FORMULA_LABEL: Record<ComputedFormula["kind"], string> = {
   average: "Average",
   grade: "Grade",
   position: "Position",
+  classAverage: "Class average",
   cumulative: "Cumulative (across terms)",
   remarksLookup: "Remarks lookup",
   promotion: "Promotion status",
@@ -65,6 +66,7 @@ function defaultFormula(kind: ComputedFormula["kind"]): ComputedFormula {
   if (kind === "weightedSum") return { kind, parts: [] }; // only ever synthesized for a compiled Grid, never picked in the builder
   if (kind === "grade") return { kind, of: "", bands: [] };
   if (kind === "position") return { kind, of: "" };
+  if (kind === "classAverage") return { kind, of: "" }; // only ever synthesized for a compiled Grid, never picked in the builder
   if (kind === "cumulative") return { kind, of: "", aggregate: "sum" };
   if (kind === "remarksLookup") return { kind, of: "", map: [] };
   if (kind === "resultAnalysis") return { kind, of: "" };

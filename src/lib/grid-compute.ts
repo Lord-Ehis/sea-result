@@ -95,6 +95,21 @@ export function expandGridPositionFields(field: TemplateField): TemplateField[] 
 }
 
 /**
+ * Per subject: Class Average — the mean Term Total across every student in
+ * the published batch. Same value for every student, unlike Subject
+ * Position. Publish-time only, for the same reason as Subject Position.
+ */
+export function expandGridClassAverageFields(field: TemplateField): TemplateField[] {
+  if (field.type !== "Grid" || !field.grid) return [];
+  return field.grid.subjects.map((subject) => ({
+    id: gridKey(field.id, subject.id, "classAverage"),
+    name: `${subject.name} Class Average`,
+    type: "Computed",
+    formula: { kind: "classAverage", of: gridKey(field.id, subject.id, "termTotal") },
+  }));
+}
+
+/**
  * Per subject, only when the grid's "Include cumulative result" toggle is
  * on: Cumulative Total/Average (the existing "cumulative" formula kind,
  * same as a flat field's — publishBatch's existing prior-published-rows
@@ -194,6 +209,7 @@ export function expandForPublish(fields: TemplateField[]): TemplateField[] {
     ...fields.filter((f) => f.type !== "Grid"),
     ...gridFields.flatMap(expandGridThisTermFields),
     ...gridFields.flatMap(expandGridPositionFields),
+    ...gridFields.flatMap(expandGridClassAverageFields),
     ...gridFields.flatMap(expandGridCumulativeFields),
   ];
 }
@@ -207,6 +223,7 @@ export function gridDisplayColumns(field: TemplateField): { key: string; label: 
     { key: "grade", label: "Grade" },
     { key: "subjectPosition", label: "Position" },
     { key: "remarks", label: "Remarks" },
+    { key: "classAverage", label: "Class Avg" },
   ];
   if (field.grid.includeCumulative) {
     columns.push(

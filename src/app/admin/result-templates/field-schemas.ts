@@ -34,6 +34,9 @@ export type ComputedFormula =
   | { kind: "average"; of: string[] }
   | { kind: "grade"; of: string; bands: GradeBand[] }
   | { kind: "position"; of: string }
+  // The mean of `of` across every student in the batch — the same value for
+  // every student, unlike position. Publish-time only, like position.
+  | { kind: "classAverage"; of: string }
   | { kind: "cumulative"; of: string; aggregate: "sum" | "average" }
   | { kind: "remarksLookup"; of: string; map: GridRemarksEntry[] }
   | {
@@ -89,6 +92,7 @@ export const formulaSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("average"), of: z.array(z.string()) }),
   z.object({ kind: z.literal("grade"), of: z.string(), bands: z.array(gradeBandSchema) }),
   z.object({ kind: z.literal("position"), of: z.string() }),
+  z.object({ kind: z.literal("classAverage"), of: z.string() }),
   z.object({ kind: z.literal("cumulative"), of: z.string(), aggregate: z.enum(["sum", "average"]) }),
   z.object({ kind: z.literal("remarksLookup"), of: z.string(), map: z.array(gridRemarksEntrySchema) }),
   z.object({
