@@ -47,6 +47,7 @@ function serializeVersion(version: VersionWithRelations): TemplateVersionSummary
     activatedAt: version.activatedAt?.toISOString() ?? null,
     legacyFields: legacyFieldsFromJson(version.legacyFields) as TemplateField[],
     includeAnnualSummary: version.includeAnnualSummary,
+    includeAttendance: version.includeAttendance,
     sections: version.sections.map((s) => ({
       id: s.id,
       name: s.name,
@@ -130,6 +131,7 @@ export async function createDraftVersion(
       legacyGridFieldId: source?.legacyGridFieldId ?? null,
       legacyFields: source?.legacyFields ?? [],
       includeAnnualSummary: source?.includeAnnualSummary ?? false,
+      includeAttendance: source?.includeAttendance ?? false,
       sections: source
         ? {
             create: source.sections.map((s) => ({
@@ -208,6 +210,7 @@ export async function updateVersionDraft(input: {
   ratingCategories: RatingCategoryInput[];
   legacyFields: TemplateField[];
   includeAnnualSummary?: boolean;
+  includeAttendance?: boolean;
 }) {
   const { schoolId } = await requireSchoolAdmin();
   const parsed = updateVersionDraftSchema.parse(input);
@@ -219,7 +222,7 @@ export async function updateVersionDraft(input: {
   await prisma.$transaction(async (tx) => {
     await tx.templateVersion.update({
       where: { id: version.id },
-      data: { gradingScaleId: parsed.gradingScaleId, legacyFields: parsed.legacyFields, includeAnnualSummary: parsed.includeAnnualSummary },
+      data: { gradingScaleId: parsed.gradingScaleId, legacyFields: parsed.legacyFields, includeAnnualSummary: parsed.includeAnnualSummary, includeAttendance: parsed.includeAttendance },
     });
 
     await replaceSections(tx, schoolId, version.id, version.sections, parsed.sections);
@@ -522,6 +525,7 @@ async function activateVersionImpl(versionId: string, schoolId: string, userId: 
     sections: sectionsFromDb(version.sections),
     ratingCategories: ratingCategoriesFromDb(version.ratingCategories),
     includeAnnualSummary: version.includeAnnualSummary,
+    includeAttendance: version.includeAttendance,
   });
 
   await prisma.$transaction(async (tx) => {
@@ -580,6 +584,7 @@ export async function previewCompiledFields(input: {
   ratingCategories: RatingCategoryInput[];
   legacyFields: TemplateField[];
   includeAnnualSummary?: boolean;
+  includeAttendance?: boolean;
 }) {
   const { schoolId } = await requireSchoolAdmin();
   const version = await prisma.templateVersion.findFirst({
@@ -596,6 +601,7 @@ export async function previewCompiledFields(input: {
     sections: sectionsFromInput(input.sections),
     ratingCategories: ratingCategoriesFromInput(input.ratingCategories),
     includeAnnualSummary: input.includeAnnualSummary === true,
+    includeAttendance: input.includeAttendance === true,
   });
 }
 

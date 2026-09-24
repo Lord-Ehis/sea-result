@@ -51,6 +51,7 @@ export type CompileVersionInput = {
   ratingCategories: CompileRatingCategory[];
   resolvedGradingScale: CompileGradingScale | null;
   includeAnnualSummary?: boolean;
+  includeAttendance?: boolean;
 };
 
 // The legacy Grid model has ONE shared score-column list applied to every
@@ -112,6 +113,18 @@ function buildGrid(input: CompileVersionInput): GridConfig {
   };
 }
 
+// Fixed ids so entered attendance keeps its place when a new version is
+// activated (like the grid's legacy field id).
+export const ATTENDANCE_OPENED_ID = "attendance-opened";
+export const ATTENDANCE_PRESENT_ID = "attendance-present";
+
+function attendanceFields(): TemplateField[] {
+  return [
+    { id: ATTENDANCE_OPENED_ID, name: "Times school opened", type: "Number", attendance: "opened" },
+    { id: ATTENDANCE_PRESENT_ID, name: "Times present", type: "Number", attendance: "present" },
+  ];
+}
+
 export function compileVersionToFields(input: CompileVersionInput): TemplateField[] {
   const fields: TemplateField[] = [];
 
@@ -139,6 +152,8 @@ export function compileVersionToFields(input: CompileVersionInput): TemplateFiel
       });
     }
   }
+
+  if (input.includeAttendance) fields.push(...attendanceFields());
 
   return [...fields, ...input.legacyFields];
 }
