@@ -408,6 +408,8 @@ function sectionsFromDb(sections: VersionWithRelations["sections"]): CompileVers
 
 function ratingCategoriesFromDb(categories: VersionWithRelations["ratingCategories"]): CompileVersionInput["ratingCategories"] {
   return categories.map((cat) => ({
+    id: cat.id,
+    name: cat.name,
     displayOrder: cat.displayOrder,
     ratingOptions: Array.isArray(cat.ratingOptions) ? (cat.ratingOptions as string[]) : [],
     items: cat.items.map((i) => ({ id: i.id, legacySourceId: i.legacySourceId, name: i.name, isEnabled: i.isEnabled })),
@@ -435,6 +437,8 @@ function sectionsFromInput(sections: SectionInput[]): CompileVersionInput["secti
 
 function ratingCategoriesFromInput(categories: RatingCategoryInput[]): CompileVersionInput["ratingCategories"] {
   return categories.map((cat) => ({
+    id: cat.id,
+    name: cat.name,
     displayOrder: cat.displayOrder,
     ratingOptions: cat.ratingOptions,
     items: cat.items.map((i) => ({ id: i.id, legacySourceId: null, name: i.name, isEnabled: i.isEnabled })),

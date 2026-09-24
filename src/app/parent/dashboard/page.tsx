@@ -60,6 +60,8 @@ export default async function ParentDashboardPage() {
             intact,
             fields: intact ? payload.fields : [],
             grids: intact ? payload.grids : [],
+            ratingGrids: intact ? (payload.ratingGrids ?? []) : [],
+            gradingScale: intact ? (payload.gradingScale ?? []) : [],
             annual: intact ? (payload.annual ?? null) : null,
           };
         }),

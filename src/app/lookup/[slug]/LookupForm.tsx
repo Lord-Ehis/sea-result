@@ -5,6 +5,8 @@ import Link from "next/link";
 import { lookupStudentResult, type LookupResult } from "./actions";
 import { ComparisonReport } from "@/components/results/ComparisonReport";
 import { GridResultTable } from "@/components/results/GridResultTable";
+import { RatingGridTable } from "@/components/results/RatingGridTable";
+import { GradingScaleTable } from "@/components/results/GradingScaleTable";
 import { AnnualSummaryTable } from "@/components/results/AnnualSummaryTable";
 import { FieldValueRow } from "@/components/results/FieldValueRow";
 
@@ -121,6 +123,10 @@ export function LookupForm({ schoolName, slug }: { schoolName: string; slug: str
                         {r.grids.map((g, gi2) => (
                           <GridResultTable key={gi2} grid={g} />
                         ))}
+                        {r.ratingGrids.map((g) => (
+                          <RatingGridTable key={g.categoryId} grid={g} />
+                        ))}
+                        {r.gradingScale.length > 0 && <GradingScaleTable bands={r.gradingScale} />}
                         {r.annual && <AnnualSummaryTable annual={r.annual} />}
                         {r.intact ? (
                           <div className="flex flex-wrap items-center justify-between gap-2 text-caption text-text-muted">
