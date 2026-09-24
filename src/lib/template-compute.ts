@@ -172,3 +172,31 @@ export function computePositions(fields: TemplateField[], studentsData: Record<s
 
   return results;
 }
+
+/**
+ * Fills in every classAverage-kind field with the mean of its source
+ * field's numeric values across every student in the batch — the same
+ * number for every student, since it's a class-wide statistic rather than a
+ * per-student rank. A student with no numeric source value (blank, ABS/EXM)
+ * doesn't count toward the average or its denominator; a batch with no
+ * numeric values at all gets "—".
+ */
+export function computeClassAverages(fields: TemplateField[], studentsData: Record<string, string>[]): Record<string, string>[] {
+  const results = studentsData.map((d) => ({ ...d }));
+
+  for (const field of fields) {
+    if (field.type !== "Computed" || field.formula?.kind !== "classAverage") continue;
+    const sourceId = field.formula.of;
+
+    const values = studentsData
+      .map((d) => (d[sourceId] ?? "").trim())
+      .filter((v) => v !== "")
+      .map(Number)
+      .filter((v) => Number.isFinite(v));
+
+    const average = values.length > 0 ? (values.reduce((sum, v) => sum + v, 0) / values.length).toFixed(2) : "—";
+    for (const d of results) d[field.id] = average;
+  }
+
+  return results;
+}

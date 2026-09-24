@@ -1,5 +1,5 @@
 import type { TemplateField } from "@/app/admin/result-templates/actions";
-import { computeOwnFields, computePositions, aggregateCumulative } from "@/lib/template-compute";
+import { computeOwnFields, computePositions, computeClassAverages, aggregateCumulative } from "@/lib/template-compute";
 import { expandForPublish, fillGridCumulativeTermSlots } from "@/lib/grid-compute";
 
 // Everything that only becomes known once a whole batch is published: the
@@ -64,5 +64,5 @@ export function computePublishData(rows: PublishRow[], fields: TemplateField[], 
     afterCumulative = afterCumulative.map((d) => computeOwnFields(expandedFields, d));
   }
 
-  return computePositions(expandedFields, afterCumulative);
+  return computeClassAverages(expandedFields, computePositions(expandedFields, afterCumulative));
 }
