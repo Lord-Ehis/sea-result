@@ -140,6 +140,12 @@ model School {
   address              String?
   phone                String?
   supportEmail         String?
+  // Sign-off block on printed results: principal, their signature and the
+  // school stamp (pasted image URLs), and when the next term starts.
+  principalName         String?
+  principalSignatureUrl String?
+  stampUrl              String?
+  nextTermBegins        DateTime?
   allowParentAccounts  Boolean      @default(true)
   allowResultLookup    Boolean      @default(true)
   createdAt            DateTime     @default(now())

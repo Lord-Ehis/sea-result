@@ -17,6 +17,10 @@ const profileSchema = z.object({
   address: z.preprocess(trim, z.string().max(300)),
   phone: z.preprocess(trim, z.string().max(50)),
   supportEmail: z.preprocess(trim, z.union([z.literal(""), z.string().toLowerCase().email("Enter a valid email address").max(255)])),
+  principalName: z.preprocess(trim, z.string().max(120)),
+  principalSignatureUrl: z.preprocess(trim, z.union([z.literal(""), z.string().url("Enter a valid image URL, e.g. https://...").max(2048)])),
+  stampUrl: z.preprocess(trim, z.union([z.literal(""), z.string().url("Enter a valid image URL, e.g. https://...").max(2048)])),
+  nextTermBegins: z.preprocess(trim, z.union([z.literal(""), z.iso.date("Enter a valid date")])),
 });
 
 export type SchoolProfileInput = z.infer<typeof profileSchema>;
@@ -32,6 +36,10 @@ export async function updateSchoolProfile(input: SchoolProfileInput) {
       address: parsed.address || null,
       phone: parsed.phone || null,
       supportEmail: parsed.supportEmail || null,
+      principalName: parsed.principalName || null,
+      principalSignatureUrl: parsed.principalSignatureUrl || null,
+      stampUrl: parsed.stampUrl || null,
+      nextTermBegins: parsed.nextTermBegins ? new Date(parsed.nextTermBegins) : null,
     },
   });
 

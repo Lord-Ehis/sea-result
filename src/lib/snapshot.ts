@@ -34,6 +34,31 @@ export type SnapshotStudent = {
   photoUrl?: string | null;
 };
 
+// The bottom-of-page sign-off, frozen with the result: who taught it, who
+// signs for the school, the stamp, and when the next term starts.
+export type SnapshotSignOff = {
+  teacherName?: string | null;
+  principalName?: string | null;
+  principalSignatureUrl?: string | null;
+  stampUrl?: string | null;
+  nextTermBegins?: string | null;
+};
+
+/** null when there is nothing to show, so the block is left out entirely. */
+export function buildSignOff(input: {
+  school: { principalName?: string | null; principalSignatureUrl?: string | null; stampUrl?: string | null; nextTermBegins?: Date | null };
+  teacherName?: string | null;
+}): SnapshotSignOff | null {
+  const signOff: SnapshotSignOff = {
+    teacherName: input.teacherName ?? null,
+    principalName: input.school.principalName ?? null,
+    principalSignatureUrl: input.school.principalSignatureUrl ?? null,
+    stampUrl: input.school.stampUrl ?? null,
+    nextTermBegins: input.school.nextTermBegins ? input.school.nextTermBegins.toISOString() : null,
+  };
+  return Object.values(signOff).some(Boolean) ? signOff : null;
+}
+
 export type SnapshotPayload = {
   schemaVersion: 1;
   school: SnapshotSchool;
@@ -48,6 +73,7 @@ export type SnapshotPayload = {
   // Total obtained / obtainable / percentage / grade across the grid's
   // subjects — absent when there is nothing to summarise.
   performanceSummary?: PerformanceSummary;
+  signOff?: SnapshotSignOff;
   // The template's grade bands/remarks at publish time, for a "Grade Scale"
   // legend — absent when the template has no Grid field or no bands set.
   gradingScale?: GradingScaleLegendEntry[];
@@ -65,6 +91,7 @@ export function buildSnapshotPayload(input: {
   template: { id: string; name: string; versionId: string | null; fields: TemplateField[] };
   data: Record<string, string>;
   annual?: AnnualSummaryPayload | null;
+  signOff?: SnapshotSignOff | null;
   publication: { version: number; verificationCode: string; publishedAt: Date; amendedAt?: Date };
 }): SnapshotPayload {
   const { template, data } = input;
@@ -73,7 +100,17 @@ export function buildSnapshotPayload(input: {
   const summary = performanceSummary(template.fields, data);
   return {
     schemaVersion: 1,
-    school: input.school,
+    // Picked field by field: callers pass a wider school row (sign-off
+    // columns, dates) that must not leak into — or break the checksum of —
+    // the frozen payload.
+    school: {
+      name: input.school.name,
+      slug: input.school.slug,
+      logoUrl: input.school.logoUrl,
+      address: input.school.address,
+      phone: input.school.phone,
+      supportEmail: input.school.supportEmail,
+    },
     student: input.student,
     period: input.period,
     template: { id: template.id, name: template.name, versionId: template.versionId },
@@ -85,6 +122,7 @@ export function buildSnapshotPayload(input: {
       .map((f) => ({ name: f.name, value: data[f.id] ?? "—" })),
     grids: buildGridResultData(template.fields, data),
     ...(summary ? { performanceSummary: summary } : {}),
+    ...(input.signOff ? { signOff: input.signOff } : {}),
     // Absent when the template has no categorised rating fields.
     ...(ratingGrids.length > 0 ? { ratingGrids } : {}),
     // Absent when the template's Grid has no configured bands.

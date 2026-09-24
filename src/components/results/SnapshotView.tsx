@@ -1,6 +1,7 @@
 import { GridResultTable } from "@/components/results/GridResultTable";
 import { RatingGridTable } from "@/components/results/RatingGridTable";
 import { GradingScaleTable } from "@/components/results/GradingScaleTable";
+import { SignOffBlock } from "@/components/results/SignOffBlock";
 import { PerformanceSummaryBox } from "@/components/results/PerformanceSummaryBox";
 import { AnnualSummaryTable } from "@/components/results/AnnualSummaryTable";
 import { SchoolLogo } from "@/components/results/SchoolLogo";
@@ -21,13 +22,13 @@ function initialsOf(name: string) {
 // whole result is shown, so they can never drift from each other. Safe to
 // render on the server or the client.
 export function SnapshotView({ payload, preview = false }: { payload: SnapshotPayload; preview?: boolean }) {
-  const { school, student, period, template, fields, grids, ratingGrids, performanceSummary, gradingScale, annual, publication } = payload;
+  const { school, student, period, template, fields, grids, ratingGrids, performanceSummary, signOff, gradingScale, annual, publication } = payload;
   const initials = initialsOf(school.name);
   const studentInitials = initialsOf(student.name);
   const bioData = [
     { label: "Gender", value: student.gender },
     { label: "Admission No", value: student.admissionNumber },
-    { label: "Date of birth", value: student.dateOfBirth ? new Date(student.dateOfBirth).toLocaleDateString("en-GB") : null },
+    { label: "Date of birth", value: student.dateOfBirth ? new Date(student.dateOfBirth).toLocaleDateString("en-GB", { timeZone: "UTC" }) : null },
     { label: "Age", value: student.age != null ? `${student.age} yrs` : null },
     { label: "Height", value: student.height },
     { label: "Weight", value: student.weight },
@@ -135,6 +136,12 @@ export function SnapshotView({ payload, preview = false }: { payload: SnapshotPa
       {annual && (
         <div className="mt-5">
           <AnnualSummaryTable annual={annual} />
+        </div>
+      )}
+
+      {signOff && (
+        <div className="mt-5">
+          <SignOffBlock signOff={signOff} />
         </div>
       )}
 
