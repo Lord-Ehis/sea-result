@@ -62,6 +62,7 @@ export default async function ParentDashboardPage() {
             grids: intact ? payload.grids : [],
             ratingGrids: intact ? (payload.ratingGrids ?? []) : [],
             attendance: intact ? (payload.attendance ?? null) : null,
+            gradeAnalysis: intact ? (payload.gradeAnalysis ?? null) : null,
             performanceSummary: intact ? (payload.performanceSummary ?? null) : null,
             gradingScale: intact ? (payload.gradingScale ?? []) : [],
             annual: intact ? (payload.annual ?? null) : null,

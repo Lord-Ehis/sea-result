@@ -8,10 +8,11 @@ import { ComparisonReport } from "@/components/results/ComparisonReport";
 import { GridResultTable } from "@/components/results/GridResultTable";
 import { RatingGridTable } from "@/components/results/RatingGridTable";
 import { GradingScaleTable } from "@/components/results/GradingScaleTable";
+import { GradeAnalysisTable } from "@/components/results/GradeAnalysisTable";
 import { AttendanceSummaryBox } from "@/components/results/AttendanceSummaryBox";
 import { PerformanceSummaryBox } from "@/components/results/PerformanceSummaryBox";
 import { FieldValueRow } from "@/components/results/FieldValueRow";
-import type { GridResultData, GradingScaleLegendEntry, PerformanceSummary } from "@/lib/grid-compute";
+import type { GridResultData, GradingScaleLegendEntry, PerformanceSummary, GradeAnalysis } from "@/lib/grid-compute";
 import type { AttendanceSummary } from "@/lib/attendance";
 import type { RatingGridData } from "@/lib/rating-grid";
 import type { AnnualSummaryPayload } from "@/lib/annual-summary";
@@ -33,6 +34,7 @@ type ResultEntry = {
   ratingGrids: RatingGridData[];
   performanceSummary: PerformanceSummary | null;
   attendance: AttendanceSummary | null;
+  gradeAnalysis: GradeAnalysis | null;
   gradingScale: GradingScaleLegendEntry[];
   annual: AnnualSummaryPayload | null;
 };
@@ -153,6 +155,7 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
                 <GridResultTable key={gi} grid={g} />
               ))}
               {recent.attendance && <AttendanceSummaryBox attendance={recent.attendance} />}
+              {recent.gradeAnalysis && <GradeAnalysisTable analysis={recent.gradeAnalysis} />}
               {recent.performanceSummary && <PerformanceSummaryBox summary={recent.performanceSummary} />}
               {recent.ratingGrids.map((g) => (
                 <RatingGridTable key={g.categoryId} grid={g} />
@@ -209,6 +212,7 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
                       <GridResultTable key={gi} grid={g} />
                     ))}
                     {r.attendance && <AttendanceSummaryBox attendance={r.attendance} />}
+                    {r.gradeAnalysis && <GradeAnalysisTable analysis={r.gradeAnalysis} />}
                     {r.performanceSummary && <PerformanceSummaryBox summary={r.performanceSummary} />}
                     {r.ratingGrids.map((g) => (
                       <RatingGridTable key={g.categoryId} grid={g} />

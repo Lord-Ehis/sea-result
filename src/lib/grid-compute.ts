@@ -340,3 +340,37 @@ export function performanceSummary(fields: TemplateField[], data: Record<string,
     remark: grid.remarksMap.find((r) => r.grade === grade)?.remarks ?? "",
   };
 }
+
+export type GradeAnalysis = {
+  counts: { grade: string; count: number }[];
+  totalSubjects: number;
+};
+
+/**
+ * "Grade analysis": how many of this student's subjects earned each grade on
+ * the grid's scale (highest band first, zero counts kept so the table has a
+ * stable shape), plus the number of subjects offered. Like the performance
+ * summary, only subjects with a numeric Term Total count — an exempted or
+ * unscored subject isn't "offered". null when there is nothing to analyse.
+ */
+export function gradeAnalysis(fields: TemplateField[], data: Record<string, string>): GradeAnalysis | null {
+  const field = fields.find((f) => f.type === "Grid" && !!f.grid);
+  const grid = field?.grid;
+  if (!field || !grid || grid.gradeBands.length === 0) return null;
+
+  const labels: string[] = [];
+  for (const band of [...grid.gradeBands].sort((a, b) => b.min - a.min)) if (!labels.includes(band.label)) labels.push(band.label);
+  const tally = new Map(labels.map((l) => [l, 0]));
+
+  let totalSubjects = 0;
+  for (const subject of grid.subjects) {
+    const raw = (data[gridKey(field.id, subject.id, "termTotal")] ?? "").trim();
+    if (raw === "" || !Number.isFinite(Number(raw))) continue;
+    totalSubjects++;
+    const grade = data[gridKey(field.id, subject.id, "grade")] ?? "";
+    if (tally.has(grade)) tally.set(grade, (tally.get(grade) ?? 0) + 1);
+  }
+  if (totalSubjects === 0) return null;
+
+  return { counts: labels.map((grade) => ({ grade, count: tally.get(grade) ?? 0 })), totalSubjects };
+}
