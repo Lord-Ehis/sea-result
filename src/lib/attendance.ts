@@ -10,7 +10,7 @@ export function attendanceSummary(fields: TemplateField[], data: Record<string, 
   const read = (role: "opened" | "present") => {
     const field = fields.find((f) => f.attendance === role);
     const raw = field ? (data[field.id] ?? "").trim() : "";
-    return raw === "" || !Number.isFinite(Number(raw)) ? null : Number(raw);
+    return /^d+$/.test(raw) ? Number(raw) : null;
   };
   const opened = read("opened");
   const present = read("present");
