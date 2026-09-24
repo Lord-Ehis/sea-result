@@ -340,3 +340,45 @@ export function performanceSummary(fields: TemplateField[], data: Record<string,
     remark: grid.remarksMap.find((r) => r.grade === grade)?.remarks ?? "",
   };
 }
+
+export type GradeAnalysis = {
+  counts: { grade: string; count: number }[];
+  totalStudents: number;
+  totalSubjects: number;
+};
+
+/**
+ * Class-wide "Grade analysis": how many students in the batch earned each
+ * grade overall (their performance-summary grade, highest band first, zero
+ * counts kept so the table has a stable shape), and how many subjects were
+ * offered — a subject counts once anyone in the class has a numeric Term
+ * Total for it. Batch-wide, so it is computed once at publish time and the
+ * same object goes on every student's result. null when nothing is graded.
+ */
+export function classGradeAnalysis(fields: TemplateField[], studentsData: Record<string, string>[]): GradeAnalysis | null {
+  const field = fields.find((f) => f.type === "Grid" && !!f.grid);
+  const grid = field?.grid;
+  if (!field || !grid || grid.gradeBands.length === 0) return null;
+
+  const labels: string[] = [];
+  for (const band of [...grid.gradeBands].sort((a, b) => b.min - a.min)) if (!labels.includes(band.label)) labels.push(band.label);
+  const tally = new Map(labels.map((l) => [l, 0]));
+
+  let totalStudents = 0;
+  for (const data of studentsData) {
+    const grade = performanceSummary(fields, data)?.grade ?? "";
+    if (!tally.has(grade)) continue;
+    tally.set(grade, (tally.get(grade) ?? 0) + 1);
+    totalStudents++;
+  }
+  if (totalStudents === 0) return null;
+
+  const totalSubjects = grid.subjects.filter((subject) =>
+    studentsData.some((d) => {
+      const raw = (d[gridKey(field.id, subject.id, "termTotal")] ?? "").trim();
+      return raw !== "" && Number.isFinite(Number(raw));
+    }),
+  ).length;
+
+  return { counts: labels.map((grade) => ({ grade, count: tally.get(grade) ?? 0 })), totalStudents, totalSubjects };
+}

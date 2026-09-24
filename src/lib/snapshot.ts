@@ -1,6 +1,6 @@
 import { createHash, randomInt } from "node:crypto";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
-import { buildGridResultData, gradingScaleLegend, performanceSummary, type GridResultData, type GradingScaleLegendEntry, type PerformanceSummary } from "@/lib/grid-compute";
+import { buildGridResultData, gradingScaleLegend, performanceSummary, type GridResultData, type GradingScaleLegendEntry, type PerformanceSummary, type GradeAnalysis } from "@/lib/grid-compute";
 import { attendanceSummary, type AttendanceSummary } from "@/lib/attendance";
 import { buildRatingGridData, type RatingGridData } from "@/lib/rating-grid";
 import type { AnnualSummaryPayload } from "@/lib/annual-summary";
@@ -74,6 +74,9 @@ export type SnapshotPayload = {
   // Total obtained / obtainable / percentage / grade across the grid's
   // subjects — absent when there is nothing to summarise.
   performanceSummary?: PerformanceSummary;
+  // Class-wide: students per overall grade + subjects offered. Batch-wide, so
+  // it is passed in at publish and frozen; absent when nothing is graded.
+  gradeAnalysis?: GradeAnalysis;
   signOff?: SnapshotSignOff;
   // Times opened / present / absent and the percentage — absent when the
   // template has no attendance switch or the numbers aren't there.
@@ -96,6 +99,7 @@ export function buildSnapshotPayload(input: {
   data: Record<string, string>;
   annual?: AnnualSummaryPayload | null;
   signOff?: SnapshotSignOff | null;
+  gradeAnalysis?: GradeAnalysis | null;
   publication: { version: number; verificationCode: string; publishedAt: Date; amendedAt?: Date };
 }): SnapshotPayload {
   const { template, data } = input;
@@ -128,6 +132,7 @@ export function buildSnapshotPayload(input: {
       .map((f) => ({ name: f.name, value: data[f.id] ?? "—" })),
     grids: buildGridResultData(template.fields, data),
     ...(summary ? { performanceSummary: summary } : {}),
+    ...(input.gradeAnalysis ? { gradeAnalysis: input.gradeAnalysis } : {}),
     ...(input.signOff ? { signOff: input.signOff } : {}),
     ...(attendance ? { attendance } : {}),
     // Absent when the template has no categorised rating fields.
