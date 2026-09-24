@@ -114,7 +114,7 @@ export function SnapshotView({ payload, preview = false }: { payload: SnapshotPa
       {ratingGrids && ratingGrids.length > 0 && (
         <div className="mt-4 grid gap-4">
           {ratingGrids.map((g) => (
-            <RatingGridTable key={g.categoryName} grid={g} />
+            <RatingGridTable key={g.categoryId} grid={g} />
           ))}
         </div>
       )}

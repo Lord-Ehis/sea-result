@@ -73,6 +73,9 @@ export type TemplateField = {
   // rating field with no category (older/legacy fields), which renders as a
   // plain row instead of being grouped.
   ratingCategory?: string;
+  // The category's own id — used to group items (names aren't guaranteed
+  // unique; two categories can share a name).
+  ratingCategoryId?: string;
 };
 
 export const gradeBandSchema = z.object({ min: z.number(), max: z.number(), label: z.string() });
@@ -127,4 +130,5 @@ export const fieldSchema = z.object({
   grid: gridConfigSchema.optional(),
   ratingOptions: z.array(z.string()).optional(),
   ratingCategory: z.string().optional(),
+  ratingCategoryId: z.string().optional(),
 });

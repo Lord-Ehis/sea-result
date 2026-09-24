@@ -148,7 +148,7 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
                 <GridResultTable key={gi} grid={g} />
               ))}
               {recent.ratingGrids.map((g) => (
-                <RatingGridTable key={g.categoryName} grid={g} />
+                <RatingGridTable key={g.categoryId} grid={g} />
               ))}
               {recent.gradingScale.length > 0 && <GradingScaleTable bands={recent.gradingScale} />}
               {recent.annual && <AnnualSummaryTable annual={recent.annual} />}
@@ -202,7 +202,7 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
                       <GridResultTable key={gi} grid={g} />
                     ))}
                     {r.ratingGrids.map((g) => (
-                      <RatingGridTable key={g.categoryName} grid={g} />
+                      <RatingGridTable key={g.categoryId} grid={g} />
                     ))}
                     {r.gradingScale.length > 0 && <GradingScaleTable bands={r.gradingScale} />}
                     {r.annual && <AnnualSummaryTable annual={r.annual} />}

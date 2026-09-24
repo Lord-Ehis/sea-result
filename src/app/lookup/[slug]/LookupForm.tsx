@@ -124,7 +124,7 @@ export function LookupForm({ schoolName, slug }: { schoolName: string; slug: str
                           <GridResultTable key={gi2} grid={g} />
                         ))}
                         {r.ratingGrids.map((g) => (
-                          <RatingGridTable key={g.categoryName} grid={g} />
+                          <RatingGridTable key={g.categoryId} grid={g} />
                         ))}
                         {r.gradingScale.length > 0 && <GradingScaleTable bands={r.gradingScale} />}
                         {r.annual && <AnnualSummaryTable annual={r.annual} />}
