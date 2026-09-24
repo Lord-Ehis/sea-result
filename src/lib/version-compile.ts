@@ -34,6 +34,7 @@ export type CompileRatingItem = {
   isEnabled: boolean;
 };
 export type CompileRatingCategory = {
+  name: string;
   displayOrder: number;
   ratingOptions: string[];
   items: CompileRatingItem[];
@@ -130,6 +131,7 @@ export function compileVersionToFields(input: CompileVersionInput): TemplateFiel
         name: item.name,
         type: "Rating scale",
         ratingOptions: category.ratingOptions,
+        ratingCategory: category.name,
       });
     }
   }

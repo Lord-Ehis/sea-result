@@ -1,6 +1,7 @@
 import { createHash, randomInt } from "node:crypto";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
 import { buildGridResultData, gradingScaleLegend, type GridResultData, type GradingScaleLegendEntry } from "@/lib/grid-compute";
+import { buildRatingGridData, type RatingGridData } from "@/lib/rating-grid";
 import type { AnnualSummaryPayload } from "@/lib/annual-summary";
 
 // A published result, frozen. The payload is self-contained — every label,
@@ -41,6 +42,9 @@ export type SnapshotPayload = {
   template: { id: string; name: string; versionId: string | null };
   fields: { name: string; value: string }[];
   grids: GridResultData[];
+  // Categorised "Rating scale" fields (Affective/Psychomotor domain etc.) as
+  // a checkbox-style grid — absent when the template has none.
+  ratingGrids?: RatingGridData[];
   // The template's grade bands/remarks at publish time, for a "Grade Scale"
   // legend — absent when the template has no Grid field or no bands set.
   gradingScale?: GradingScaleLegendEntry[];
@@ -62,6 +66,7 @@ export function buildSnapshotPayload(input: {
 }): SnapshotPayload {
   const { template, data } = input;
   const gradingScale = gradingScaleLegend(template.fields);
+  const ratingGrids = buildRatingGridData(template.fields, data);
   return {
     schemaVersion: 1,
     school: input.school,
@@ -69,9 +74,14 @@ export function buildSnapshotPayload(input: {
     period: input.period,
     template: { id: template.id, name: template.name, versionId: template.versionId },
     // Grid fields have no single value (their cells live under composite
-    // keys) — they're carried separately in `grids`.
-    fields: template.fields.filter((f) => f.type !== "Grid").map((f) => ({ name: f.name, value: data[f.id] ?? "—" })),
+    // keys) — they're carried separately in `grids`. Categorised rating
+    // fields are carried in `ratingGrids` instead of this flat list.
+    fields: template.fields
+      .filter((f) => f.type !== "Grid" && !(f.type === "Rating scale" && f.ratingCategory))
+      .map((f) => ({ name: f.name, value: data[f.id] ?? "—" })),
     grids: buildGridResultData(template.fields, data),
+    // Absent when the template has no categorised rating fields.
+    ...(ratingGrids.length > 0 ? { ratingGrids } : {}),
     // Absent when the template's Grid has no configured bands.
     ...(gradingScale.length > 0 ? { gradingScale } : {}),
     // Absent (not null) when there's no annual summary, so snapshots without

@@ -6,8 +6,11 @@ import { FileText, Plus, ChevronDown } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ComparisonReport } from "@/components/results/ComparisonReport";
 import { GridResultTable } from "@/components/results/GridResultTable";
+import { RatingGridTable } from "@/components/results/RatingGridTable";
+import { GradingScaleTable } from "@/components/results/GradingScaleTable";
 import { FieldValueRow } from "@/components/results/FieldValueRow";
-import type { GridResultData } from "@/lib/grid-compute";
+import type { GridResultData, GradingScaleLegendEntry } from "@/lib/grid-compute";
+import type { RatingGridData } from "@/lib/rating-grid";
 import type { AnnualSummaryPayload } from "@/lib/annual-summary";
 import { AnnualSummaryTable } from "@/components/results/AnnualSummaryTable";
 
@@ -24,6 +27,8 @@ type ResultEntry = {
   intact: boolean;
   fields: { name: string; value: string }[];
   grids: GridResultData[];
+  ratingGrids: RatingGridData[];
+  gradingScale: GradingScaleLegendEntry[];
   annual: AnnualSummaryPayload | null;
 };
 
@@ -142,6 +147,10 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
               {recent.grids.map((g, gi) => (
                 <GridResultTable key={gi} grid={g} />
               ))}
+              {recent.ratingGrids.map((g) => (
+                <RatingGridTable key={g.categoryName} grid={g} />
+              ))}
+              {recent.gradingScale.length > 0 && <GradingScaleTable bands={recent.gradingScale} />}
               {recent.annual && <AnnualSummaryTable annual={recent.annual} />}
               <ResultFooter r={recent} />
             </div>
@@ -192,6 +201,10 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
                     {r.grids.map((g, gi) => (
                       <GridResultTable key={gi} grid={g} />
                     ))}
+                    {r.ratingGrids.map((g) => (
+                      <RatingGridTable key={g.categoryName} grid={g} />
+                    ))}
+                    {r.gradingScale.length > 0 && <GradingScaleTable bands={r.gradingScale} />}
                     {r.annual && <AnnualSummaryTable annual={r.annual} />}
                     <ResultFooter r={r} />
                   </div>

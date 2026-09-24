@@ -67,6 +67,12 @@ export type TemplateField = {
   // fixed 1-5 scale everywhere it's read, so already-published "3"s keep
   // meaning "3 of 5" rather than being silently reinterpreted.
   ratingOptions?: string[];
+  // Only meaningful for type === "Rating scale" — the parent RatingCategory's
+  // name (e.g. "Affective domain"), set by compileVersionToFields so items
+  // can be regrouped into a rating grid at render time. Undefined for a
+  // rating field with no category (older/legacy fields), which renders as a
+  // plain row instead of being grouped.
+  ratingCategory?: string;
 };
 
 export const gradeBandSchema = z.object({ min: z.number(), max: z.number(), label: z.string() });
@@ -120,4 +126,5 @@ export const fieldSchema = z.object({
   formula: formulaSchema.optional(),
   grid: gridConfigSchema.optional(),
   ratingOptions: z.array(z.string()).optional(),
+  ratingCategory: z.string().optional(),
 });
