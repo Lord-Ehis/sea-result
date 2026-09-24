@@ -191,6 +191,7 @@ export function TemplateBuilderClient({
   const [draftGradingScaleId, setDraftGradingScaleId] = useState<string | null>(null);
   const [draftLegacyFields, setDraftLegacyFields] = useState<TemplateField[]>([]);
   const [draftIncludeAnnual, setDraftIncludeAnnual] = useState(false);
+  const [draftIncludeAttendance, setDraftIncludeAttendance] = useState(false);
   const [previewFields, setPreviewFields] = useState<TemplateField[]>([]);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -224,6 +225,7 @@ export function TemplateBuilderClient({
     setDraftGradingScaleId(selectedVersion?.gradingScaleId ?? null);
     setDraftLegacyFields(selectedVersion?.legacyFields ?? []);
     setDraftIncludeAnnual(selectedVersion?.includeAnnualSummary ?? false);
+    setDraftIncludeAttendance(selectedVersion?.includeAttendance ?? false);
     setValidation(null);
     setPreviewFields([]);
   }
@@ -253,12 +255,13 @@ export function TemplateBuilderClient({
         ratingCategories: draftRatingCategories,
         legacyFields: draftLegacyFields,
         includeAnnualSummary: draftIncludeAnnual,
+        includeAttendance: draftIncludeAttendance,
       })
         .then(setPreviewFields)
         .catch(() => {});
     }, 400);
     return () => clearTimeout(handle);
-  }, [selectedVersion, draftGradingScaleId, draftSections, draftRatingCategories, draftLegacyFields, draftIncludeAnnual]);
+  }, [selectedVersion, draftGradingScaleId, draftSections, draftRatingCategories, draftLegacyFields, draftIncludeAnnual, draftIncludeAttendance]);
 
   function updateSelected(patch: Partial<Template>) {
     if (!selected) return;
@@ -350,6 +353,7 @@ export function TemplateBuilderClient({
           ratingCategories: draftRatingCategories,
           legacyFields: draftLegacyFields,
           includeAnnualSummary: draftIncludeAnnual,
+          includeAttendance: draftIncludeAttendance,
         });
         setSavedMessage("Draft saved.");
         setTimeout(() => setSavedMessage(null), 3000);
@@ -724,6 +728,20 @@ export function TemplateBuilderClient({
                       <label className="flex items-center gap-2 text-caption text-text-secondary">
                         <input type="checkbox" checked={draftIncludeAnnual} onChange={(e) => setDraftIncludeAnnual(e.target.checked)} />
                         Show annual summary on 3rd Term results
+                      </label>
+                    </fieldset>
+                  </div>
+
+                  <div className="border-b border-border px-5 py-5">
+                    <h3 className="m-0 mb-1 text-body font-medium text-text-primary">Attendance</h3>
+                    <p className="m-0 mb-3 text-caption text-text-muted">
+                      Teachers enter how many times school opened and how many times each student was present; absences and the attendance percentage are worked out for the
+                      result.
+                    </p>
+                    <fieldset disabled={!isEditableDraft} className="disabled:opacity-60">
+                      <label className="flex items-center gap-2 text-caption text-text-secondary">
+                        <input type="checkbox" checked={draftIncludeAttendance} onChange={(e) => setDraftIncludeAttendance(e.target.checked)} />
+                        Record attendance on results
                       </label>
                     </fieldset>
                   </div>

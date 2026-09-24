@@ -65,6 +65,7 @@ export type TemplateVersionSummary = {
   ratingCategories: RatingCategoryInput[];
   legacyFields: TemplateField[];
   includeAnnualSummary: boolean;
+  includeAttendance: boolean;
 };
 
 export const PRESETS = {
@@ -136,4 +137,5 @@ export const updateVersionDraftSchema = z.object({
   ratingCategories: z.array(ratingCategorySchema),
   legacyFields: z.array(fieldSchema),
   includeAnnualSummary: z.boolean().default(false),
+  includeAttendance: z.boolean().default(false),
 });

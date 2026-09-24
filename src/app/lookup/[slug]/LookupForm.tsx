@@ -7,6 +7,7 @@ import { ComparisonReport } from "@/components/results/ComparisonReport";
 import { GridResultTable } from "@/components/results/GridResultTable";
 import { RatingGridTable } from "@/components/results/RatingGridTable";
 import { GradingScaleTable } from "@/components/results/GradingScaleTable";
+import { AttendanceSummaryBox } from "@/components/results/AttendanceSummaryBox";
 import { PerformanceSummaryBox } from "@/components/results/PerformanceSummaryBox";
 import { AnnualSummaryTable } from "@/components/results/AnnualSummaryTable";
 import { FieldValueRow } from "@/components/results/FieldValueRow";
@@ -124,6 +125,7 @@ export function LookupForm({ schoolName, slug }: { schoolName: string; slug: str
                         {r.grids.map((g, gi2) => (
                           <GridResultTable key={gi2} grid={g} />
                         ))}
+                        {r.attendance && <AttendanceSummaryBox attendance={r.attendance} />}
                         {r.performanceSummary && <PerformanceSummaryBox summary={r.performanceSummary} />}
                         {r.ratingGrids.map((g) => (
                           <RatingGridTable key={g.categoryId} grid={g} />

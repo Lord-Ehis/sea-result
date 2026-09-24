@@ -79,6 +79,10 @@ export type TemplateField = {
   // The category's own id — used to group items (names aren't guaranteed
   // unique; two categories can share a name).
   ratingCategoryId?: string;
+  // Set on the two Number fields compiled for a version's attendance switch
+  // (times school opened / times present); they render as one attendance
+  // summary instead of as plain rows.
+  attendance?: "opened" | "present";
 };
 
 export const gradeBandSchema = z.object({ min: z.number(), max: z.number(), label: z.string() });
@@ -135,4 +139,5 @@ export const fieldSchema = z.object({
   ratingOptions: z.array(z.string()).optional(),
   ratingCategory: z.string().optional(),
   ratingCategoryId: z.string().optional(),
+  attendance: z.enum(["opened", "present"]).optional(),
 });

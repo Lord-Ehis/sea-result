@@ -446,6 +446,10 @@ model TemplateVersion {
   // Show the Term 1–3 annual summary on Term 3 results. Part of the immutable
   // version because it changes what the result contains.
   includeAnnualSummary   Boolean               @default(false)
+  // Ask teachers for times school opened / times present, and show the
+  // attendance summary on results. Part of the immutable version because it
+  // changes what the result contains.
+  includeAttendance      Boolean               @default(false)
   // Snapshot of exactly what was compiled onto ResultTemplate.fields at
   // activation — audit-log-ready even though no audit log exists yet.
   compiledFieldsSnapshot Json?

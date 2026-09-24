@@ -1,6 +1,7 @@
 import { GridResultTable } from "@/components/results/GridResultTable";
 import { RatingGridTable } from "@/components/results/RatingGridTable";
 import { GradingScaleTable } from "@/components/results/GradingScaleTable";
+import { AttendanceSummaryBox } from "@/components/results/AttendanceSummaryBox";
 import { SignOffBlock } from "@/components/results/SignOffBlock";
 import { PerformanceSummaryBox } from "@/components/results/PerformanceSummaryBox";
 import { AnnualSummaryTable } from "@/components/results/AnnualSummaryTable";
@@ -22,7 +23,7 @@ function initialsOf(name: string) {
 // whole result is shown, so they can never drift from each other. Safe to
 // render on the server or the client.
 export function SnapshotView({ payload, preview = false }: { payload: SnapshotPayload; preview?: boolean }) {
-  const { school, student, period, template, fields, grids, ratingGrids, performanceSummary, signOff, gradingScale, annual, publication } = payload;
+  const { school, student, period, template, fields, grids, ratingGrids, performanceSummary, attendance, signOff, gradingScale, annual, publication } = payload;
   const initials = initialsOf(school.name);
   const studentInitials = initialsOf(student.name);
   const bioData = [
@@ -116,6 +117,12 @@ export function SnapshotView({ payload, preview = false }: { payload: SnapshotPa
       {performanceSummary && (
         <div className="mt-4">
           <PerformanceSummaryBox summary={performanceSummary} />
+        </div>
+      )}
+
+      {attendance && (
+        <div className="mt-4">
+          <AttendanceSummaryBox attendance={attendance} />
         </div>
       )}
 
