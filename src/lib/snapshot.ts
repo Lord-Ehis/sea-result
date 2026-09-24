@@ -1,6 +1,6 @@
 import { createHash, randomInt } from "node:crypto";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
-import { buildGridResultData, type GridResultData } from "@/lib/grid-compute";
+import { buildGridResultData, gradingScaleLegend, type GridResultData, type GradingScaleLegendEntry } from "@/lib/grid-compute";
 import type { AnnualSummaryPayload } from "@/lib/annual-summary";
 
 // A published result, frozen. The payload is self-contained — every label,
@@ -41,6 +41,9 @@ export type SnapshotPayload = {
   template: { id: string; name: string; versionId: string | null };
   fields: { name: string; value: string }[];
   grids: GridResultData[];
+  // The template's grade bands/remarks at publish time, for a "Grade Scale"
+  // legend — absent when the template has no Grid field or no bands set.
+  gradingScale?: GradingScaleLegendEntry[];
   // Only on a 3rd Term result of an annual-enabled template. Part of the
   // checksummed payload, so the weights and sources it was built from are
   // frozen with it.
@@ -58,6 +61,7 @@ export function buildSnapshotPayload(input: {
   publication: { version: number; verificationCode: string; publishedAt: Date; amendedAt?: Date };
 }): SnapshotPayload {
   const { template, data } = input;
+  const gradingScale = gradingScaleLegend(template.fields);
   return {
     schemaVersion: 1,
     school: input.school,
@@ -68,6 +72,8 @@ export function buildSnapshotPayload(input: {
     // keys) — they're carried separately in `grids`.
     fields: template.fields.filter((f) => f.type !== "Grid").map((f) => ({ name: f.name, value: data[f.id] ?? "—" })),
     grids: buildGridResultData(template.fields, data),
+    // Absent when the template's Grid has no configured bands.
+    ...(gradingScale.length > 0 ? { gradingScale } : {}),
     // Absent (not null) when there's no annual summary, so snapshots without
     // one keep exactly the shape — and checksum — they were published with.
     ...(input.annual ? { annual: input.annual } : {}),
