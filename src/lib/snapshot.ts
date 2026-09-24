@@ -1,6 +1,6 @@
 import { createHash, randomInt } from "node:crypto";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
-import { buildGridResultData, gradingScaleLegend, type GridResultData, type GradingScaleLegendEntry } from "@/lib/grid-compute";
+import { buildGridResultData, gradingScaleLegend, performanceSummary, type GridResultData, type GradingScaleLegendEntry, type PerformanceSummary } from "@/lib/grid-compute";
 import { buildRatingGridData, type RatingGridData } from "@/lib/rating-grid";
 import type { AnnualSummaryPayload } from "@/lib/annual-summary";
 
@@ -45,6 +45,9 @@ export type SnapshotPayload = {
   // Categorised "Rating scale" fields (Affective/Psychomotor domain etc.) as
   // a checkbox-style grid — absent when the template has none.
   ratingGrids?: RatingGridData[];
+  // Total obtained / obtainable / percentage / grade across the grid's
+  // subjects — absent when there is nothing to summarise.
+  performanceSummary?: PerformanceSummary;
   // The template's grade bands/remarks at publish time, for a "Grade Scale"
   // legend — absent when the template has no Grid field or no bands set.
   gradingScale?: GradingScaleLegendEntry[];
@@ -67,6 +70,7 @@ export function buildSnapshotPayload(input: {
   const { template, data } = input;
   const gradingScale = gradingScaleLegend(template.fields);
   const ratingGrids = buildRatingGridData(template.fields, data);
+  const summary = performanceSummary(template.fields, data);
   return {
     schemaVersion: 1,
     school: input.school,
@@ -80,6 +84,7 @@ export function buildSnapshotPayload(input: {
       .filter((f) => f.type !== "Grid" && !(f.type === "Rating scale" && f.ratingCategory))
       .map((f) => ({ name: f.name, value: data[f.id] ?? "—" })),
     grids: buildGridResultData(template.fields, data),
+    ...(summary ? { performanceSummary: summary } : {}),
     // Absent when the template has no categorised rating fields.
     ...(ratingGrids.length > 0 ? { ratingGrids } : {}),
     // Absent when the template's Grid has no configured bands.

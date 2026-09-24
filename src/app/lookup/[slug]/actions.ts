@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import type { GridResultData, GradingScaleLegendEntry } from "@/lib/grid-compute";
+import type { GridResultData, GradingScaleLegendEntry, PerformanceSummary } from "@/lib/grid-compute";
 import type { RatingGridData } from "@/lib/rating-grid";
 import { isSnapshotIntact, type SnapshotPayload } from "@/lib/snapshot";
 import type { AnnualSummaryPayload } from "@/lib/annual-summary";
@@ -34,6 +34,7 @@ export type LookupResult = {
     fields: { name: string; value: string }[];
     grids: GridResultData[];
     ratingGrids: RatingGridData[];
+    performanceSummary: PerformanceSummary | null;
     gradingScale: GradingScaleLegendEntry[];
     annual: AnnualSummaryPayload | null;
   }[];
@@ -94,6 +95,7 @@ export async function lookupStudentResult(input: { slug: string; studentCode: st
         fields: intact ? payload.fields : [],
         grids: intact ? payload.grids : [],
         ratingGrids: intact ? (payload.ratingGrids ?? []) : [],
+        performanceSummary: intact ? (payload.performanceSummary ?? null) : null,
         gradingScale: intact ? (payload.gradingScale ?? []) : [],
         annual: intact ? (payload.annual ?? null) : null,
       };

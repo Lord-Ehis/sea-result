@@ -61,6 +61,7 @@ export default async function ParentDashboardPage() {
             fields: intact ? payload.fields : [],
             grids: intact ? payload.grids : [],
             ratingGrids: intact ? (payload.ratingGrids ?? []) : [],
+            performanceSummary: intact ? (payload.performanceSummary ?? null) : null,
             gradingScale: intact ? (payload.gradingScale ?? []) : [],
             annual: intact ? (payload.annual ?? null) : null,
           };

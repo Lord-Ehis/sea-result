@@ -8,8 +8,9 @@ import { ComparisonReport } from "@/components/results/ComparisonReport";
 import { GridResultTable } from "@/components/results/GridResultTable";
 import { RatingGridTable } from "@/components/results/RatingGridTable";
 import { GradingScaleTable } from "@/components/results/GradingScaleTable";
+import { PerformanceSummaryBox } from "@/components/results/PerformanceSummaryBox";
 import { FieldValueRow } from "@/components/results/FieldValueRow";
-import type { GridResultData, GradingScaleLegendEntry } from "@/lib/grid-compute";
+import type { GridResultData, GradingScaleLegendEntry, PerformanceSummary } from "@/lib/grid-compute";
 import type { RatingGridData } from "@/lib/rating-grid";
 import type { AnnualSummaryPayload } from "@/lib/annual-summary";
 import { AnnualSummaryTable } from "@/components/results/AnnualSummaryTable";
@@ -28,6 +29,7 @@ type ResultEntry = {
   fields: { name: string; value: string }[];
   grids: GridResultData[];
   ratingGrids: RatingGridData[];
+  performanceSummary: PerformanceSummary | null;
   gradingScale: GradingScaleLegendEntry[];
   annual: AnnualSummaryPayload | null;
 };
@@ -147,6 +149,7 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
               {recent.grids.map((g, gi) => (
                 <GridResultTable key={gi} grid={g} />
               ))}
+              {recent.performanceSummary && <PerformanceSummaryBox summary={recent.performanceSummary} />}
               {recent.ratingGrids.map((g) => (
                 <RatingGridTable key={g.categoryId} grid={g} />
               ))}
@@ -201,6 +204,7 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
                     {r.grids.map((g, gi) => (
                       <GridResultTable key={gi} grid={g} />
                     ))}
+                    {r.performanceSummary && <PerformanceSummaryBox summary={r.performanceSummary} />}
                     {r.ratingGrids.map((g) => (
                       <RatingGridTable key={g.categoryId} grid={g} />
                     ))}
