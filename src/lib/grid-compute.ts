@@ -1,5 +1,6 @@
 import type { TemplateField } from "@/app/admin/result-templates/actions";
 import { SCORE_STATE_LABEL, explicitScoreState, formatScore } from "@/lib/score-state";
+import { gradeForValue } from "@/lib/grade-lookup";
 
 // Pure translation layer for the "Grid" field type (a subjects × columns
 // table, e.g. a report card's Cognitive Domain section). Rather than a
@@ -290,4 +291,52 @@ export function gradingScaleLegend(fields: TemplateField[]): GradingScaleLegendE
   return [...grid.gradeBands]
     .sort((a, b) => b.min - a.min)
     .map((b) => ({ gradeCode: b.label, minScore: b.min, maxScore: b.max, remark: remarkFor.get(b.label) ?? "" }));
+}
+
+export type PerformanceSummary = {
+  totalObtained: number;
+  totalObtainable: number;
+  percentage: string;
+  grade: string;
+  remark: string;
+};
+
+/**
+ * Overall performance across a Grid's subjects: total obtained, total
+ * obtainable, percentage, and the grade/remark that percentage earns on the
+ * grid's own scale. Only subjects with a numeric Term Total count — a
+ * subject the student was exempted from or has no score in adds nothing to
+ * either side, so it can't drag the percentage down. null when there is
+ * nothing to summarise.
+ */
+export function performanceSummary(fields: TemplateField[], data: Record<string, string>): PerformanceSummary | null {
+  const field = fields.find((f) => f.type === "Grid" && !!f.grid);
+  const grid = field?.grid;
+  if (!field || !grid) return null;
+
+  const weighted = grid.weighted === true && grid.rawColumns.every((c) => typeof c.weight === "number");
+  const perSubjectMax = weighted ? grid.rawColumns.reduce((sum, c) => sum + (c.weight ?? 0), 0) : grid.rawColumns.reduce((sum, c) => sum + c.maxMark, 0);
+
+  let totalObtained = 0;
+  let counted = 0;
+  for (const subject of grid.subjects) {
+    const raw = (data[gridKey(field.id, subject.id, "termTotal")] ?? "").trim();
+    if (raw === "") continue;
+    const value = Number(raw);
+    if (!Number.isFinite(value)) continue;
+    totalObtained += value;
+    counted++;
+  }
+  const totalObtainable = counted * perSubjectMax;
+  if (counted === 0 || totalObtainable <= 0) return null;
+
+  const percentage = (totalObtained / totalObtainable) * 100;
+  const grade = gradeForValue(percentage, grid.gradeBands);
+  return {
+    totalObtained: Math.round(totalObtained * 100) / 100,
+    totalObtainable,
+    percentage: percentage.toFixed(1),
+    grade,
+    remark: grid.remarksMap.find((r) => r.grade === grade)?.remarks ?? "",
+  };
 }
