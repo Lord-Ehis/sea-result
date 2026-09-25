@@ -11,6 +11,14 @@ import { AnnualSummaryTable } from "@/components/results/AnnualSummaryTable";
 import { SchoolLogo } from "@/components/results/SchoolLogo";
 import { StudentPhoto } from "@/components/results/StudentPhoto";
 import type { SnapshotPayload } from "@/lib/snapshot";
+import { ordinal } from "@/lib/template-compute";
+
+// "Term 1" reads as "1st Term" on a report card; a label already in another
+// form ("1st Term", "First Term") is left as the school wrote it.
+function termTitle(term: string) {
+  const m = /^term\s*(\d)$/i.exec(term.trim());
+  return m ? `${ordinal(Number(m[1]))} Term` : term;
+}
 
 function initialsOf(name: string) {
   return name
@@ -65,7 +73,7 @@ export function SnapshotView({ payload, preview = false }: { payload: SnapshotPa
 
       <div className="py-3 text-center">
         <strong className="block text-body font-semibold uppercase tracking-wide">
-          {period.term} Student&apos;s Performance Report
+          {termTitle(period.term)} Student&apos;s Performance Report
         </strong>
         <span className="text-[10px] text-text-muted">{template.name}</span>
       </div>
