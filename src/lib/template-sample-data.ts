@@ -23,9 +23,13 @@ export function sampleDataFor(fields: TemplateField[]): Record<string, string> {
         }
       });
     } else if (field.type === "Rating scale") {
-        const options = ratingOptionsFor(field);
-        // Skews toward the better end of the scale (index 0), like a real class.
-        data[field.id] = options[Math.abs(hash(field.id)) % Math.min(2, options.length)] ?? options[0] ?? "";
+      const options = ratingOptionsFor(field);
+      // Which end of the scale is "best" isn't knowable from the options
+      // alone — some schools list 5 (best) first, others list 1 (worst)
+      // first — so this picks a plausible-looking option anywhere in the
+      // scale rather than assuming a direction and risking every item
+      // looking like the worst possible rating.
+      data[field.id] = options[Math.abs(hash(field.id)) % options.length] ?? "";
     } else if (field.type === "Number") {
       if (field.attendance === "opened") data[field.id] = "150";
       else if (field.attendance === "present") data[field.id] = "143";
