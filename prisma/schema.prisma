@@ -175,6 +175,7 @@ model School {
   annualSettings       AnnualSummarySettings?
   termExceptions       StudentTermException[]
   resultSnapshots      PublishedResultSnapshot[]
+  subjectLists         SubjectList[]
 
   @@map("schools")
 }
@@ -549,6 +550,27 @@ model GradingScaleBand {
   @@index([schoolId])
   @@index([gradingScaleId])
   @@map("grading_scale_bands")
+}
+
+// A school-saved subject list ("SS2 Science", "JSS Core", ...) — just names,
+// in order, reused to quick-fill a new draft's subjects instead of typing
+// them one by one every term. Deliberately separate from a version's
+// TemplateSection/AssessmentComponent rows: a subject list outlives any one
+// version and carries no scoring shape (that still comes from a component
+// preset, chosen alongside it when filling a draft).
+model SubjectList {
+  id        String   @id @default(cuid())
+  schoolId  String
+  name      String
+  subjects  Json // string[], in order
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+  @@map("subject_lists")
 }
 
 model RatingCategory {
