@@ -7,6 +7,7 @@ import { createTemplate, updateTemplateMeta, type TemplateField, type ComputedFo
 import {
   activateVersion,
   createDraftVersion,
+  createSubjectList,
   duplicateActiveVersionIntoDraft,
   getTemplateVersions,
   previewCompiledFields,
@@ -17,7 +18,17 @@ import { GradeBandsEditor } from "./GradeBandsEditor";
 import { SectionsEditor } from "./SectionsEditor";
 import { GradingScaleEditor } from "./GradingScaleEditor";
 import { RatingCategoriesEditor } from "./RatingCategoriesEditor";
-import { PRESETS, type GradingScaleSummary, type PresetKey, type RatingCategoryInput, type SectionInput, type TemplateVersionSummary } from "./version-types";
+import {
+  PRESETS,
+  SUBJECT_LIST_STARTERS,
+  type GradingScaleSummary,
+  type PresetKey,
+  type RatingCategoryInput,
+  type SectionInput,
+  type SubjectListStarterKey,
+  type SubjectListSummary,
+  type TemplateVersionSummary,
+} from "./version-types";
 import type { ValidationResult } from "@/lib/version-validate";
 import { TERM_NUMBERS, isTermNumber, termLabel } from "@/lib/term-number";
 import type { AnnualSettings } from "@/lib/annual-summary";
@@ -103,6 +114,7 @@ export function TemplateBuilderClient({
   classes,
   levels,
   initialGradingScales,
+  initialSubjectLists,
   annualSettings,
   school,
 }: {
@@ -110,12 +122,15 @@ export function TemplateBuilderClient({
   classes: ClassOption[];
   levels: string[];
   initialGradingScales: GradingScaleSummary[];
+  initialSubjectLists: SubjectListSummary[];
   annualSettings: AnnualSettings;
   school: BuilderSchool;
 }) {
   const [templates, setTemplates] = useState(initialTemplates);
   const [selectedId, setSelectedId] = useState<string | null>(initialTemplates[0]?.id ?? null);
   const [gradingScales, setGradingScales] = useState(initialGradingScales);
+  const [subjectLists, setSubjectLists] = useState(initialSubjectLists);
+  const [savingSubjectList, setSavingSubjectList] = useState(false);
   const [versions, setVersions] = useState<TemplateVersionSummary[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [loadingVersions, setLoadingVersions] = useState(false);
@@ -256,11 +271,35 @@ export function TemplateBuilderClient({
     });
   }
 
-  function handleNewDraft(preset?: PresetKey) {
+  function handleNewDraft(preset?: PresetKey, subjects?: string[]) {
     if (!selected) return;
     startTransition(async () => {
-      const id = await createDraftVersion(selected.id, preset ? { preset } : undefined);
+      const id = await createDraftVersion(selected.id, preset || subjects ? { preset, subjects } : undefined);
       await refreshVersions(id);
+    });
+  }
+
+  function handleSaveSubjectList() {
+    if (draftSections.length === 0) return;
+    const name = window.prompt("Name this subject list (e.g. \"SS2 Science\") so it can be reused for other classes or terms:");
+    if (!name || !name.trim()) return;
+    setSavingSubjectList(true);
+    setError(null);
+    startTransition(async () => {
+      try {
+        const subjects = draftSections.map((s) => s.name).filter((n) => n.trim());
+        const id = await createSubjectList({ name: name.trim(), subjects });
+        setSubjectLists((prev) => {
+          const withoutSame = prev.filter((l) => l.name !== name.trim());
+          return [...withoutSame, { id, name: name.trim(), subjects }].sort((a, b) => a.name.localeCompare(b.name));
+        });
+        setSavedMessage(`Saved subject list "${name.trim()}".`);
+        setTimeout(() => setSavedMessage(null), 3000);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not save the subject list.");
+      } finally {
+        setSavingSubjectList(false);
+      }
     });
   }
 
@@ -557,7 +596,13 @@ export function TemplateBuilderClient({
                         const value = e.target.value;
                         e.target.value = "";
                         if (value === "__blank__") handleNewDraft();
-                        else if (value) handleNewDraft(value as PresetKey);
+                        else if (value.startsWith("starter:")) {
+                          const key = value.slice("starter:".length) as SubjectListStarterKey;
+                          handleNewDraft(undefined, [...SUBJECT_LIST_STARTERS[key].subjects]);
+                        } else if (value.startsWith("list:")) {
+                          const list = subjectLists.find((l) => l.id === value.slice("list:".length));
+                          if (list) handleNewDraft(undefined, list.subjects);
+                        } else if (value) handleNewDraft(value as PresetKey);
                       }}
                       defaultValue=""
                       disabled={pending}
@@ -572,6 +617,22 @@ export function TemplateBuilderClient({
                           From preset: {preset.label}
                         </option>
                       ))}
+                      {subjectLists.length > 0 && (
+                        <optgroup label="From your saved subject lists (Simple 40/60 scoring)">
+                          {subjectLists.map((list) => (
+                            <option key={list.id} value={`list:${list.id}`}>
+                              {list.name} ({list.subjects.length} subjects)
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      <optgroup label="From a starter subject list (Simple 40/60 scoring)">
+                        {Object.entries(SUBJECT_LIST_STARTERS).map(([key, starter]) => (
+                          <option key={key} value={`starter:${key}`}>
+                            {starter.label} ({starter.subjects.length} subjects)
+                          </option>
+                        ))}
+                      </optgroup>
                     </select>
                     <button
                       type="button"
@@ -673,7 +734,18 @@ export function TemplateBuilderClient({
                   )}
 
                   <div className="border-b border-border px-5 py-5">
-                    <h3 className="m-0 mb-3 text-body font-medium text-text-primary">Subjects &amp; assessment components</h3>
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="m-0 text-body font-medium text-text-primary">Subjects &amp; assessment components</h3>
+                      <button
+                        type="button"
+                        onClick={handleSaveSubjectList}
+                        disabled={!isEditableDraft || pending || savingSubjectList || draftSections.length === 0}
+                        className="h-7 rounded-md border border-dashed border-border px-2.5 text-[10px] font-medium text-primary disabled:opacity-40"
+                        title="Save just these subjects' names, so a new draft for another class or term can start from them instead of being typed out again."
+                      >
+                        Save these subject names as a list
+                      </button>
+                    </div>
                     <fieldset disabled={!isEditableDraft} className="disabled:opacity-60">
                       <SectionsEditor sections={draftSections} onChange={setDraftSections} />
                     </fieldset>

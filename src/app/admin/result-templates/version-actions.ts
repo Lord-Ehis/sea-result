@@ -10,6 +10,7 @@ import type { TemplateField } from "./field-schemas";
 import { UserError, toResult, type ActionResult } from "@/lib/user-error";
 import { compileVersionToFields, type CompileVersionInput } from "@/lib/version-compile";
 import { validateVersionConfig, type ValidationResult } from "@/lib/version-validate";
+import { z } from "zod";
 import {
   PRESETS,
   updateVersionDraftSchema,
@@ -17,6 +18,7 @@ import {
   type PresetKey,
   type RatingCategoryInput,
   type SectionInput,
+  type SubjectListSummary,
   type TemplateVersionSummary,
 } from "./version-types";
 
@@ -107,7 +109,7 @@ export async function getTemplateVersions(templateId: string): Promise<TemplateV
 
 export async function createDraftVersion(
   templateId: string,
-  opts?: { fromVersionId?: string; preset?: PresetKey },
+  opts?: { fromVersionId?: string; preset?: PresetKey; subjects?: string[] },
 ): Promise<string> {
   const { schoolId, userId } = await requireSchoolAdmin();
 
@@ -158,28 +160,51 @@ export async function createDraftVersion(
               },
             })),
           }
-        : opts?.preset
+        : opts?.subjects && opts.subjects.length > 0
           ? {
-              create: [
-                {
-                  schoolId,
-                  name: "Sample subject",
-                  displayOrder: 0,
-                  components: {
-                    create: PRESETS[opts.preset].components.map((c, i) => ({
-                      schoolId,
-                      componentName: c.componentName,
-                      componentCode: c.componentCode,
-                      maxScore: c.maxScore,
-                      weightPercent: c.weightPercent,
-                      displayOrder: i,
-                      isRequired: true,
-                    })),
-                  },
+              // A whole subject list at once: every name gets the chosen
+              // (or default) component preset's shape, ready to fine-tune —
+              // the same shape a lone "From preset" draft's one sample
+              // subject gets, just applied to every name in the list.
+              create: opts.subjects.map((name, si) => ({
+                schoolId,
+                name,
+                displayOrder: si,
+                components: {
+                  create: PRESETS[opts.preset ?? "simple-40-60"].components.map((c, i) => ({
+                    schoolId,
+                    componentName: c.componentName,
+                    componentCode: c.componentCode,
+                    maxScore: c.maxScore,
+                    weightPercent: c.weightPercent,
+                    displayOrder: i,
+                    isRequired: true,
+                  })),
                 },
-              ],
+              })),
             }
-          : undefined,
+          : opts?.preset
+            ? {
+                create: [
+                  {
+                    schoolId,
+                    name: "Sample subject",
+                    displayOrder: 0,
+                    components: {
+                      create: PRESETS[opts.preset].components.map((c, i) => ({
+                        schoolId,
+                        componentName: c.componentName,
+                        componentCode: c.componentCode,
+                        maxScore: c.maxScore,
+                        weightPercent: c.weightPercent,
+                        displayOrder: i,
+                        isRequired: true,
+                      })),
+                    },
+                  },
+                ],
+              }
+            : undefined,
       ratingCategories: source
         ? {
             create: source.ratingCategories.map((cat) => ({
@@ -711,4 +736,37 @@ export async function createGradingScale(input: {
 
   revalidatePath("/admin/result-templates");
   return scale.id;
+}
+
+export async function listSubjectLists(): Promise<SubjectListSummary[]> {
+  const { schoolId } = await requireSchoolAdmin();
+  const lists = await prisma.subjectList.findMany({ where: { schoolId }, orderBy: { name: "asc" } });
+  return lists.map((l) => ({
+    id: l.id,
+    name: l.name,
+    subjects: Array.isArray(l.subjects) ? (l.subjects as string[]) : [],
+  }));
+}
+
+const createSubjectListSchema = z.object({
+  name: z.string().trim().min(1, "Name is required.").max(120),
+  subjects: z.array(z.string().trim().min(1)).min(1, "Add at least one subject first."),
+});
+
+// Saves a draft's current subject names (not their scoring shape — that
+// still comes from a component preset, picked separately when the list is
+// applied) as a reusable, named list, so it doesn't have to be rebuilt by
+// hand next term or for another class at the same level.
+export async function createSubjectList(input: { name: string; subjects: string[] }): Promise<string> {
+  const { schoolId } = await requireSchoolAdmin();
+  const parsed = createSubjectListSchema.parse(input);
+
+  const list = await prisma.subjectList.upsert({
+    where: { schoolId_name: { schoolId, name: parsed.name } },
+    create: { schoolId, name: parsed.name, subjects: parsed.subjects },
+    update: { subjects: parsed.subjects },
+  });
+
+  revalidatePath("/admin/result-templates");
+  return list.id;
 }

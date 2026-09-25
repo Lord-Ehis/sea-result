@@ -1,14 +1,14 @@
 import { requireFullAdminPage } from "@/lib/admin-access";
 import { prisma } from "@/lib/prisma";
 import { TemplateBuilderClient } from "./TemplateBuilderClient";
-import { listGradingScales } from "./version-actions";
+import { listGradingScales, listSubjectLists } from "./version-actions";
 import type { TemplateField } from "./actions";
 import { loadAnnualSettings } from "@/lib/annual-context";
 
 export default async function ResultTemplatesPage() {
   const { schoolId } = await requireFullAdminPage();
 
-  const [templates, classes, gradingScales, annualSettings, school] = await Promise.all([
+  const [templates, classes, gradingScales, subjectLists, annualSettings, school] = await Promise.all([
     prisma.resultTemplate.findMany({
       where: { schoolId },
       include: { class: true },
@@ -16,6 +16,7 @@ export default async function ResultTemplatesPage() {
     }),
     prisma.class.findMany({ where: { schoolId }, orderBy: { name: "asc" } }),
     listGradingScales(),
+    listSubjectLists(),
     loadAnnualSettings(schoolId),
     prisma.school.findUniqueOrThrow({
       where: { id: schoolId },
@@ -44,6 +45,7 @@ export default async function ResultTemplatesPage() {
       classes={classes.map((c) => ({ id: c.id, name: c.name }))}
       levels={levels}
       initialGradingScales={gradingScales}
+      initialSubjectLists={subjectLists}
       annualSettings={annualSettings}
     />
   );
