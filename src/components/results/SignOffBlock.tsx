@@ -14,7 +14,8 @@ function SignOffImage({ src, className }: { src: string; className: string }) {
 
 // Teacher and principal (with signature lines), the school stamp, and when
 // the next term begins — the foot of a report card.
-export function SignOffBlock({ signOff }: { signOff: SnapshotSignOff }) {
+export function SignOffBlock({ signOff, issuedOn }: { signOff: SnapshotSignOff; issuedOn?: string | null }) {
+  const issued = issuedOn ? new Date(issuedOn).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : null;
   const nextTerm = signOff.nextTermBegins ? new Date(signOff.nextTermBegins).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }) : null;
   const signers = [
     { role: "Teacher", name: signOff.teacherName, signature: null },
@@ -32,7 +33,10 @@ export function SignOffBlock({ signOff }: { signOff: SnapshotSignOff }) {
               <div className="mt-2 flex h-12 items-end border-b border-text-muted/50">
                 {s.signature && <SignOffImage src={s.signature} className="max-h-12 object-contain" />}
               </div>
-              <span className="mt-0.5 block text-[10px] text-text-muted">Signature</span>
+              <span className="mt-0.5 flex justify-between text-[10px] text-text-muted">
+                <span>Signature</span>
+                {issued && <span>Date: {issued}</span>}
+              </span>
             </div>
           ))}
         </div>

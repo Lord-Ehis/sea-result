@@ -83,6 +83,11 @@ export type TemplateField = {
   // (times school opened / times present); they render as one attendance
   // summary instead of as plain rows.
   attendance?: "opened" | "present";
+  // Set on the two Text fields compiled for a version's remarks switch; they
+  // print as boxed remarks instead of plain rows.
+  remark?: "teacher" | "principal";
+  // What each rating option means, by index (a category-level legend).
+  ratingMeanings?: string[];
 };
 
 export const gradeBandSchema = z.object({ min: z.number(), max: z.number(), label: z.string() });
@@ -140,4 +145,6 @@ export const fieldSchema = z.object({
   ratingCategory: z.string().optional(),
   ratingCategoryId: z.string().optional(),
   attendance: z.enum(["opened", "present"]).optional(),
+  remark: z.enum(["teacher", "principal"]).optional(),
+  ratingMeanings: z.array(z.string()).optional(),
 });

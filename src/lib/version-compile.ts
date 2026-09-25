@@ -38,6 +38,7 @@ export type CompileRatingCategory = {
   name: string;
   displayOrder: number;
   ratingOptions: string[];
+  ratingMeanings?: string[];
   items: CompileRatingItem[];
 };
 export type CompileGradingScale = {
@@ -52,6 +53,7 @@ export type CompileVersionInput = {
   resolvedGradingScale: CompileGradingScale | null;
   includeAnnualSummary?: boolean;
   includeAttendance?: boolean;
+  includeRemarks?: boolean;
 };
 
 // The legacy Grid model has ONE shared score-column list applied to every
@@ -118,6 +120,16 @@ function buildGrid(input: CompileVersionInput): GridConfig {
 export const ATTENDANCE_OPENED_ID = "attendance-opened";
 export const ATTENDANCE_PRESENT_ID = "attendance-present";
 
+export const REMARK_TEACHER_ID = "remark-teacher";
+export const REMARK_PRINCIPAL_ID = "remark-principal";
+
+function remarkFields(): TemplateField[] {
+  return [
+    { id: REMARK_TEACHER_ID, name: "Teacher's remark", type: "Text", remark: "teacher" },
+    { id: REMARK_PRINCIPAL_ID, name: "Principal's remark", type: "Text", remark: "principal" },
+  ];
+}
+
 function attendanceFields(): TemplateField[] {
   return [
     { id: ATTENDANCE_OPENED_ID, name: "Times school opened", type: "Number", attendance: "opened" },
@@ -145,6 +157,8 @@ export function compileVersionToFields(input: CompileVersionInput): TemplateFiel
         name: item.name,
         type: "Rating scale",
         ratingOptions: category.ratingOptions,
+        // Only written when set, so a category without meanings compiles as it always did.
+        ...(category.ratingMeanings?.some((m) => m.trim()) ? { ratingMeanings: category.ratingMeanings } : {}),
         ratingCategory: category.name,
         // Grouping key — unlike the name, guaranteed unique, so two
         // differently-named-the-same categories never merge into one grid.
@@ -154,6 +168,7 @@ export function compileVersionToFields(input: CompileVersionInput): TemplateFiel
   }
 
   if (input.includeAttendance) fields.push(...attendanceFields());
+  if (input.includeRemarks) fields.push(...remarkFields());
 
   return [...fields, ...input.legacyFields];
 }

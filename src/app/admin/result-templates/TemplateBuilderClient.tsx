@@ -192,6 +192,7 @@ export function TemplateBuilderClient({
   const [draftLegacyFields, setDraftLegacyFields] = useState<TemplateField[]>([]);
   const [draftIncludeAnnual, setDraftIncludeAnnual] = useState(false);
   const [draftIncludeAttendance, setDraftIncludeAttendance] = useState(false);
+  const [draftIncludeRemarks, setDraftIncludeRemarks] = useState(false);
   const [previewFields, setPreviewFields] = useState<TemplateField[]>([]);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -226,6 +227,7 @@ export function TemplateBuilderClient({
     setDraftLegacyFields(selectedVersion?.legacyFields ?? []);
     setDraftIncludeAnnual(selectedVersion?.includeAnnualSummary ?? false);
     setDraftIncludeAttendance(selectedVersion?.includeAttendance ?? false);
+    setDraftIncludeRemarks(selectedVersion?.includeRemarks ?? false);
     setValidation(null);
     setPreviewFields([]);
   }
@@ -256,12 +258,13 @@ export function TemplateBuilderClient({
         legacyFields: draftLegacyFields,
         includeAnnualSummary: draftIncludeAnnual,
         includeAttendance: draftIncludeAttendance,
+        includeRemarks: draftIncludeRemarks,
       })
         .then(setPreviewFields)
         .catch(() => {});
     }, 400);
     return () => clearTimeout(handle);
-  }, [selectedVersion, draftGradingScaleId, draftSections, draftRatingCategories, draftLegacyFields, draftIncludeAnnual, draftIncludeAttendance]);
+  }, [selectedVersion, draftGradingScaleId, draftSections, draftRatingCategories, draftLegacyFields, draftIncludeAnnual, draftIncludeAttendance, draftIncludeRemarks]);
 
   function updateSelected(patch: Partial<Template>) {
     if (!selected) return;
@@ -354,6 +357,7 @@ export function TemplateBuilderClient({
           legacyFields: draftLegacyFields,
           includeAnnualSummary: draftIncludeAnnual,
           includeAttendance: draftIncludeAttendance,
+          includeRemarks: draftIncludeRemarks,
         });
         setSavedMessage("Draft saved.");
         setTimeout(() => setSavedMessage(null), 3000);
@@ -742,6 +746,10 @@ export function TemplateBuilderClient({
                       <label className="flex items-center gap-2 text-caption text-text-secondary">
                         <input type="checkbox" checked={draftIncludeAttendance} onChange={(e) => setDraftIncludeAttendance(e.target.checked)} />
                         Record attendance on results
+                      </label>
+                      <label className="mt-2 flex items-center gap-2 text-caption text-text-secondary">
+                        <input type="checkbox" checked={draftIncludeRemarks} onChange={(e) => setDraftIncludeRemarks(e.target.checked)} />
+                        Teacher&apos;s and principal&apos;s remarks on results
                       </label>
                     </fieldset>
                   </div>

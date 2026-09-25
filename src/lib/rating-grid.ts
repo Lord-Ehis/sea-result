@@ -17,6 +17,8 @@ export type RatingGridData = {
   categoryId: string;
   categoryName: string;
   options: string[];
+  // What each option means, by index — only present when the template set some.
+  meanings?: string[];
   items: { id: string; name: string; value: string }[];
 };
 
@@ -37,6 +39,7 @@ export function buildRatingGridData(fields: TemplateField[], data: Record<string
       categoryId,
       categoryName: items[0]?.ratingCategory ?? "",
       options: items[0]?.ratingOptions ?? [],
+      ...(items[0]?.ratingMeanings?.some((m) => m.trim()) ? { meanings: items[0].ratingMeanings } : {}),
       items: items.map((f) => ({ id: f.id, name: f.name, value: data[f.id] ?? "" })),
     };
   });

@@ -3,12 +3,22 @@ import { RatingGridTable } from "@/components/results/RatingGridTable";
 import { GradingScaleTable } from "@/components/results/GradingScaleTable";
 import { AttendanceSummaryBox } from "@/components/results/AttendanceSummaryBox";
 import { SignOffBlock } from "@/components/results/SignOffBlock";
+import { RatingIndicesLegend } from "@/components/results/RatingIndicesLegend";
+import { RemarksBox } from "@/components/results/RemarksBox";
 import { GradeAnalysisTable } from "@/components/results/GradeAnalysisTable";
 import { PerformanceSummaryBox } from "@/components/results/PerformanceSummaryBox";
 import { AnnualSummaryTable } from "@/components/results/AnnualSummaryTable";
 import { SchoolLogo } from "@/components/results/SchoolLogo";
 import { StudentPhoto } from "@/components/results/StudentPhoto";
 import type { SnapshotPayload } from "@/lib/snapshot";
+import { ordinal } from "@/lib/template-compute";
+
+// "Term 1" reads as "1st Term" on a report card; a label already in another
+// form ("1st Term", "First Term") is left as the school wrote it.
+function termTitle(term: string) {
+  const m = /^term\s*(\d)$/i.exec(term.trim());
+  return m ? `${ordinal(Number(m[1]))} Term` : term;
+}
 
 function initialsOf(name: string) {
   return name
@@ -24,69 +34,52 @@ function initialsOf(name: string) {
 // whole result is shown, so they can never drift from each other. Safe to
 // render on the server or the client.
 export function SnapshotView({ payload, preview = false }: { payload: SnapshotPayload; preview?: boolean }) {
-  const { school, student, period, template, fields, grids, ratingGrids, performanceSummary, gradeAnalysis, attendance, signOff, gradingScale, annual, publication } = payload;
+  const { school, student, period, template, fields, grids, ratingGrids, performanceSummary, gradeAnalysis, attendance, remarks, signOff, gradingScale, annual, publication } = payload;
   const initials = initialsOf(school.name);
   const studentInitials = initialsOf(student.name);
   const bioData = [
+    { label: "Name", value: student.name },
+    { label: "Student code", value: student.code },
     { label: "Gender", value: student.gender },
+    { label: "Class", value: student.className },
+    { label: "Session", value: period.session },
     { label: "Admission No", value: student.admissionNumber },
     { label: "Date of birth", value: student.dateOfBirth ? new Date(student.dateOfBirth).toLocaleDateString("en-GB", { timeZone: "UTC" }) : null },
     { label: "Age", value: student.age != null ? `${student.age} yrs` : null },
     { label: "Height", value: student.height },
     { label: "Weight", value: student.weight },
-    { label: "Favourite colour", value: student.favouriteColour },
     { label: "Club/Society", value: student.clubOrSociety },
+    { label: "Favourite colour", value: student.favouriteColour },
+    { label: "Campus", value: student.campusName },
   ].filter((f): f is { label: string; value: string } => !!f.value);
 
   return (
     <article className="rounded-md border border-border bg-bg-card p-6 text-text-primary print:border-0 print:p-0">
-      <header className="flex items-start gap-3 border-b border-border pb-4">
+      <header className="flex items-center gap-3 border-b border-border pb-3">
         {school.logoUrl ? (
           <SchoolLogo logoUrl={school.logoUrl} initials={initials} />
         ) : (
           <div className="grid h-10 w-10 flex-none place-items-center rounded bg-primary text-caption font-medium text-white">{initials}</div>
         )}
-        <div className="min-w-0">
-          <strong className="block text-heading font-medium">{school.name}</strong>
+        <div className="min-w-0 flex-1 text-center">
+          <strong className="block text-title font-semibold uppercase tracking-wide">{school.name}</strong>
           {school.address && <span className="block text-caption text-text-muted">{school.address}</span>}
           {(school.phone || school.supportEmail) && (
             <span className="block text-caption text-text-muted">{[school.phone, school.supportEmail].filter(Boolean).join(" · ")}</span>
           )}
-          <span className="text-caption text-text-muted">{template.name}</span>
         </div>
+        <div className="h-10 w-10 flex-none" aria-hidden />
       </header>
 
-      <div className="py-4 text-center">
-        <strong className="block text-heading font-medium">Student result sheet</strong>
-        <span className="mt-1 block text-caption text-text-muted">
-          {period.term} · {period.session}
-        </span>
+      <div className="py-3 text-center">
+        <strong className="block text-body font-semibold uppercase tracking-wide">
+          {termTitle(period.term)} Student&apos;s Performance Report
+        </strong>
+        <span className="text-[10px] text-text-muted">{template.name}</span>
       </div>
 
       <div className="flex items-start gap-3">
-        {student.photoUrl && <StudentPhoto photoUrl={student.photoUrl} initials={studentInitials} />}
-        <dl className="grid flex-1 grid-cols-2 gap-3 rounded-md bg-bg-page p-3 text-caption sm:grid-cols-4">
-          <div>
-            <dt className="text-[10px] text-text-muted">Student</dt>
-            <dd className="font-medium">{student.name}</dd>
-          </div>
-          <div>
-            <dt className="text-[10px] text-text-muted">Student code</dt>
-            <dd className="font-medium">{student.code}</dd>
-          </div>
-          <div>
-            <dt className="text-[10px] text-text-muted">Class</dt>
-            <dd className="font-medium">{student.className}</dd>
-          </div>
-          <div>
-            <dt className="text-[10px] text-text-muted">Campus</dt>
-            <dd className="font-medium">{student.campusName}</dd>
-          </div>
-        </dl>
-      </div>
-
-      {bioData.length > 0 && (
-        <dl className="mt-3 grid grid-cols-2 gap-3 rounded-md border border-border p-3 text-caption sm:grid-cols-4">
+        <dl className="grid flex-1 grid-cols-2 gap-x-3 gap-y-2 rounded-md border border-border p-3 text-caption sm:grid-cols-4">
           {bioData.map((f) => (
             <div key={f.label}>
               <dt className="text-[10px] text-text-muted">{f.label}</dt>
@@ -94,7 +87,8 @@ export function SnapshotView({ payload, preview = false }: { payload: SnapshotPa
             </div>
           ))}
         </dl>
-      )}
+        {student.photoUrl && <StudentPhoto photoUrl={student.photoUrl} initials={studentInitials} />}
+      </div>
 
       {fields.length > 0 && (
         <dl className="mt-4 grid gap-2 sm:grid-cols-2">
@@ -107,43 +101,36 @@ export function SnapshotView({ payload, preview = false }: { payload: SnapshotPa
         </dl>
       )}
 
-      {grids.length > 0 && (
-        <div className="mt-4 grid gap-4">
+      {/* Report-card body: subjects on the left; attendance, ratings and the
+          rating legend in a narrower column on the right, like the paper form. */}
+      <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] print:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
+        <div className="grid content-start gap-4">
           {grids.map((g, i) => (
-            <GridResultTable key={`${g.fieldName}-${i}`} grid={g} />
+            <GridResultTable key={`${g.fieldName}-${i}`} grid={g} compact />
           ))}
         </div>
-      )}
+        {(attendance || (ratingGrids && ratingGrids.length > 0)) && (
+          <div className="grid content-start gap-4">
+            {attendance && <AttendanceSummaryBox attendance={attendance} />}
+            {ratingGrids?.map((g) => (
+              <RatingGridTable key={g.categoryId} grid={g} />
+            ))}
+            {ratingGrids && <RatingIndicesLegend grids={ratingGrids} />}
+          </div>
+        )}
+      </div>
 
-      {performanceSummary && (
-        <div className="mt-4">
-          <PerformanceSummaryBox summary={performanceSummary} />
+      {(performanceSummary || (gradingScale && gradingScale.length > 0) || gradeAnalysis) && (
+        <div className="mt-4 grid items-start gap-4 md:grid-cols-3 print:grid-cols-3">
+          {performanceSummary && <PerformanceSummaryBox summary={performanceSummary} />}
+          {gradingScale && gradingScale.length > 0 && <GradingScaleTable bands={gradingScale} />}
+          {gradeAnalysis && <GradeAnalysisTable analysis={gradeAnalysis} />}
         </div>
       )}
 
-      {attendance && (
+      {remarks && (
         <div className="mt-4">
-          <AttendanceSummaryBox attendance={attendance} />
-        </div>
-      )}
-
-      {gradeAnalysis && (
-        <div className="mt-4">
-          <GradeAnalysisTable analysis={gradeAnalysis} />
-        </div>
-      )}
-
-      {ratingGrids && ratingGrids.length > 0 && (
-        <div className="mt-4 grid gap-4">
-          {ratingGrids.map((g) => (
-            <RatingGridTable key={g.categoryId} grid={g} />
-          ))}
-        </div>
-      )}
-
-      {gradingScale && gradingScale.length > 0 && (
-        <div className="mt-4">
-          <GradingScaleTable bands={gradingScale} />
+          <RemarksBox remarks={remarks} />
         </div>
       )}
 
@@ -155,7 +142,7 @@ export function SnapshotView({ payload, preview = false }: { payload: SnapshotPa
 
       {signOff && (
         <div className="mt-5">
-          <SignOffBlock signOff={signOff} />
+          <SignOffBlock signOff={signOff} issuedOn={preview ? null : publication.publishedAt} />
         </div>
       )}
 

@@ -450,6 +450,8 @@ model TemplateVersion {
   // attendance summary on results. Part of the immutable version because it
   // changes what the result contains.
   includeAttendance      Boolean               @default(false)
+  // Ask for a teacher's and a principal's remark, shown boxed on results.
+  includeRemarks         Boolean               @default(false)
   // Snapshot of exactly what was compiled onto ResultTemplate.fields at
   // activation — audit-log-ready even though no audit log exists yet.
   compiledFieldsSnapshot Json?
@@ -556,6 +558,9 @@ model RatingCategory {
   name          String // e.g. "Affective domain"
   displayOrder  Int
   ratingOptions Json     @default("[\"1\",\"2\",\"3\",\"4\",\"5\"]") // string[] shared by items in this category
+  // What each option means, by index ("Maintains an excellent degree of
+  // observable traits") — printed as a "Rating indices" legend. Optional.
+  ratingMeanings Json    @default("[]")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

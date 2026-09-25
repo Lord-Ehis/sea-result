@@ -83,7 +83,7 @@ export function RatingCategoriesEditor({
               <span className="text-[10px] text-text-muted">Scale options (shared by every item below), in order</span>
               <div className="grid gap-1">
                 {category.ratingOptions.map((opt, oi) => (
-                  <div key={oi} className="grid grid-cols-[1fr_auto] items-center gap-1.5">
+                  <div key={oi} className="grid grid-cols-[1fr_2fr_auto] items-center gap-1.5">
                     <input
                       value={opt}
                       onChange={(e) =>
@@ -94,9 +94,24 @@ export function RatingCategoriesEditor({
                       placeholder="Option label"
                       className="h-[30px] min-w-0 rounded-md border border-border bg-bg-page px-2 text-[10px] text-text-primary"
                     />
+                    <input
+                      value={category.ratingMeanings?.[oi] ?? ""}
+                      onChange={(e) => {
+                        const meanings = category.ratingOptions.map((_, i) => category.ratingMeanings?.[i] ?? "");
+                        meanings[oi] = e.target.value;
+                        update(category.id, { ratingMeanings: meanings });
+                      }}
+                      placeholder="What this means (optional, printed as a legend)"
+                      className="h-[30px] min-w-0 rounded-md border border-border bg-bg-page px-2 text-[10px] text-text-primary"
+                    />
                     <button
                       type="button"
-                      onClick={() => update(category.id, { ratingOptions: category.ratingOptions.filter((_, i) => i !== oi) })}
+                      onClick={() =>
+                        update(category.id, {
+                          ratingOptions: category.ratingOptions.filter((_, i) => i !== oi),
+                          ratingMeanings: (category.ratingMeanings ?? []).filter((_, i) => i !== oi),
+                        })
+                      }
                       aria-label={`Remove ${opt || "option"}`}
                       className="grid h-6 w-6 place-items-center rounded text-text-muted hover:bg-danger-bg hover:text-danger"
                     >
