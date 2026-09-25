@@ -119,7 +119,7 @@ export function SectionsEditor({ sections, onChange }: { sections: SectionInput[
 
             <div className="grid gap-1.5 p-2.5">
               {section.components.map((c, ci) => (
-                <div key={c.id} className="grid grid-cols-[1fr_70px_64px_64px_auto] items-center gap-1.5">
+                <div key={c.id} className="grid grid-cols-[1fr_70px_64px_64px_70px_auto] items-center gap-1.5">
                   <input
                     value={c.componentName}
                     onChange={(e) =>
@@ -162,6 +162,21 @@ export function SectionsEditor({ sections, onChange }: { sections: SectionInput[
                     placeholder="Weight %"
                     className={rowInputClass}
                   />
+                  <label
+                    className="flex h-[30px] items-center gap-1 whitespace-nowrap text-[9px] text-text-muted"
+                    title="On: a blank score here is flagged as missing. Off: it can stay blank, e.g. for a subject a student doesn't take."
+                  >
+                    <input
+                      type="checkbox"
+                      checked={c.isRequired}
+                      onChange={(e) =>
+                        updateSection(section.id, {
+                          components: section.components.map((x) => (x.id === c.id ? { ...x, isRequired: e.target.checked } : x)),
+                        })
+                      }
+                    />
+                    Required
+                  </label>
                   <span className="flex items-center gap-0.5">
                     <button
                       type="button"
