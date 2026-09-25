@@ -48,6 +48,7 @@ function serializeVersion(version: VersionWithRelations): TemplateVersionSummary
     legacyFields: legacyFieldsFromJson(version.legacyFields) as TemplateField[],
     includeAnnualSummary: version.includeAnnualSummary,
     includeAttendance: version.includeAttendance,
+    includeRemarks: version.includeRemarks,
     sections: version.sections.map((s) => ({
       id: s.id,
       name: s.name,
@@ -67,6 +68,7 @@ function serializeVersion(version: VersionWithRelations): TemplateVersionSummary
       name: cat.name,
       displayOrder: cat.displayOrder,
       ratingOptions: Array.isArray(cat.ratingOptions) ? (cat.ratingOptions as string[]) : [],
+      ratingMeanings: Array.isArray(cat.ratingMeanings) ? (cat.ratingMeanings as string[]) : [],
       items: cat.items.map((i) => ({ id: i.id, name: i.name, displayOrder: i.displayOrder, isEnabled: i.isEnabled })),
     })),
   };
@@ -132,6 +134,7 @@ export async function createDraftVersion(
       legacyFields: source?.legacyFields ?? [],
       includeAnnualSummary: source?.includeAnnualSummary ?? false,
       includeAttendance: source?.includeAttendance ?? false,
+      includeRemarks: source?.includeRemarks ?? false,
       sections: source
         ? {
             create: source.sections.map((s) => ({
@@ -184,6 +187,7 @@ export async function createDraftVersion(
               name: cat.name,
               displayOrder: cat.displayOrder,
               ratingOptions: cat.ratingOptions ?? [],
+              ratingMeanings: cat.ratingMeanings ?? [],
               items: {
                 create: cat.items.map((i) => ({
                   schoolId,
@@ -211,6 +215,7 @@ export async function updateVersionDraft(input: {
   legacyFields: TemplateField[];
   includeAnnualSummary?: boolean;
   includeAttendance?: boolean;
+  includeRemarks?: boolean;
 }) {
   const { schoolId } = await requireSchoolAdmin();
   const parsed = updateVersionDraftSchema.parse(input);
@@ -222,7 +227,7 @@ export async function updateVersionDraft(input: {
   await prisma.$transaction(async (tx) => {
     await tx.templateVersion.update({
       where: { id: version.id },
-      data: { gradingScaleId: parsed.gradingScaleId, legacyFields: parsed.legacyFields, includeAnnualSummary: parsed.includeAnnualSummary, includeAttendance: parsed.includeAttendance },
+      data: { gradingScaleId: parsed.gradingScaleId, legacyFields: parsed.legacyFields, includeAnnualSummary: parsed.includeAnnualSummary, includeAttendance: parsed.includeAttendance, includeRemarks: parsed.includeRemarks },
     });
 
     await replaceSections(tx, schoolId, version.id, version.sections, parsed.sections);
@@ -327,7 +332,7 @@ async function replaceRatingCategories(
     if (existingCategory) {
       await tx.ratingCategory.update({
         where: { id: category.id },
-        data: { name: category.name, displayOrder: category.displayOrder, ratingOptions: category.ratingOptions },
+        data: { name: category.name, displayOrder: category.displayOrder, ratingOptions: category.ratingOptions, ratingMeanings: category.ratingMeanings ?? [] },
       });
       await replaceRatingItems(tx, schoolId, category.id, existingCategory.items, category.items);
     } else {
@@ -339,6 +344,7 @@ async function replaceRatingCategories(
           name: category.name,
           displayOrder: category.displayOrder,
           ratingOptions: category.ratingOptions,
+          ratingMeanings: category.ratingMeanings ?? [],
           items: {
             create: category.items.map((i) => ({
               id: i.id,
@@ -415,6 +421,7 @@ function ratingCategoriesFromDb(categories: VersionWithRelations["ratingCategori
     name: cat.name,
     displayOrder: cat.displayOrder,
     ratingOptions: Array.isArray(cat.ratingOptions) ? (cat.ratingOptions as string[]) : [],
+    ratingMeanings: Array.isArray(cat.ratingMeanings) ? (cat.ratingMeanings as string[]) : [],
     items: cat.items.map((i) => ({ id: i.id, legacySourceId: i.legacySourceId, name: i.name, isEnabled: i.isEnabled })),
   }));
 }
@@ -444,6 +451,7 @@ function ratingCategoriesFromInput(categories: RatingCategoryInput[]): CompileVe
     name: cat.name,
     displayOrder: cat.displayOrder,
     ratingOptions: cat.ratingOptions,
+    ratingMeanings: cat.ratingMeanings,
     items: cat.items.map((i) => ({ id: i.id, legacySourceId: null, name: i.name, isEnabled: i.isEnabled })),
   }));
 }
@@ -526,6 +534,7 @@ async function activateVersionImpl(versionId: string, schoolId: string, userId: 
     ratingCategories: ratingCategoriesFromDb(version.ratingCategories),
     includeAnnualSummary: version.includeAnnualSummary,
     includeAttendance: version.includeAttendance,
+    includeRemarks: version.includeRemarks,
   });
 
   await prisma.$transaction(async (tx) => {
@@ -585,6 +594,7 @@ export async function previewCompiledFields(input: {
   legacyFields: TemplateField[];
   includeAnnualSummary?: boolean;
   includeAttendance?: boolean;
+  includeRemarks?: boolean;
 }) {
   const { schoolId } = await requireSchoolAdmin();
   const version = await prisma.templateVersion.findFirst({
@@ -602,6 +612,7 @@ export async function previewCompiledFields(input: {
     ratingCategories: ratingCategoriesFromInput(input.ratingCategories),
     includeAnnualSummary: input.includeAnnualSummary === true,
     includeAttendance: input.includeAttendance === true,
+    includeRemarks: input.includeRemarks === true,
   });
 }
 

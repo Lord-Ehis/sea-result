@@ -8,7 +8,7 @@ import { batchWhere, classWhere, ofStudentWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 import { createAndSendNotification, runWithConcurrency } from "@/lib/notifications";
 import { computeOwnFields } from "@/lib/template-compute";
-import { classGradeAnalysis, expandThisTermFields } from "@/lib/grid-compute";
+import { expandThisTermFields } from "@/lib/grid-compute";
 import { computePublishData, needsPriorRows, type PriorPublishedRow } from "@/lib/publish-compute";
 import { recordResultEvent } from "@/lib/result-events";
 import { computeBatchAnnual, describeIssues } from "@/lib/annual-context";
@@ -207,7 +207,6 @@ export async function publishBatch(batchId: string): Promise<ActionResult<{ alre
         throw new UserError(`Can't publish — the annual summary isn't ready (${annual.issues.length} issue(s)): ${describeIssues(annual)}`);
       }
 
-      const gradeAnalysis = classGradeAnalysis(fields, finalData);
       const now = new Date();
       // A verification-code collision (1 in ~10^12) just retries with fresh codes.
       for (let attempt = 0; ; attempt++) {
@@ -223,7 +222,6 @@ export async function publishBatch(batchId: string): Promise<ActionResult<{ alre
             period: { session: r.session, term: r.term },
             template: { id: batch.templateId, name: batch.template.name, versionId: batch.templateVersionId, fields },
             data: finalData[i],
-            gradeAnalysis,
             annual: annual?.students[i]?.payload,
             publication: { version: 1, verificationCode, publishedAt: now },
           });
@@ -398,7 +396,6 @@ export async function previewBatchPayload(batchId: string, resultId: string): Pr
       period: { session: r.session, term: r.term },
       template: { id: batch.templateId, name: batch.template.name, versionId: batch.templateVersionId, fields },
       data: finalData[index],
-      gradeAnalysis: classGradeAnalysis(fields, finalData),
       annual: annual?.students[index]?.payload,
       publication: { version: 1, verificationCode: "PREVIEW", publishedAt: new Date() },
     });

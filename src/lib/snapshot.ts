@@ -1,6 +1,6 @@
 import { createHash, randomInt } from "node:crypto";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
-import { buildGridResultData, gradingScaleLegend, performanceSummary, type GridResultData, type GradingScaleLegendEntry, type PerformanceSummary, type GradeAnalysis } from "@/lib/grid-compute";
+import { buildGridResultData, gradingScaleLegend, performanceSummary, gradeAnalysis, type GridResultData, type GradingScaleLegendEntry, type PerformanceSummary, type GradeAnalysis } from "@/lib/grid-compute";
 import { attendanceSummary, type AttendanceSummary } from "@/lib/attendance";
 import { buildRatingGridData, type RatingGridData } from "@/lib/rating-grid";
 import type { AnnualSummaryPayload } from "@/lib/annual-summary";
@@ -60,6 +60,18 @@ export function buildSignOff(input: {
   return Object.values(signOff).some(Boolean) ? signOff : null;
 }
 
+export type SnapshotRemarks = { teacher?: string; principal?: string };
+
+function remarksFrom(fields: TemplateField[], data: Record<string, string>): SnapshotRemarks | null {
+  const remarks: SnapshotRemarks = {};
+  for (const f of fields) {
+    if (!f.remark) continue;
+    const text = (data[f.id] ?? "").trim();
+    if (text) remarks[f.remark] = text;
+  }
+  return Object.keys(remarks).length > 0 ? remarks : null;
+}
+
 export type SnapshotPayload = {
   schemaVersion: 1;
   school: SnapshotSchool;
@@ -74,13 +86,15 @@ export type SnapshotPayload = {
   // Total obtained / obtainable / percentage / grade across the grid's
   // subjects — absent when there is nothing to summarise.
   performanceSummary?: PerformanceSummary;
-  // Class-wide: students per overall grade + subjects offered. Batch-wide, so
-  // it is passed in at publish and frozen; absent when nothing is graded.
+  // This student's subjects per grade + subjects offered — absent when
+  // nothing is graded.
   gradeAnalysis?: GradeAnalysis;
   signOff?: SnapshotSignOff;
   // Times opened / present / absent and the percentage — absent when the
   // template has no attendance switch or the numbers aren't there.
   attendance?: AttendanceSummary;
+  // The teacher's and principal's written remarks — absent when neither was written.
+  remarks?: SnapshotRemarks;
   // The template's grade bands/remarks at publish time, for a "Grade Scale"
   // legend — absent when the template has no Grid field or no bands set.
   gradingScale?: GradingScaleLegendEntry[];
@@ -99,7 +113,6 @@ export function buildSnapshotPayload(input: {
   data: Record<string, string>;
   annual?: AnnualSummaryPayload | null;
   signOff?: SnapshotSignOff | null;
-  gradeAnalysis?: GradeAnalysis | null;
   publication: { version: number; verificationCode: string; publishedAt: Date; amendedAt?: Date };
 }): SnapshotPayload {
   const { template, data } = input;
@@ -107,6 +120,8 @@ export function buildSnapshotPayload(input: {
   const ratingGrids = buildRatingGridData(template.fields, data);
   const summary = performanceSummary(template.fields, data);
   const attendance = attendanceSummary(template.fields, data);
+  const analysis = gradeAnalysis(template.fields, data);
+  const remarks = remarksFrom(template.fields, data);
   return {
     schemaVersion: 1,
     // Picked field by field: callers pass a wider school row (sign-off
@@ -128,11 +143,12 @@ export function buildSnapshotPayload(input: {
     // fields and attendance are carried in `ratingGrids` / `attendance`
     // instead of this flat list.
     fields: template.fields
-      .filter((f) => f.type !== "Grid" && !(f.type === "Rating scale" && f.ratingCategory) && !f.attendance)
+      .filter((f) => f.type !== "Grid" && !(f.type === "Rating scale" && f.ratingCategory) && !f.attendance && !f.remark)
       .map((f) => ({ name: f.name, value: data[f.id] ?? "—" })),
     grids: buildGridResultData(template.fields, data),
     ...(summary ? { performanceSummary: summary } : {}),
-    ...(input.gradeAnalysis ? { gradeAnalysis: input.gradeAnalysis } : {}),
+    ...(analysis ? { gradeAnalysis: analysis } : {}),
+    ...(remarks ? { remarks } : {}),
     ...(input.signOff ? { signOff: input.signOff } : {}),
     ...(attendance ? { attendance } : {}),
     // Absent when the template has no categorised rating fields.

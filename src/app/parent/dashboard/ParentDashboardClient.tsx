@@ -8,6 +8,9 @@ import { ComparisonReport } from "@/components/results/ComparisonReport";
 import { GridResultTable } from "@/components/results/GridResultTable";
 import { RatingGridTable } from "@/components/results/RatingGridTable";
 import { GradingScaleTable } from "@/components/results/GradingScaleTable";
+import { RatingIndicesLegend } from "@/components/results/RatingIndicesLegend";
+import { RemarksBox } from "@/components/results/RemarksBox";
+import type { SnapshotRemarks } from "@/lib/snapshot";
 import { GradeAnalysisTable } from "@/components/results/GradeAnalysisTable";
 import { AttendanceSummaryBox } from "@/components/results/AttendanceSummaryBox";
 import { PerformanceSummaryBox } from "@/components/results/PerformanceSummaryBox";
@@ -35,6 +38,7 @@ type ResultEntry = {
   performanceSummary: PerformanceSummary | null;
   attendance: AttendanceSummary | null;
   gradeAnalysis: GradeAnalysis | null;
+  remarks: SnapshotRemarks | null;
   gradingScale: GradingScaleLegendEntry[];
   annual: AnnualSummaryPayload | null;
 };
@@ -160,6 +164,8 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
               {recent.ratingGrids.map((g) => (
                 <RatingGridTable key={g.categoryId} grid={g} />
               ))}
+              <RatingIndicesLegend grids={recent.ratingGrids} />
+              {recent.remarks && <RemarksBox remarks={recent.remarks} />}
               {recent.gradingScale.length > 0 && <GradingScaleTable bands={recent.gradingScale} />}
               {recent.annual && <AnnualSummaryTable annual={recent.annual} />}
               <ResultFooter r={recent} />
@@ -217,6 +223,8 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
                     {r.ratingGrids.map((g) => (
                       <RatingGridTable key={g.categoryId} grid={g} />
                     ))}
+                    <RatingIndicesLegend grids={r.ratingGrids} />
+                    {r.remarks && <RemarksBox remarks={r.remarks} />}
                     {r.gradingScale.length > 0 && <GradingScaleTable bands={r.gradingScale} />}
                     {r.annual && <AnnualSummaryTable annual={r.annual} />}
                     <ResultFooter r={r} />

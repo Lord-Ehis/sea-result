@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import type { GridResultData, GradingScaleLegendEntry, PerformanceSummary, GradeAnalysis } from "@/lib/grid-compute";
 import type { AttendanceSummary } from "@/lib/attendance";
 import type { RatingGridData } from "@/lib/rating-grid";
-import { isSnapshotIntact, type SnapshotPayload } from "@/lib/snapshot";
+import { isSnapshotIntact, type SnapshotPayload, type SnapshotRemarks } from "@/lib/snapshot";
 import type { AnnualSummaryPayload } from "@/lib/annual-summary";
 import { signSnapshotToken } from "@/lib/snapshot-token";
 import { callerId, hit, isOverLimit, waitMessage } from "@/lib/rate-limit";
@@ -38,6 +38,7 @@ export type LookupResult = {
     performanceSummary: PerformanceSummary | null;
     attendance: AttendanceSummary | null;
     gradeAnalysis: GradeAnalysis | null;
+    remarks: SnapshotRemarks | null;
     gradingScale: GradingScaleLegendEntry[];
     annual: AnnualSummaryPayload | null;
   }[];
@@ -101,6 +102,7 @@ export async function lookupStudentResult(input: { slug: string; studentCode: st
         performanceSummary: intact ? (payload.performanceSummary ?? null) : null,
         attendance: intact ? (payload.attendance ?? null) : null,
         gradeAnalysis: intact ? (payload.gradeAnalysis ?? null) : null,
+        remarks: intact ? (payload.remarks ?? null) : null,
         gradingScale: intact ? (payload.gradingScale ?? []) : [],
         annual: intact ? (payload.annual ?? null) : null,
       };

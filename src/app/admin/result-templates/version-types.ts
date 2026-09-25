@@ -36,6 +36,8 @@ export type RatingCategoryInput = {
   name: string;
   displayOrder: number;
   ratingOptions: string[];
+  // What each option means, by index; optional.
+  ratingMeanings?: string[];
   items: RatingItemInput[];
 };
 
@@ -66,6 +68,7 @@ export type TemplateVersionSummary = {
   legacyFields: TemplateField[];
   includeAnnualSummary: boolean;
   includeAttendance: boolean;
+  includeRemarks: boolean;
 };
 
 export const PRESETS = {
@@ -127,6 +130,7 @@ export const ratingCategorySchema = z.object({
   name: z.string().trim().min(1),
   displayOrder: z.number().int(),
   ratingOptions: z.array(z.string()),
+  ratingMeanings: z.array(z.string()).default([]),
   items: z.array(ratingItemSchema),
 });
 
@@ -138,4 +142,5 @@ export const updateVersionDraftSchema = z.object({
   legacyFields: z.array(fieldSchema),
   includeAnnualSummary: z.boolean().default(false),
   includeAttendance: z.boolean().default(false),
+  includeRemarks: z.boolean().default(false),
 });
