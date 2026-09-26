@@ -4,6 +4,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireFullAdmin } from "@/lib/admin-access";
 import { prisma } from "@/lib/prisma";
+import { randomUUID } from "node:crypto";
+import { ImageError, validateImage } from "@/lib/image-validate";
+import { StorageNotConfigured, putPublicImage } from "@/lib/storage";
+import { UserError, toResult, type ActionResult } from "@/lib/user-error";
 
 // School-wide branding shown on printed results and (later) other public
 // pages. A campus admin is refused (see src/lib/admin-access.ts).
@@ -44,4 +48,31 @@ export async function updateSchoolProfile(input: SchoolProfileInput) {
   });
 
   revalidatePath("/admin/school-profile");
+}
+
+const IMAGE_KINDS = ["logo", "signature", "stamp"] as const;
+
+// Stores an uploaded logo / signature / stamp and hands back its public URL
+// for the form to fill in (the admin still presses Save, like any other
+// field). Checked on the server by the file's real bytes and size, and stored
+// under a fresh unique name every time — a published result keeps pointing at
+// the exact file it was printed with even if the school uploads a new one.
+export async function uploadSchoolImage(formData: FormData): Promise<ActionResult<{ url: string }>> {
+  const { schoolId } = await requireFullAdmin();
+  return toResult(async () => {
+    const kind = formData.get("kind");
+    const file = formData.get("file");
+    if (typeof kind !== "string" || !(IMAGE_KINDS as readonly string[]).includes(kind)) throw new UserError("Unknown image type.");
+    if (!(file instanceof File)) throw new UserError("Choose an image to upload.");
+
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const type = validateImage(bytes);
+      const url = await putPublicImage(`${schoolId}/${kind}-${randomUUID()}.${type}`, bytes, type);
+      return { url };
+    } catch (err) {
+      if (err instanceof ImageError || err instanceof StorageNotConfigured) throw new UserError(err.message);
+      throw err;
+    }
+  });
 }
