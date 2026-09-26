@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Building2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { updateSchoolProfile } from "./actions";
+import { ImageUploadField } from "./ImageUploadField";
 
 export function SchoolProfileClient({
   schoolName,
@@ -77,20 +78,16 @@ export function SchoolProfileClient({
             <p className="mt-1.5 text-caption text-text-muted">Already-published results keep the details they were printed with — only new ones use these.</p>
           </div>
           <form onSubmit={handleSubmit} className="grid gap-4 px-5 py-5">
-            <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
-              Logo image URL <span className="font-normal text-text-muted">(optional)</span>
-              <input
-                value={fields.logoUrl}
-                onChange={(e) => {
-                  set("logoUrl", e.target.value);
-                  setLogoError(false);
-                }}
-                placeholder="https://yourschool.com/logo.png"
-                autoComplete="off"
-                className="h-10 rounded-md border border-border bg-bg-card px-3 text-body text-text-primary"
-              />
-              <span className="font-normal text-text-muted">Paste a link to an image already hosted online — file upload isn&apos;t available yet.</span>
-            </label>
+            <ImageUploadField
+              label="Logo image"
+              kind="logo"
+              value={fields.logoUrl}
+              placeholder="https://yourschool.com/logo.png"
+              onChange={(url) => {
+                set("logoUrl", url);
+                setLogoError(false);
+              }}
+            />
             <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
               Address <span className="font-normal text-text-muted">(optional)</span>
               <input
@@ -133,26 +130,20 @@ export function SchoolProfileClient({
                 className="h-10 rounded-md border border-border bg-bg-card px-3 text-body text-text-primary"
               />
             </label>
-            <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
-              Principal&apos;s signature image URL <span className="font-normal text-text-muted">(optional)</span>
-              <input
-                value={fields.principalSignatureUrl}
-                onChange={(e) => set("principalSignatureUrl", e.target.value)}
-                placeholder="https://yourschool.com/signature.png"
-                autoComplete="off"
-                className="h-10 rounded-md border border-border bg-bg-card px-3 text-body text-text-primary"
-              />
-            </label>
-            <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
-              School stamp image URL <span className="font-normal text-text-muted">(optional)</span>
-              <input
-                value={fields.stampUrl}
-                onChange={(e) => set("stampUrl", e.target.value)}
-                placeholder="https://yourschool.com/stamp.png"
-                autoComplete="off"
-                className="h-10 rounded-md border border-border bg-bg-card px-3 text-body text-text-primary"
-              />
-            </label>
+            <ImageUploadField
+              label="Principal's signature image"
+              kind="signature"
+              value={fields.principalSignatureUrl}
+              placeholder="https://yourschool.com/signature.png"
+              onChange={(url) => set("principalSignatureUrl", url)}
+            />
+            <ImageUploadField
+              label="School stamp image"
+              kind="stamp"
+              value={fields.stampUrl}
+              placeholder="https://yourschool.com/stamp.png"
+              onChange={(url) => set("stampUrl", url)}
+            />
             <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
               Next term begins <span className="font-normal text-text-muted">(update each term)</span>
               <input
