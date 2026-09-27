@@ -1,6 +1,7 @@
 import type { TemplateField } from "@/app/admin/result-templates/actions";
 import { SCORE_STATE_LABEL, explicitScoreState, formatScore } from "@/lib/score-state";
 import { gradeForValue } from "@/lib/grade-lookup";
+import { ordinal } from "@/lib/template-compute";
 
 // Pure translation layer for the "Grid" field type (a subjects × columns
 // table, e.g. a report card's Cognitive Domain section). Rather than a
@@ -299,7 +300,17 @@ export type PerformanceSummary = {
   percentage: string;
   grade: string;
   remark: string;
+  // This student's rank in the class by overall percentage — batch-wide,
+  // like a Grid's Subject Position, so only ever filled in at publish time
+  // (computeOverallPositions writes it into `data` first). Absent during
+  // live entry/review, when only one student's data is in view.
+  position?: string;
 };
+
+// Fixed id so a computed overall position survives, in `data`, from
+// computeOverallPositions through to performanceSummary reading it back out
+// — the same pattern attendance's fixed field ids use.
+export const OVERALL_POSITION_ID = "overall-position";
 
 /**
  * Overall performance across a Grid's subjects: total obtained, total
@@ -338,7 +349,35 @@ export function performanceSummary(fields: TemplateField[], data: Record<string,
     percentage: percentage.toFixed(1),
     grade,
     remark: grid.remarksMap.find((r) => r.grade === grade)?.remarks ?? "",
+    ...(data[OVERALL_POSITION_ID] ? { position: data[OVERALL_POSITION_ID] } : {}),
   };
+}
+
+/**
+ * This student's rank in the whole class by overall percentage — the same
+ * competition ranking (tied values share a rank, the next distinct value
+ * skips ahead) as a Grid's per-subject Position. Batch-wide, so only ever
+ * meaningful at publish time. A student with nothing to summarise (see
+ * performanceSummary) gets "—", the same as an ungraded subject position.
+ */
+export function computeOverallPositions(fields: TemplateField[], studentsData: Record<string, string>[]): Record<string, string>[] {
+  const results = studentsData.map((d) => ({ ...d }));
+
+  const ranked = studentsData
+    .map((d, index) => ({ index, value: Number(performanceSummary(fields, d)?.percentage) }))
+    .filter((r) => Number.isFinite(r.value))
+    .sort((a, b) => b.value - a.value);
+
+  let rank = 0;
+  let lastValue: number | null = null;
+  ranked.forEach((r, i) => {
+    if (lastValue === null || r.value !== lastValue) rank = i + 1;
+    lastValue = r.value;
+    results[r.index][OVERALL_POSITION_ID] = ordinal(rank);
+  });
+
+  for (const d of results) if (d[OVERALL_POSITION_ID] === undefined) d[OVERALL_POSITION_ID] = "—";
+  return results;
 }
 
 export type GradeAnalysis = {
