@@ -6,9 +6,11 @@ import { getSchoolAccess } from "@/lib/school-access-lookup";
 import { SubscriptionBanner } from "@/components/SubscriptionBanner";
 import { campusWhere, ofStudentWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
+import { getActiveAnnouncement } from "@/lib/announcements";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
+  const announcement = await getActiveAnnouncement();
   // allowLapsed: a school whose subscription has ended still needs its navigation and banner (the proxy limits it to Billing).
   const access = session?.user.schoolId ? await getAdminAccess(true).catch(() => null) : null;
   const scoped = !!access && access.campusIds !== null;
@@ -48,6 +50,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       userRoleLabel={scoped ? "Campus admin" : "School admin"}
       notificationsHref="/admin/notifications"
       hasAlerts={failedNotifications > 0}
+      announcement={announcement}
     >
       {schoolAccess && <SubscriptionBanner access={schoolAccess} canRenew={!scoped} />}
       {children}

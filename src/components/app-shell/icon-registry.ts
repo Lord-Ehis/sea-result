@@ -17,6 +17,7 @@ import {
   BadgeCheck,
   ClipboardList,
   ShieldCheck,
+  Megaphone,
   type LucideIcon,
 } from "lucide-react";
 import type { IconName } from "./types";
@@ -44,4 +45,5 @@ export const iconRegistry: Record<IconName, LucideIcon> = {
   BadgeCheck,
   ClipboardList,
   ShieldCheck,
+  Megaphone,
 };

@@ -830,6 +830,36 @@ model Notification {
 }
 
 // ---------------------------------------------------------------------------
+// Platform-wide announcements (Platform Owner managed)
+// ---------------------------------------------------------------------------
+
+enum AnnouncementTone {
+  INFO
+  WARNING
+}
+
+// A sticky banner the Platform Owner can show across every school, teacher
+// and parent view at once (rendered by the shared AppShell, so one place
+// covers every role). Only one is ever "live" — createAnnouncement turns off
+// any other active row in the same write, rather than letting several fight
+// for the same banner — but past ones are kept, not deleted, as a simple
+// history of what's been announced.
+model PlatformAnnouncement {
+  id              String           @id @default(cuid())
+  message         String
+  tone            AnnouncementTone @default(INFO)
+  linkUrl         String?
+  linkLabel       String?
+  isActive        Boolean          @default(true)
+  createdByUserId String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([isActive, createdAt])
+  @@map("platform_announcements")
+}
+
+// ---------------------------------------------------------------------------
 // Platform-wide provider settings (Platform Owner managed)
 // ---------------------------------------------------------------------------
 
