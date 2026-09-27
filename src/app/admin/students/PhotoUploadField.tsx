@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { uploadStudentPhoto } from "./actions";
-import { inputClass } from "./StudentsClient";
+import { inputClass } from "./styles";
 
 const MAX_BYTES = 1024 * 1024;
 

@@ -7,6 +7,7 @@ import { Modal } from "@/components/ui/Modal";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { createCampus, createStudent, updateStudent } from "./actions";
 import { PhotoUploadField } from "./PhotoUploadField";
+import { inputClass } from "./styles";
 
 type Campus = { id: string; name: string };
 type ClassOption = { id: string; name: string };
@@ -486,8 +487,6 @@ export function StudentsClient({ campuses, classes, students, canAddCampus }: St
     </>
   );
 }
-
-export const inputClass = "h-[38px] min-w-0 rounded-md border border-border bg-bg-card px-2.5 text-body text-text-primary";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
