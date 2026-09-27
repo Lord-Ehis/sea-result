@@ -1,11 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { getAdminAccess, requireFullAdmin } from "@/lib/admin-access";
 import { campusWhere, classWhere, studentWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 import { defaultSessionLabel } from "@/lib/academic-term";
+import { ImageError, validateImage } from "@/lib/image-validate";
+import { StorageNotConfigured, putPublicImage } from "@/lib/storage";
+import { UserError, toResult, type ActionResult } from "@/lib/user-error";
 
 const createCampusSchema = z.object({
   name: z.string().trim().min(1, "Campus name is required"),
@@ -204,4 +208,30 @@ export async function setStudentActive(studentId: string, isActive: boolean) {
   });
   if (updated.count === 0) throw new Error("Student not found.");
   revalidatePath("/admin/students");
+}
+
+// Stores an uploaded student photo and hands back its public URL for the
+// form to fill in — the same "Upload image" pattern as the school profile's
+// logo/signature/stamp (checked by its real bytes and a 1 MB limit, stored
+// under a fresh unique name every time so an already-published result keeps
+// the photo it was printed with). No studentId to scope the path by yet —
+// this runs from both the Add and Edit forms, and Add has no student to
+// attach to until the form is actually submitted — so it's filed under the
+// school alone, the same as a school image.
+export async function uploadStudentPhoto(formData: FormData): Promise<ActionResult<{ url: string }>> {
+  const { schoolId } = await getAdminAccess();
+  return toResult(async () => {
+    const file = formData.get("file");
+    if (!(file instanceof File)) throw new UserError("Choose a photo to upload.");
+
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const type = validateImage(bytes);
+      const url = await putPublicImage(`${schoolId}/students/photo-${randomUUID()}.${type}`, bytes, type);
+      return { url };
+    } catch (err) {
+      if (err instanceof ImageError || err instanceof StorageNotConfigured) throw new UserError(err.message);
+      throw err;
+    }
+  });
 }

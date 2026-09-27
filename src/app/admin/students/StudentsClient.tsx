@@ -6,6 +6,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { createCampus, createStudent, updateStudent } from "./actions";
+import { PhotoUploadField } from "./PhotoUploadField";
+import { inputClass } from "./styles";
 
 type Campus = { id: string; name: string };
 type ClassOption = { id: string; name: string };
@@ -486,8 +488,6 @@ export function StudentsClient({ campuses, classes, students, canAddCampus }: St
   );
 }
 
-const inputClass = "h-[38px] min-w-0 rounded-md border border-border bg-bg-card px-2.5 text-body text-text-primary";
-
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="grid gap-1.5 text-caption text-text-secondary">
@@ -539,8 +539,8 @@ function ProfileFieldInputs({ defaults }: { defaults?: ProfileDefaults }) {
       <Field label="Club/Society">
         <input name="clubOrSociety" defaultValue={defaults?.clubOrSociety ?? ""} placeholder="e.g. Cultural dance, choir" className={inputClass} />
       </Field>
-      <Field label="Photo URL">
-        <input name="photoUrl" defaultValue={defaults?.photoUrl ?? ""} placeholder="https://.../photo.jpg" className={inputClass} />
+      <Field label="Photo">
+        <PhotoUploadField defaultValue={defaults?.photoUrl} />
       </Field>
     </div>
   );
