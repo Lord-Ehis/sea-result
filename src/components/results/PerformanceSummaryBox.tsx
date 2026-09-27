@@ -1,13 +1,15 @@
 import type { PerformanceSummary } from "@/lib/grid-compute";
 
 // Overall performance across all subjects: total obtained / obtainable,
-// percentage, and the grade + remark that percentage earns.
+// percentage, the grade + remark that percentage earns, and (once
+// published) this student's rank in the class by that percentage.
 export function PerformanceSummaryBox({ summary }: { summary: PerformanceSummary }) {
   const items = [
     { label: "Total obtained", value: String(summary.totalObtained) },
     { label: "Total obtainable", value: String(summary.totalObtainable) },
     { label: "Percentage", value: `${summary.percentage}%` },
     { label: "Grade", value: summary.grade ? (summary.remark ? `${summary.grade} · ${summary.remark}` : summary.grade) : "—" },
+    ...(summary.position ? [{ label: "Position in class", value: summary.position }] : []),
   ];
   return (
     <div className="overflow-hidden rounded-md border border-border">
