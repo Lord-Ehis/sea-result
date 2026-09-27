@@ -56,7 +56,9 @@ export type CreateAnnouncementInput = z.infer<typeof createAnnouncementSchema>;
 export async function createAnnouncement(input: CreateAnnouncementInput): Promise<ActionResult<{ id: string }>> {
   const userId = await requirePlatformOwner();
   return toResult(async () => {
-    const parsed = createAnnouncementSchema.parse(input);
+    const result = createAnnouncementSchema.safeParse(input);
+    if (!result.success) throw new UserError(result.error.issues[0]?.message ?? "Those details aren't valid.");
+    const parsed = result.data;
 
     const created = await prisma.$transaction(async (tx) => {
       await tx.platformAnnouncement.updateMany({ where: { isActive: true }, data: { isActive: false } });
