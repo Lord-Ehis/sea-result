@@ -119,7 +119,7 @@ export function SectionsEditor({ sections, onChange }: { sections: SectionInput[
 
             <div className="grid gap-1.5 p-2.5">
               {section.components.map((c, ci) => (
-                <div key={c.id} className="grid grid-cols-[1fr_70px_64px_64px_70px_auto] items-center gap-1.5">
+                <div key={c.id} className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap">
                   <input
                     value={c.componentName}
                     onChange={(e) =>
@@ -128,7 +128,7 @@ export function SectionsEditor({ sections, onChange }: { sections: SectionInput[
                       })
                     }
                     placeholder="Component (e.g. CA1)"
-                    className={rowInputClass}
+                    className={`${rowInputClass} w-full sm:w-auto sm:min-w-0 sm:flex-1`}
                   />
                   <input
                     value={c.componentCode}
@@ -138,7 +138,7 @@ export function SectionsEditor({ sections, onChange }: { sections: SectionInput[
                       })
                     }
                     placeholder="Code"
-                    className={rowInputClass}
+                    className={`${rowInputClass} w-[70px] flex-none`}
                   />
                   <input
                     type="number"
@@ -149,7 +149,7 @@ export function SectionsEditor({ sections, onChange }: { sections: SectionInput[
                       })
                     }
                     placeholder="Max"
-                    className={rowInputClass}
+                    className={`${rowInputClass} w-16 flex-none`}
                   />
                   <input
                     type="number"
@@ -160,10 +160,10 @@ export function SectionsEditor({ sections, onChange }: { sections: SectionInput[
                       })
                     }
                     placeholder="Weight %"
-                    className={rowInputClass}
+                    className={`${rowInputClass} w-16 flex-none`}
                   />
                   <label
-                    className="flex h-[30px] items-center gap-1 whitespace-nowrap text-[9px] text-text-muted"
+                    className="flex h-[30px] flex-none items-center gap-1 whitespace-nowrap text-[9px] text-text-muted"
                     title="On: a blank score here is flagged as missing. Off: it can stay blank, e.g. for a subject a student doesn't take."
                   >
                     <input
@@ -177,7 +177,7 @@ export function SectionsEditor({ sections, onChange }: { sections: SectionInput[
                     />
                     Required
                   </label>
-                  <span className="flex items-center gap-0.5">
+                  <span className="ml-auto flex flex-none items-center gap-0.5 sm:ml-0">
                     <button
                       type="button"
                       onClick={() => updateSection(section.id, { components: move(section.components, ci, -1) })}
