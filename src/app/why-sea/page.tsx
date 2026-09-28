@@ -11,8 +11,9 @@ import {
   GraduationCap,
   UserRound,
   Ban,
+  Check,
 } from "lucide-react";
-import { MarketingPage, Eyebrow, CtaBand } from "@/components/home/MarketingPage";
+import { MarketingPage, Eyebrow, CtaBand, GlowBackdrop, WindowCard } from "@/components/home/MarketingPage";
 
 export const metadata: Metadata = {
   title: "Why SEA · Sophie Educational Assistant",
@@ -106,12 +107,11 @@ export default function WhySeaPage() {
   return (
     <MarketingPage>
       <section className="relative mx-auto max-w-[1000px] px-5 pt-14 pb-16 text-center sm:px-8 sm:pt-20 md:px-12">
-        <div className="mx-auto flex w-fit items-center gap-2.5 text-[0.78rem] font-medium tracking-[0.08em] text-primary uppercase">
-          <span className="h-0.5 w-7 rounded-full bg-primary" />
-          Why SEA
-          <span className="h-0.5 w-7 rounded-full bg-primary" />
+        <GlowBackdrop />
+        <div className="flex justify-center">
+          <Eyebrow>why_sea.md</Eyebrow>
         </div>
-        <h1 className="mx-auto mt-5 max-w-[820px] text-[clamp(2.4rem,7vw,3.6rem)] leading-[1.04] font-medium tracking-[-0.045em] text-deep">
+        <h1 className="mx-auto mt-6 max-w-[820px] text-[clamp(2.4rem,7vw,3.6rem)] leading-[1.04] font-medium tracking-[-0.045em] text-deep">
           Results your school can stand behind, every single term.
         </h1>
         <p className="mx-auto mt-6 max-w-[620px] text-[1.02rem] leading-[1.75] text-[#667b89]">
@@ -121,9 +121,9 @@ export default function WhySeaPage() {
       </section>
 
       <section className="mx-auto max-w-[1100px] px-5 pb-16 sm:px-8 md:px-12">
-        <div className="grid gap-4 rounded-[18px] border border-[#dce5e9] bg-white p-2 md:grid-cols-2">
-          <div className="rounded-[14px] bg-bg-page p-7">
-            <p className="m-0 text-[0.72rem] font-medium tracking-[0.08em] text-[#98a7ae] uppercase">The old way</p>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="rounded-[14px] border border-[#dce5e9] bg-white p-7">
+            <p className="m-0 font-mono text-[0.7rem] font-medium tracking-[0.06em] text-[#98a7ae]">{"// the old way"}</p>
             <ul className="m-0 mt-4 grid gap-3.5 p-0">
               {oldWay.map((line) => (
                 <li key={line} className="flex gap-3 text-[0.88rem] leading-relaxed text-[#6b7d87]">
@@ -133,12 +133,14 @@ export default function WhySeaPage() {
               ))}
             </ul>
           </div>
-          <div className="rounded-[14px] bg-primary-bg p-7">
-            <p className="m-0 text-[0.72rem] font-medium tracking-[0.08em] text-primary uppercase">With SEA</p>
+          <div className="rounded-[14px] border border-[#123753] bg-deep p-7">
+            <p className="m-0 font-mono text-[0.7rem] font-medium tracking-[0.06em] text-[#80c7b3]">{"// with sea"}</p>
             <ul className="m-0 mt-4 grid gap-3.5 p-0">
               {newWay.map((line) => (
-                <li key={line} className="flex gap-3 text-[0.88rem] leading-relaxed text-[#294a5f]">
-                  <span className="mt-[7px] h-1.5 w-1.5 flex-none rounded-full bg-primary" />
+                <li key={line} className="flex gap-3 text-[0.88rem] leading-relaxed text-[#dce8ed]">
+                  <span className="mt-[3px] grid h-4 w-4 flex-none place-items-center rounded-full bg-[#80c7b3]/15 text-[#80c7b3]">
+                    <Check size={10} strokeWidth={2.5} />
+                  </span>
                   {line}
                 </li>
               ))}
@@ -149,37 +151,49 @@ export default function WhySeaPage() {
 
       <section className="mx-auto max-w-[1200px] px-5 pb-16 sm:px-8 md:px-12">
         <div className="mx-auto max-w-[620px] text-center">
-          <Eyebrow>Built for every role</Eyebrow>
-          <h2 className="m-0 text-[1.9rem] font-medium tracking-[-0.03em] text-deep sm:text-[2.2rem]">Something for everyone in the process</h2>
+          <div className="flex justify-center">
+            <Eyebrow>built_for_every_role</Eyebrow>
+          </div>
+          <h2 className="m-0 mt-4 text-[1.9rem] font-medium tracking-[-0.03em] text-deep sm:text-[2.2rem]">Something for everyone in the process</h2>
         </div>
         <div className="mt-10 grid gap-5 md:grid-cols-3">
           {roleBenefits.map(({ icon: Icon, role, points }) => (
-            <div key={role} className="rounded-[16px] border border-[#dce5e9] bg-white p-7">
-              <span className="grid h-11 w-11 place-items-center rounded-[11px] bg-primary-bg text-primary">
-                <Icon size={20} strokeWidth={1.8} />
-              </span>
-              <h3 className="m-0 mt-5 text-[1.05rem] font-medium text-deep">{role}</h3>
-              <ul className="m-0 mt-3 grid gap-2.5 p-0">
-                {points.map((point) => (
-                  <li key={point} className="flex gap-2.5 text-[0.84rem] leading-relaxed text-[#667b89]">
-                    <span className="mt-[7px] h-1 w-1 flex-none rounded-full bg-[#aebfc7]" />
-                    {point}
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <WindowCard key={role}>
+              <div className="p-7">
+                <span className="grid h-11 w-11 place-items-center rounded-[11px] bg-primary-bg text-primary">
+                  <Icon size={20} strokeWidth={1.8} />
+                </span>
+                <h3 className="m-0 mt-5 text-[1.05rem] font-medium text-deep">{role}</h3>
+                <ul className="m-0 mt-3 grid gap-2.5 p-0">
+                  {points.map((point) => (
+                    <li key={point} className="flex gap-2.5 text-[0.84rem] leading-relaxed text-[#667b89]">
+                      <span className="mt-[7px] h-1 w-1 flex-none rounded-full bg-[#aebfc7]" />
+                      {point}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </WindowCard>
           ))}
         </div>
       </section>
 
       <section className="mx-auto max-w-[1200px] px-5 pb-16 sm:px-8 md:px-12">
         <div className="mx-auto max-w-[620px] text-center">
-          <Eyebrow>What&apos;s included</Eyebrow>
-          <h2 className="m-0 text-[1.9rem] font-medium tracking-[-0.03em] text-deep sm:text-[2.2rem]">Everything a results process needs</h2>
+          <div className="flex justify-center">
+            <Eyebrow>whats_included</Eyebrow>
+          </div>
+          <h2 className="m-0 mt-4 text-[1.9rem] font-medium tracking-[-0.03em] text-deep sm:text-[2.2rem]">Everything a results process needs</h2>
         </div>
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map(({ icon: Icon, title, body }) => (
-            <div key={title} className="rounded-[14px] border border-[#dce5e9] bg-white p-6">
+          {features.map(({ icon: Icon, title, body }, i) => (
+            <div
+              key={title}
+              className="group relative rounded-[14px] border border-[#dce5e9] bg-white p-6 transition-all duration-200 hover:-translate-y-[3px] hover:border-primary/30 hover:shadow-[0_16px_36px_-16px_rgba(24,95,165,0.28)]"
+            >
+              <span className="pointer-events-none absolute top-5 right-5 font-mono text-[0.68rem] text-[#cbd6db] transition-colors group-hover:text-primary/40">
+                {String(i + 1).padStart(2, "0")}
+              </span>
               <span className="grid h-10 w-10 place-items-center rounded-[10px] bg-primary-bg text-primary">
                 <Icon size={18} strokeWidth={1.8} />
               </span>
@@ -190,15 +204,33 @@ export default function WhySeaPage() {
         </div>
       </section>
 
-      <section className="bg-deep text-white">
-        <div className="mx-auto max-w-[1200px] px-5 py-16 sm:px-8 md:px-12">
+      <section className="relative overflow-hidden bg-deep text-white">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage: "radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)",
+            backgroundSize: "24px 24px",
+            maskImage: "radial-gradient(ellipse 70% 60% at 50% 30%, black 0%, transparent 75%)",
+            WebkitMaskImage: "radial-gradient(ellipse 70% 60% at 50% 30%, black 0%, transparent 75%)",
+          }}
+        />
+        <div className="relative mx-auto max-w-[1200px] px-5 py-16 sm:px-8 md:px-12">
           <div className="mx-auto max-w-[560px] text-center">
-            <p className="m-0 text-[0.78rem] font-medium tracking-[0.08em] text-[#80c7b3] uppercase">Trust and privacy</p>
-            <h2 className="m-0 mt-3 text-[1.7rem] font-medium tracking-[-0.03em] sm:text-[2rem]">Your school&apos;s data stays your school&apos;s</h2>
+            <div className="flex justify-center">
+              <span className="inline-flex items-center gap-2 rounded-full border border-[#2a4a63] bg-[#0f3d61] px-3 py-1.5 font-mono text-[0.7rem] font-medium tracking-wide text-[#80c7b3]">
+                <ShieldCheck size={12} strokeWidth={2} />
+                trust_and_privacy
+              </span>
+            </div>
+            <h2 className="m-0 mt-4 text-[1.7rem] font-medium tracking-[-0.03em] sm:text-[2rem]">Your school&apos;s data stays your school&apos;s</h2>
           </div>
           <div className="mx-auto mt-10 grid max-w-[900px] gap-4 sm:grid-cols-3">
             {trustPoints.map(({ icon: Icon, label }) => (
-              <div key={label} className="rounded-[14px] border border-[#26445c] bg-[#0f3d61] p-6 text-center">
+              <div
+                key={label}
+                className="rounded-[14px] border border-[#26445c] bg-[#0f3d61] p-6 text-center transition-colors hover:border-[#3a6280]"
+              >
                 <span className="mx-auto grid h-11 w-11 place-items-center rounded-full border border-[#315873] text-[#80c7b3]">
                   <Icon size={19} strokeWidth={1.8} />
                 </span>
