@@ -16,7 +16,8 @@ export type IconName =
   | "Layers"
   | "BadgeCheck"
   | "ClipboardList"
-  | "ShieldCheck";
+  | "ShieldCheck"
+  | "Megaphone";
 
 export type NavItem = {
   label: string;

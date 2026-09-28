@@ -3,6 +3,7 @@ import type { NavItem } from "@/components/app-shell";
 export const ownerNavItems: NavItem[] = [
   { label: "Schools", href: "/owner/schools", icon: "Building2" },
   { label: "Analytics", href: "/owner/analytics", icon: "BarChart3" },
+  { label: "Announcements", href: "/owner/announcements", icon: "Megaphone" },
   { label: "Global settings", href: "/owner/settings", icon: "Settings" },
   { label: "Go-live", href: "/owner/readiness", icon: "ShieldCheck" },
 ];
