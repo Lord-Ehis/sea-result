@@ -42,11 +42,14 @@
   --radius-sm: var(--radius-sm);
   --radius-md: var(--radius-md);
 
-  --spacing-xs: var(--gap-xs);
-  --spacing-sm: var(--gap-sm);
-  --spacing-md: var(--gap-md);
-  --spacing-lg: var(--gap-lg);
-  --spacing-xl: var(--gap-xl);
+  /* --gap-xs/sm/md/lg/xl (design-tokens.css) are intentionally NOT mapped
+     into Tailwind's shared --spacing-* scale here. That scale isn't just
+     for gap-*: named sizes like max-w-sm/max-w-md/w-lg resolve through it
+     too, so a previous version of this block silently turned every
+     max-w-sm (384px) and max-w-md (448px) in the app into 8px/12px — no
+     component here actually uses gap-xs/sm/md/lg/xl (Tailwind's own
+     numeric scale, e.g. gap-2, gap-3, covers the same pixel values), so
+     nothing depends on this mapping existing. */
 }
 
 body {

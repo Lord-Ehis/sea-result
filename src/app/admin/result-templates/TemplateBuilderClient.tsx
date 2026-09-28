@@ -680,7 +680,7 @@ export function TemplateBuilderClient({
 
               {selectedVersion && (
                 <>
-                  <div className="flex items-center justify-between gap-2 border-b border-border px-5 py-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-4">
                     <div>
                       <h3 className="m-0 text-body font-medium text-text-primary">
                         Version {selectedVersion.versionNumber}
@@ -688,7 +688,7 @@ export function TemplateBuilderClient({
                       </h3>
                     </div>
                     {isEditableDraft && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <button
                           type="button"
                           onClick={handleValidate}
