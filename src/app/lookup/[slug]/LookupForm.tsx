@@ -15,12 +15,22 @@ import { PerformanceSummaryBox } from "@/components/results/PerformanceSummaryBo
 import { AnnualSummaryTable } from "@/components/results/AnnualSummaryTable";
 import { FieldValueRow } from "@/components/results/FieldValueRow";
 
-export function LookupForm({ schoolName, slug }: { schoolName: string; slug: string }) {
+// A verification code (e.g. R7K4-P2M9, from generateVerificationCode in
+// snapshot.ts) is exactly 8 characters once separators are stripped — a
+// shape a school-assigned student code essentially never matches. Someone
+// who prints a result sees both a student code and a verification code on
+// it, and it's an easy mix-up to type the wrong one in here.
+function looksLikeVerificationCode(input: string): boolean {
+  return input.trim().toUpperCase().replace(/[^A-Z0-9]/g, "").length === 8;
+}
+
+export function LookupForm({ schoolName, slug, logoUrl }: { schoolName: string; slug: string; logoUrl: string | null }) {
   const [studentCode, setStudentCode] = useState("");
   const [fullName, setFullName] = useState("");
   const [result, setResult] = useState<LookupResult | null>(null);
   const [comparingTemplateId, setComparingTemplateId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [logoBroken, setLogoBroken] = useState(false);
 
   // Groups every published result by template, preserving the query's own
   // publishedAt-desc order within each group (newest term first).
@@ -52,9 +62,19 @@ export function LookupForm({ schoolName, slug }: { schoolName: string; slug: str
     <div className="grid min-h-screen place-items-center bg-bg-page px-4 py-10">
       <div className="w-full max-w-[440px] rounded-md border border-border bg-bg-card p-8">
         <div className="mb-7 flex flex-col items-center text-center">
-          <span className="grid h-[55px] w-[55px] place-items-center rounded-md border border-dashed border-primary/40 bg-primary-bg text-heading font-medium tracking-tight text-primary">
-            {initials}
-          </span>
+          {logoUrl && !logoBroken ? (
+            // eslint-disable-next-line @next/next/no-img-element -- arbitrary URL the school uploaded, not an optimizable local asset
+            <img
+              src={logoUrl}
+              alt=""
+              onError={() => setLogoBroken(true)}
+              className="h-[55px] w-[55px] flex-none rounded-md border border-border bg-bg-card object-contain"
+            />
+          ) : (
+            <span className="grid h-[55px] w-[55px] place-items-center rounded-md border border-dashed border-primary/40 bg-primary-bg text-heading font-medium tracking-tight text-primary">
+              {initials}
+            </span>
+          )}
           <span className="mt-3 text-caption font-medium text-text-secondary">{schoolName}</span>
           <h1 className="mt-5 mb-0 text-title font-medium leading-tight tracking-tight text-text-primary">Check student result</h1>
           <p className="mt-2 mb-0 text-body text-text-muted">Enter the student&apos;s details to continue.</p>
@@ -96,9 +116,21 @@ export function LookupForm({ schoolName, slug }: { schoolName: string; slug: str
         )}
 
         {result && !result.found && (
-          <p className="mt-1 rounded-md border border-primary/20 bg-primary-bg px-3.5 py-3 text-caption leading-relaxed text-primary">
-            {result.limitedMessage ?? "No matching result found. Double-check the student code and full name, or contact your school."}
-          </p>
+          <div className="mt-1 grid gap-2.5">
+            <p className="m-0 rounded-md border border-primary/20 bg-primary-bg px-3.5 py-3 text-caption leading-relaxed text-primary">
+              {result.limitedMessage ?? "No matching result found. Double-check the student code and full name, or contact your school."}
+            </p>
+            {!result.limitedMessage && looksLikeVerificationCode(studentCode) && (
+              <p className="m-0 rounded-md border border-border bg-bg-page px-3.5 py-3 text-caption leading-relaxed text-text-secondary">
+                That looks like it could be a <strong>verification code</strong> (printed on a result to confirm it&apos;s genuine),
+                not the student code this form asks for — those are two different things. Try{" "}
+                <Link href={`/verify?code=${encodeURIComponent(studentCode)}`} className="font-medium text-primary hover:underline">
+                  verifying it here
+                </Link>{" "}
+                instead, or ask your school for the student&apos;s code.
+              </p>
+            )}
+          </div>
         )}
 
         {result?.found && (

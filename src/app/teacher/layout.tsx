@@ -18,6 +18,7 @@ export default async function TeacherLayout({ children }: { children: React.Reac
       workspaceMeta="Assigned classes only"
       pageTitle="Teacher"
       schoolName={school?.name}
+      schoolLogoUrl={school?.logoUrl}
       userName={session?.user.name ?? "Teacher"}
       userRoleLabel="Teacher"
       announcement={announcement}
