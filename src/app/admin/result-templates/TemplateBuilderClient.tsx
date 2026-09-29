@@ -962,6 +962,10 @@ function FormulaConfig({
   onChange: (formula: ComputedFormula) => void;
 }) {
   const formula = field.formula ?? defaultFormula("sum");
+  // Only for the promotion formula's Subjects/Compulsory-subjects pickers —
+  // every other formula kind below still uses the full otherFields list,
+  // since e.g. a Grade formula legitimately reads from a Computed Total field.
+  const subjectCandidates = otherFields.filter((of) => of.type === "Number");
 
   function changeKind(kind: ComputedFormula["kind"]) {
     onChange(defaultFormula(kind));
@@ -1063,11 +1067,15 @@ function FormulaConfig({
         <>
           <div className="grid gap-1.5">
             <span className="text-[10px] text-text-muted">Subjects</span>
-            {otherFields.length === 0 ? (
-              <p className="m-0 text-[10px] text-text-muted">Add other fields first.</p>
+            {/* Only raw Number fields make sense as "subjects" here — a Computed
+                field (e.g. a Total or Grade) isn't itself a subject a student
+                passes or fails, and letting one be picked produces a garbled
+                Result Analysis narrative (e.g. "You passed Total"). */}
+            {subjectCandidates.length === 0 ? (
+              <p className="m-0 text-[10px] text-text-muted">Add subject score fields first.</p>
             ) : (
               <div className="grid max-h-[140px] gap-1 overflow-y-auto rounded-md border border-border bg-bg-card p-1.5">
-                {otherFields.map((of) => (
+                {subjectCandidates.map((of) => (
                   <label key={of.id} className="flex cursor-pointer items-center gap-2 rounded-md p-1.5 text-[10px] text-text-secondary hover:bg-bg-page">
                     <input
                       type="checkbox"
@@ -1094,7 +1102,7 @@ function FormulaConfig({
               <p className="m-0 text-[10px] text-text-muted">Pick subjects above first.</p>
             ) : (
               <div className="grid max-h-[140px] gap-1 overflow-y-auto rounded-md border border-border bg-bg-card p-1.5">
-                {otherFields
+                {subjectCandidates
                   .filter((of) => formula.subjectFields.includes(of.id))
                   .map((of) => (
                     <label key={of.id} className="flex cursor-pointer items-center gap-2 rounded-md p-1.5 text-[10px] text-text-secondary hover:bg-bg-page">
