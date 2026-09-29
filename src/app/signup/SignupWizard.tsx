@@ -6,6 +6,7 @@ import { signIn } from "next-auth/react";
 import { Building2, CreditCard, UserPlus, Check, ArrowLeft, ArrowRight } from "lucide-react";
 import { checkSlugAvailable, createSchoolSignup } from "./actions";
 import { Logo } from "@/components/ui/Logo";
+import { BackHomeLink } from "@/components/ui/BackHomeLink";
 import { PackageOverview, type PlanSummary } from "@/components/PackageOverview";
 import { TermsConsent } from "@/components/TermsConsent";
 import { PasswordInput } from "@/components/ui/PasswordInput";
@@ -150,6 +151,7 @@ export function SignupWizard({ offer }: { offer: SignupOffer }) {
   return (
     <div className="grid min-h-screen place-items-center bg-bg-page px-4 py-10">
       <div className="w-full max-w-[560px] rounded-md border border-border bg-bg-card p-8">
+        <BackHomeLink />
         <div className="mb-7">
           <Logo height={42} />
         </div>

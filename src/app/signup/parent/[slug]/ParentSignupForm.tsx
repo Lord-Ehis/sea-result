@@ -6,6 +6,7 @@ import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { registerParent } from "./actions";
 import { Logo } from "@/components/ui/Logo";
+import { BackHomeLink } from "@/components/ui/BackHomeLink";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { TermsConsent } from "@/components/TermsConsent";
 
@@ -63,6 +64,7 @@ export function ParentSignupForm({ schoolName, slug }: { schoolName: string; slu
   return (
     <div className="grid min-h-screen place-items-center bg-bg-page px-4">
       <div className="w-full max-w-[440px] rounded-md border border-border bg-bg-card p-8">
+        <BackHomeLink />
         <div className="mb-7">
           <Logo height={42} />
         </div>
