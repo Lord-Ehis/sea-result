@@ -22,8 +22,16 @@ const PILL = {
 
 // Things only a person can confirm (or that we can't see from here).
 const CONFIRM_YOURSELF: { title: string; text: string; href?: string }[] = [
-  { title: "Vercel plan", text: "Vercel's free Hobby plan is for non-commercial projects. A paid product should be on the Pro plan.", href: "https://vercel.com/pricing" },
-  { title: "Supabase plan and backups", text: "The free plan pauses after a week of inactivity and has no daily backups. Use a paid plan before real school data goes in.", href: "https://supabase.com/pricing" },
+  {
+    title: "Vercel plan",
+    text: "Vercel's free Hobby plan is for non-commercial projects. Upgrade to Pro — $20/month flat, billed monthly (no annual discount is offered) — before real schools depend on this.",
+    href: "https://vercel.com/pricing",
+  },
+  {
+    title: "Supabase plan and backups",
+    text: "The free plan pauses after a week of inactivity and has no daily backups — a real outage risk, not just a terms issue. Upgrade to Pro — from $25/month, billed monthly (no annual discount is offered), likely to stay near that for a while at this scale — before real school data goes in.",
+    href: "https://supabase.com/pricing",
+  },
   { title: "Paystack business activation", text: "Live payments need Paystack to activate your business (business documents and a settlement bank account).", href: "https://dashboard.paystack.com" },
   { title: "Lawyer review", text: "Have a Nigerian lawyer read the Terms of Use and Privacy Policy before launch." },
   { title: "Support inbox", text: `Make sure mail sent to ${SUPPORT_EMAIL} actually arrives, since the policies tell people to write there.` },
