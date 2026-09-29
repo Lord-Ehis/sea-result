@@ -15,6 +15,15 @@ import { PerformanceSummaryBox } from "@/components/results/PerformanceSummaryBo
 import { AnnualSummaryTable } from "@/components/results/AnnualSummaryTable";
 import { FieldValueRow } from "@/components/results/FieldValueRow";
 
+// A verification code (e.g. R7K4-P2M9, from generateVerificationCode in
+// snapshot.ts) is exactly 8 characters once separators are stripped — a
+// shape a school-assigned student code essentially never matches. Someone
+// who prints a result sees both a student code and a verification code on
+// it, and it's an easy mix-up to type the wrong one in here.
+function looksLikeVerificationCode(input: string): boolean {
+  return input.trim().toUpperCase().replace(/[^A-Z0-9]/g, "").length === 8;
+}
+
 export function LookupForm({ schoolName, slug, logoUrl }: { schoolName: string; slug: string; logoUrl: string | null }) {
   const [studentCode, setStudentCode] = useState("");
   const [fullName, setFullName] = useState("");
@@ -107,9 +116,21 @@ export function LookupForm({ schoolName, slug, logoUrl }: { schoolName: string; 
         )}
 
         {result && !result.found && (
-          <p className="mt-1 rounded-md border border-primary/20 bg-primary-bg px-3.5 py-3 text-caption leading-relaxed text-primary">
-            {result.limitedMessage ?? "No matching result found. Double-check the student code and full name, or contact your school."}
-          </p>
+          <div className="mt-1 grid gap-2.5">
+            <p className="m-0 rounded-md border border-primary/20 bg-primary-bg px-3.5 py-3 text-caption leading-relaxed text-primary">
+              {result.limitedMessage ?? "No matching result found. Double-check the student code and full name, or contact your school."}
+            </p>
+            {!result.limitedMessage && looksLikeVerificationCode(studentCode) && (
+              <p className="m-0 rounded-md border border-border bg-bg-page px-3.5 py-3 text-caption leading-relaxed text-text-secondary">
+                That looks like it could be a <strong>verification code</strong> (printed on a result to confirm it&apos;s genuine),
+                not the student code this form asks for — those are two different things. Try{" "}
+                <Link href={`/verify?code=${encodeURIComponent(studentCode)}`} className="font-medium text-primary hover:underline">
+                  verifying it here
+                </Link>{" "}
+                instead, or ask your school for the student&apos;s code.
+              </p>
+            )}
+          </div>
         )}
 
         {result?.found && (
