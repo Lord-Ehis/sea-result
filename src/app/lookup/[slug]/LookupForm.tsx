@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { lookupStudentResult, type LookupResult } from "./actions";
+import { BackHomeLink } from "@/components/ui/BackHomeLink";
 import { ComparisonReport } from "@/components/results/ComparisonReport";
 import { GridResultTable } from "@/components/results/GridResultTable";
 import { RatingGridTable } from "@/components/results/RatingGridTable";
@@ -61,6 +62,7 @@ export function LookupForm({ schoolName, slug, logoUrl }: { schoolName: string; 
   return (
     <div className="grid min-h-screen place-items-center bg-bg-page px-4 py-10">
       <div className="w-full max-w-[440px] rounded-md border border-border bg-bg-card p-8">
+        <BackHomeLink />
         <div className="mb-7 flex flex-col items-center text-center">
           {logoUrl && !logoBroken ? (
             // eslint-disable-next-line @next/next/no-img-element -- arbitrary URL the school uploaded, not an optimizable local asset
