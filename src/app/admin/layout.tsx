@@ -46,6 +46,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       workspaceMeta={scoped ? `${campusCount} ${campusCount === 1 ? "campus" : "campuses"} assigned to you` : `${campusCount} active campuses`}
       pageTitle={scoped ? "Campus admin" : "School admin"}
       schoolName={school?.name}
+      schoolLogoUrl={school?.logoUrl}
       userName={session?.user.name ?? "School admin"}
       userRoleLabel={scoped ? "Campus admin" : "School admin"}
       notificationsHref="/admin/notifications"

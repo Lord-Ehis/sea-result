@@ -13,6 +13,7 @@ type AppShellProps = {
   workspaceMeta: string;
   pageTitle: string;
   schoolName?: string;
+  schoolLogoUrl?: string | null;
   termBadge?: string;
   userName: string;
   userRoleLabel: string;
@@ -28,6 +29,7 @@ export function AppShell({
   workspaceMeta,
   pageTitle,
   schoolName,
+  schoolLogoUrl,
   termBadge,
   userName,
   userRoleLabel,
@@ -55,6 +57,7 @@ export function AppShell({
           <Topbar
             pageTitle={pageTitle}
             schoolName={schoolName}
+            schoolLogoUrl={schoolLogoUrl}
             termBadge={termBadge}
             userName={userName}
             userRoleLabel={userRoleLabel}

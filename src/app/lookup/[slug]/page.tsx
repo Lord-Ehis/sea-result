@@ -7,7 +7,7 @@ export default async function SchoolLookupPage({ params }: { params: Promise<{ s
 
   const school = await prisma.school.findFirst({
     where: { slug, status: "ACTIVE", allowResultLookup: true },
-    select: { name: true, slug: true },
+    select: { name: true, slug: true, logoUrl: true },
   });
 
   if (!school) {
@@ -25,5 +25,5 @@ export default async function SchoolLookupPage({ params }: { params: Promise<{ s
     );
   }
 
-  return <LookupForm schoolName={school.name} slug={school.slug} />;
+  return <LookupForm schoolName={school.name} slug={school.slug} logoUrl={school.logoUrl} />;
 }
