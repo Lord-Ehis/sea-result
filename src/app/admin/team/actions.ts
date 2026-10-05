@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { createAndSendNotification } from "@/lib/notifications";
 import { createPasswordResetToken } from "@/lib/password-reset";
 import { changeUserEmail } from "@/lib/change-email";
+import { forgetUserSession } from "@/lib/session-validity";
 import { UserError, toResult, type ActionResult } from "@/lib/user-error";
 
 // Campus admins: School Admin accounts limited to the campuses chosen here.
@@ -104,6 +105,7 @@ export async function setCampusAdminActive(userId: string, isActive: boolean): P
   return toResult(async () => {
     const admin = await findCampusAdmin(schoolId, userId);
     await prisma.user.update({ where: { id: admin.id }, data: { isActive } });
+    forgetUserSession(admin.id);
     revalidatePath("/admin/team");
     return {};
   });

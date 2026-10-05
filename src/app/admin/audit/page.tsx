@@ -7,6 +7,7 @@ import { classWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 import { AUDIT_ACTIONS, AUDIT_PAGE_SIZE, countAudit, loadAudit, parseAuditFilters } from "@/lib/audit-query";
 import { ACTION_LABEL } from "@/lib/audit-describe";
+import { loadAccountEvents } from "@/lib/account-events";
 
 type SearchParams = { action?: string; classId?: string; from?: string; to?: string; actor?: string; page?: string };
 
@@ -30,6 +31,8 @@ export default async function AuditLogPage({ searchParams }: { searchParams: Pro
       : Promise.resolve([] as { id: string; name: string }[]),
   ]);
   const pages = Math.max(1, Math.ceil(total / AUDIT_PAGE_SIZE));
+  // Sign-in changes are school-wide, so only the main admin sees them.
+  const accountEvents = access.campusIds === null ? await loadAccountEvents(schoolId) : [];
 
   const query = (extra: Record<string, string>) => {
     const params = new URLSearchParams();
@@ -163,6 +166,42 @@ export default async function AuditLogPage({ searchParams }: { searchParams: Pro
               )}
             </div>
           )}
+        </section>
+      )}
+
+      {accountEvents.length > 0 && (
+        <section className="mt-6 overflow-hidden rounded-md border border-border bg-bg-card">
+          <div className="border-b border-border px-5 py-4">
+            <h2 className="m-0 text-heading font-medium text-text-primary">Sign-in email changes</h2>
+            <p className="mt-1.5 text-caption text-text-muted">Whenever someone&apos;s sign-in email was replaced because they lost access to their inbox. Latest {accountEvents.length}.</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] border-collapse text-left">
+              <thead className="bg-[#fafbfb]">
+                <tr>
+                  {["When", "Account", "Changed by", "From", "To"].map((h) => (
+                    <th key={h} className="border-b border-border px-4 py-3 text-[10px] font-medium uppercase tracking-wide text-text-muted first:pl-5">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {accountEvents.map((e) => (
+                  <tr key={e.id} className="border-b border-[#f0f2f3] align-top last:border-0">
+                    <td className="whitespace-nowrap px-4 py-3 pl-5 text-caption text-text-secondary">{e.at.toLocaleString("en-GB")}</td>
+                    <td className="px-4 py-3 text-caption font-medium text-text-primary">{e.account}</td>
+                    <td className="px-4 py-3 text-caption text-text-secondary">
+                      {e.changedBy}
+                      {e.changedByRole && <span className="block text-[10px] text-text-muted">{e.changedByRole}</span>}
+                    </td>
+                    <td className="px-4 py-3 text-caption text-text-secondary">{e.from}</td>
+                    <td className="px-4 py-3 text-caption text-text-secondary">{e.to}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
     </>
