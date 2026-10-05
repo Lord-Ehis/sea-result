@@ -8,6 +8,7 @@ import { requireFullAdmin } from "@/lib/admin-access";
 import { prisma } from "@/lib/prisma";
 import { createAndSendNotification } from "@/lib/notifications";
 import { createPasswordResetToken } from "@/lib/password-reset";
+import { changeUserEmail } from "@/lib/change-email";
 import { UserError, toResult, type ActionResult } from "@/lib/user-error";
 
 // Campus admins: School Admin accounts limited to the campuses chosen here.
@@ -105,5 +106,24 @@ export async function setCampusAdminActive(userId: string, isActive: boolean): P
     await prisma.user.update({ where: { id: admin.id }, data: { isActive } });
     revalidatePath("/admin/team");
     return {};
+  });
+}
+
+/**
+ * Replaces the email a campus admin signs in with — the recovery path when they've
+ * lost their inbox. They then set a new password from a link sent to the new address.
+ * The main admin's own email is changed by the platform owner, never from here.
+ */
+export async function changeCampusAdminEmail(input: { userId: string; email: string }): Promise<ActionResult<{ linkSent: boolean; email: string }>> {
+  const { schoolId, userId } = await requireFullAdmin();
+  return toResult(async () => {
+    const admin = await findCampusAdmin(schoolId, input.userId);
+    const result = await changeUserEmail({
+      targetUserId: admin.id,
+      newEmail: input.email,
+      actor: { userId, role: "SCHOOL_ADMIN", label: "your school's main administrator" },
+    });
+    revalidatePath("/admin/team");
+    return { linkSent: result.linkSent, email: result.newEmail };
   });
 }

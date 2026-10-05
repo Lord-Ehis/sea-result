@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { forgetSchoolAccess } from "@/lib/school-access-lookup";
 import { defaultSessionLabel } from "@/lib/academic-term";
 import { UserError, toResult, type ActionResult } from "@/lib/user-error";
+import { changeUserEmail } from "@/lib/change-email";
 
 async function requirePlatformOwner() {
   const session = await auth();
@@ -75,5 +76,22 @@ export async function grantComplimentaryAccess(input: { schoolId: string; until:
     revalidatePath(`/owner/schools/${school.id}`);
     revalidatePath("/owner/schools");
     return {};
+  });
+}
+
+// Recovery for a school administrator who has lost their inbox. The owner is
+// expected to have confirmed who is asking (e.g. by phone) before using this.
+export async function changeSchoolAdminEmail(input: { userId: string; email: string }): Promise<ActionResult<{ linkSent: boolean; email: string }>> {
+  const ownerId = await requirePlatformOwner();
+  return toResult(async () => {
+    const admin = await prisma.user.findFirst({ where: { id: input.userId, role: "SCHOOL_ADMIN", schoolId: { not: null } }, select: { id: true, schoolId: true } });
+    if (!admin?.schoolId) throw new UserError("Admin account not found.");
+    const result = await changeUserEmail({
+      targetUserId: admin.id,
+      newEmail: input.email,
+      actor: { userId: ownerId, role: "PLATFORM_OWNER", label: "the Sophie Educational Assistant team" },
+    });
+    revalidatePath(`/owner/schools/${admin.schoolId}`);
+    return { linkSent: result.linkSent, email: result.newEmail };
   });
 }

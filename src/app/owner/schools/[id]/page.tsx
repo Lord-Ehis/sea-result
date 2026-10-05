@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Building2, Mail, CalendarDays, CreditCard, Users } from "lucide-react";
+import { ArrowLeft, Building2, CalendarDays, CreditCard, Users } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusPill } from "@/components/ui/StatusPill";
@@ -8,6 +8,7 @@ import { resolveSchoolAccess } from "@/lib/school-access";
 import { SchoolStatusToggle } from "./SchoolStatusToggle";
 import { ComplimentaryAccessPanel } from "./ComplimentaryAccessPanel";
 import { DeletionRequestPanel } from "./DeletionRequestPanel";
+import { SchoolAdminsList } from "./SchoolAdminsList";
 
 const naira = (n: number) => `₦${n.toLocaleString()}`;
 
@@ -158,26 +159,7 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ i
           <div className="border-b border-border px-5 py-5">
             <h2 className="m-0 text-heading font-medium text-text-primary">School admins</h2>
           </div>
-          <div className="divide-y divide-[#f0f2f3]">
-            {school.users.length === 0 ? (
-              <p className="px-5 py-6 text-body text-text-muted">No admin account yet.</p>
-            ) : (
-              school.users.map((u) => (
-                <div key={u.id} className="flex items-center gap-2.5 px-5 py-4">
-                  <span className="grid h-[33px] w-[33px] flex-none place-items-center rounded-md bg-primary-bg text-[10px] font-medium text-primary">
-                    {u.name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase()}
-                  </span>
-                  <div className="min-w-0">
-                    <strong className="block truncate text-body font-medium text-text-primary">{u.name}</strong>
-                    <span className="flex items-center gap-1 text-caption text-text-muted">
-                      <Mail size={12} strokeWidth={1.8} />
-                      {u.email}
-                    </span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+          <SchoolAdminsList admins={school.users.map((u) => ({ id: u.id, name: u.name, email: u.email }))} />
         </section>
       </div>
 
