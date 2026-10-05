@@ -5,7 +5,8 @@ import { Search, Plus } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { StatusPill } from "@/components/ui/StatusPill";
-import { inviteTeacher, updateTeacherAssignments, setTeacherActive } from "./actions";
+import { ChangeEmailDialog } from "@/components/ui/ChangeEmailDialog";
+import { inviteTeacher, updateTeacherAssignments, setTeacherActive, changeTeacherEmail } from "./actions";
 
 type ClassOption = { id: string; name: string };
 type Teacher = {
@@ -20,6 +21,7 @@ type Teacher = {
 export function TeachersClient({ classes, teachers }: { classes: ClassOption[]; teachers: Teacher[] }) {
   const [query, setQuery] = useState("");
   const [modalTeacher, setModalTeacher] = useState<Teacher | "new" | null>(null);
+  const [emailTeacher, setEmailTeacher] = useState<Teacher | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
@@ -189,6 +191,13 @@ export function TeachersClient({ classes, teachers }: { classes: ClassOption[]; 
                         </button>
                         <button
                           type="button"
+                          onClick={() => setEmailTeacher(t)}
+                          className="inline-flex h-8 items-center rounded-md border border-border bg-bg-card px-2.5 text-caption font-medium text-text-secondary hover:bg-bg-page"
+                        >
+                          Change email
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => handleToggleActive(t)}
                           disabled={pending}
                           className="inline-flex h-8 items-center rounded-md border border-border bg-bg-card px-2.5 text-caption font-medium text-text-secondary disabled:opacity-60"
@@ -251,6 +260,13 @@ export function TeachersClient({ classes, teachers }: { classes: ClassOption[]; 
                   </button>
                   <button
                     type="button"
+                    onClick={() => setEmailTeacher(t)}
+                    className="inline-flex h-8 items-center rounded-md border border-border bg-bg-card px-2.5 text-caption font-medium text-text-secondary hover:bg-bg-page"
+                  >
+                    Change email
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => handleToggleActive(t)}
                     disabled={pending}
                     className="inline-flex h-8 items-center rounded-md border border-border bg-bg-card px-2.5 text-caption font-medium text-text-secondary disabled:opacity-60"
@@ -267,6 +283,14 @@ export function TeachersClient({ classes, teachers }: { classes: ClassOption[]; 
           Showing {filtered.length} of {teachers.length} teachers
         </div>
       </section>
+
+      <ChangeEmailDialog
+        key={emailTeacher?.id ?? "none"}
+        person={emailTeacher}
+        onClose={() => setEmailTeacher(null)}
+        onSubmit={(teacherId, newEmail) => changeTeacherEmail({ teacherId, email: newEmail })}
+        onDone={setMessage}
+      />
 
       <Modal
         open={modalTeacher !== null}

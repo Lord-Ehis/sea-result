@@ -9,6 +9,8 @@ import { classWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 import { createAndSendNotification } from "@/lib/notifications";
 import { createPasswordResetToken } from "@/lib/password-reset";
+import { changeUserEmail } from "@/lib/change-email";
+import { UserError, toResult, type ActionResult } from "@/lib/user-error";
 
 // Every class id must be a real class of this school that this admin may manage.
 async function assertClassesInScope(access: AdminAccess, classIds: string[]) {
@@ -27,6 +29,15 @@ async function findTeacherInScope(access: AdminAccess, teacherId: string) {
       ...(access.campusIds === null ? {} : { teachingAssignments: { some: { class: classWhere(access) } } }),
     },
   });
+}
+
+// An account-wide change (switching it off, replacing its email) affects every
+// campus the teacher works in, so a campus admin may only make it for a
+// teacher who works nowhere else.
+async function assertAccountOnlyInScope(access: AdminAccess, teacherId: string) {
+  if (access.campusIds === null) return;
+  const elsewhere = await prisma.teacherClassAssignment.count({ where: { teacherId, NOT: { class: classWhere(access) } } });
+  if (elsewhere > 0) throw new UserError("This teacher also teaches at another campus. Ask the school's main administrator to change their account.");
 }
 
 /**
@@ -116,13 +127,29 @@ export async function setTeacherActive(teacherId: string, isActive: boolean) {
   const teacher = await findTeacherInScope(access, teacherId);
   if (!teacher) throw new Error("Teacher not found.");
 
-  // Switching an account off affects every campus the teacher works in, so a
-  // campus admin may only do it for a teacher who works nowhere else.
-  if (access.campusIds !== null) {
-    const elsewhere = await prisma.teacherClassAssignment.count({ where: { teacherId, NOT: { class: classWhere(access) } } });
-    if (elsewhere > 0) throw new Error("This teacher also teaches at another campus. Ask the school's main administrator to change their account.");
-  }
+  await assertAccountOnlyInScope(access, teacherId);
 
   await prisma.user.update({ where: { id: teacher.id }, data: { isActive } });
   revalidatePath("/admin/teachers");
+}
+
+/**
+ * Replaces the email a teacher signs in with — the recovery path when they've
+ * lost their inbox. The teacher then sets a new password from a link sent to
+ * the new address.
+ */
+export async function changeTeacherEmail(input: { teacherId: string; email: string }): Promise<ActionResult<{ linkSent: boolean; email: string }>> {
+  const access = await getAdminAccess();
+  return toResult(async () => {
+    const teacher = await findTeacherInScope(access, input.teacherId);
+    if (!teacher) throw new UserError("Teacher not found.");
+    await assertAccountOnlyInScope(access, teacher.id);
+    const result = await changeUserEmail({
+      targetUserId: teacher.id,
+      newEmail: input.email,
+      actor: { userId: access.userId, role: "SCHOOL_ADMIN", label: "your school administrator" },
+    });
+    revalidatePath("/admin/teachers");
+    return { linkSent: result.linkSent, email: result.newEmail };
+  });
 }

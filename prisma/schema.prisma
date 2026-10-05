@@ -172,7 +172,8 @@ model School {
   templateAssignments  TemplateAssignment[]
   resultBatches        ResultBatch[]
   resultEvents         ResultEvent[]
-  annualSettings       AnnualSummarySettings?
+  accountEvents        AccountEvent[]
+  annualSettings      AnnualSummarySettings?
   termExceptions       StudentTermException[]
   resultSnapshots      PublishedResultSnapshot[]
   subjectLists         SubjectList[]
@@ -974,6 +975,30 @@ model ResultEvent {
   @@index([batchId])
   @@index([schoolId, createdAt])
   @@map("result_events")
+}
+
+// Append-only record of changes to who can sign in to an account (today: the
+// sign-in email being replaced). userId is a plain string so the history
+// survives the account being deleted. A database trigger blocks UPDATE.
+enum AccountEventAction {
+  EMAIL_CHANGED
+}
+
+model AccountEvent {
+  id          String             @id @default(cuid())
+  schoolId    String
+  userId      String
+  action      AccountEventAction
+  actorUserId String?
+  actorRole   Role?
+  metadata    Json?
+  createdAt   DateTime           @default(now())
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId, createdAt])
+  @@index([userId])
+  @@map("account_events")
 }
 
 // Which campuses a campus admin (User.campusScoped) may access.

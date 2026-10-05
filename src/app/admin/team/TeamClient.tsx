@@ -5,7 +5,8 @@ import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { StatusPill } from "@/components/ui/StatusPill";
-import { inviteCampusAdmin, setCampusAdminActive, updateCampusAdminAccess } from "./actions";
+import { ChangeEmailDialog } from "@/components/ui/ChangeEmailDialog";
+import { changeCampusAdminEmail, inviteCampusAdmin, setCampusAdminActive, updateCampusAdminAccess } from "./actions";
 
 type Campus = { id: string; name: string };
 type Admin = { id: string; name: string; email: string; isActive: boolean; campusScoped: boolean; campusIds: string[] };
@@ -14,6 +15,7 @@ const inputClass = "h-10 w-full rounded-md border border-border bg-bg-card px-3 
 
 export function TeamClient({ campuses, admins }: { campuses: Campus[]; admins: Admin[] }) {
   const [modal, setModal] = useState<Admin | "new" | null>(null);
+  const [emailAdmin, setEmailAdmin] = useState<Admin | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
@@ -125,6 +127,13 @@ export function TeamClient({ campuses, admins }: { campuses: Campus[]; admins: A
                         </button>
                         <button
                           type="button"
+                          onClick={() => setEmailAdmin(a)}
+                          className="inline-flex h-8 items-center rounded-md border border-border bg-bg-card px-3 text-caption font-medium text-text-secondary hover:bg-bg-page"
+                        >
+                          Change email
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => toggleActive(a)}
                           disabled={pending}
                           className="inline-flex h-8 items-center rounded-md border border-border bg-bg-card px-3 text-caption font-medium text-text-secondary hover:bg-bg-page disabled:opacity-50"
@@ -140,6 +149,14 @@ export function TeamClient({ campuses, admins }: { campuses: Campus[]; admins: A
           </table>
         </div>
       </section>
+
+      <ChangeEmailDialog
+        key={emailAdmin?.id ?? "none"}
+        person={emailAdmin}
+        onClose={() => setEmailAdmin(null)}
+        onSubmit={(userId, newEmail) => changeCampusAdminEmail({ userId, email: newEmail })}
+        onDone={setMessage}
+      />
 
       <Modal
         open={modal !== null}
