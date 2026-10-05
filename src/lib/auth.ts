@@ -4,6 +4,7 @@ import { callerId, hit, isOverLimit } from "@/lib/rate-limit";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { checkSession } from "@/lib/session-validity";
 import type { Role } from "@prisma/client";
 
 declare module "next-auth" {
@@ -87,12 +88,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    jwt({ token, user }) {
+    async jwt({ token, user }) {
       if (user) {
         token.id = user.id as string;
         token.role = (user as { role: Role }).role;
         token.schoolId = (user as { schoolId: string | null }).schoolId;
+        return token;
       }
+      // Returning null ends the session: the account was switched off or deleted,
+      // or its sign-in email was replaced since this token was issued.
+      if (token.id && !(await checkSession(token.id, token.email))) return null;
       return token;
     },
     session({ session, token }) {

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { createAndSendNotification } from "@/lib/notifications";
 import { createPasswordResetToken } from "@/lib/password-reset";
+import { forgetUserSession } from "@/lib/session-validity";
 import { UserError } from "@/lib/user-error";
 
 // Recovery path for someone who has lost their inbox: a person with authority
@@ -60,6 +61,8 @@ export async function changeUserEmail(input: {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") throw new UserError("An account with this email already exists.");
     throw err;
   }
+
+  forgetUserSession(user.id);
 
   const token = await createPasswordResetToken(user.id);
   const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";

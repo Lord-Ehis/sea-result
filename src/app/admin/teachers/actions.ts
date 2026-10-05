@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { createAndSendNotification } from "@/lib/notifications";
 import { createPasswordResetToken } from "@/lib/password-reset";
 import { changeUserEmail } from "@/lib/change-email";
+import { forgetUserSession } from "@/lib/session-validity";
 import { UserError, toResult, type ActionResult } from "@/lib/user-error";
 
 // Every class id must be a real class of this school that this admin may manage.
@@ -130,6 +131,7 @@ export async function setTeacherActive(teacherId: string, isActive: boolean) {
   await assertAccountOnlyInScope(access, teacherId);
 
   await prisma.user.update({ where: { id: teacher.id }, data: { isActive } });
+  forgetUserSession(teacher.id);
   revalidatePath("/admin/teachers");
 }
 
