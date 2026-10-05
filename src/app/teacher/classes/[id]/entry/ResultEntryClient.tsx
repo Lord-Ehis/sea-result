@@ -175,11 +175,12 @@ export function ResultEntryClient({
     const statuses = students.map((s) => s.status).filter(Boolean);
     if (statuses.length === 0) return "Not started";
     if (statuses.some((s) => s === "REJECTED")) return "Sent back for corrections";
+    if (statuses.length === students.length && statuses.every((s) => s === "PUBLISHED")) return "Published";
     if (statuses.length === students.length && statuses.every((s) => s === "SUBMITTED" || s === "APPROVED" || s === "PUBLISHED")) return "Submitted";
     return "In progress";
   }, [students]);
 
-  const locked = overallStatus === "Submitted";
+  const locked = overallStatus === "Submitted" || overallStatus === "Published";
   const rejectionNote = students.find((s) => s.rejectionNote)?.rejectionNote;
 
   const expandedFields = useMemo(() => expandThisTermFields(fields), [fields]);
@@ -303,7 +304,13 @@ export function ResultEntryClient({
         <PageHeader eyebrow="Teacher workspace / My classes" title={`Result entry · ${className}`} intro={`${templateName} · ${term}`} />
         <StatusPill
           label={overallStatus}
-          tone={overallStatus === "Submitted" ? "success" : overallStatus === "Sent back for corrections" ? "warning" : "neutral"}
+          tone={
+            overallStatus === "Submitted" || overallStatus === "Published"
+              ? "success"
+              : overallStatus === "Sent back for corrections"
+                ? "warning"
+                : "neutral"
+          }
         />
       </div>
 
@@ -443,7 +450,11 @@ export function ResultEntryClient({
             </div>
           </div>
           <div className="border-t border-border px-5 py-3.5 text-caption text-text-muted">
-            {locked ? "Results have been submitted for approval." : "Changes are saved to your account, not just this browser."}
+            {overallStatus === "Published"
+              ? "Results have been published to parents."
+              : locked
+                ? "Results have been submitted for approval."
+                : "Changes are saved to your account, not just this browser."}
           </div>
         </section>
       ) : (
@@ -511,20 +522,26 @@ export function ResultEntryClient({
             ))}
           </div>
           <div className="border-t border-border px-5 py-3.5 text-caption text-text-muted">
-            {locked ? "Results have been submitted for approval." : "Changes are saved to your account, not just this browser."}
+            {overallStatus === "Published"
+              ? "Results have been published to parents."
+              : locked
+                ? "Results have been submitted for approval."
+                : "Changes are saved to your account, not just this browser."}
           </div>
         </section>
       )}
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
         <p className="m-0 text-caption text-text-muted">
-          {locked
-            ? "This batch is locked while it's under review."
-            : errorIssues.length > 0
-              ? `${errorIssues.length} score(s) need fixing before you can save or submit.`
-              : canSubmit
-                ? "All student records are complete and ready to submit."
-                : `${students.length - completedCount} student record(s) still need scores.`}
+          {overallStatus === "Published"
+            ? "This batch is locked because results have been published to parents."
+            : locked
+              ? "This batch is locked while it's under review."
+              : errorIssues.length > 0
+                ? `${errorIssues.length} score(s) need fixing before you can save or submit.`
+                : canSubmit
+                  ? "All student records are complete and ready to submit."
+                  : `${students.length - completedCount} student record(s) still need scores.`}
         </p>
         <div className="flex gap-2">
           <button

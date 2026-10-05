@@ -7,10 +7,10 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-type ClassStatus = "Not started" | "In progress" | "Submitted" | "Sent back for corrections";
+type ClassStatus = "Not started" | "In progress" | "Submitted" | "Published" | "Sent back for corrections";
 
 function statusTone(status: ClassStatus): "success" | "warning" | "neutral" {
-  if (status === "Submitted") return "success";
+  if (status === "Submitted" || status === "Published") return "success";
   if (status === "Sent back for corrections") return "warning";
   return "neutral";
 }
@@ -63,6 +63,7 @@ export default async function MyClassesPage() {
         completed = results.length;
         const allStudentsCovered = results.length === klass.students.length;
         if (results.some((r) => r.status === "REJECTED")) status = "Sent back for corrections";
+        else if (allStudentsCovered && results.every((r) => r.status === "PUBLISHED")) status = "Published";
         else if (allStudentsCovered && results.every((r) => r.status === "SUBMITTED" || r.status === "APPROVED" || r.status === "PUBLISHED")) status = "Submitted";
         else if (results.length > 0) status = "In progress";
       }
