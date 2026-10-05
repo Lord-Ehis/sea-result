@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { SchoolPicker } from "./SchoolPicker";
 import { Logo } from "@/components/ui/Logo";
+import { BackHomeLink } from "@/components/ui/BackHomeLink";
 
 // Queries the School table directly; must stay dynamic so newly
 // onboarded schools show up without a full production rebuild.
@@ -16,6 +17,7 @@ export default async function ResultLookupPage() {
   return (
     <div className="grid min-h-screen place-items-center bg-bg-page px-4">
       <div className="w-full max-w-[420px] rounded-md border border-border bg-bg-card p-8">
+        <BackHomeLink />
         <div className="mb-7">
           <Logo height={42} />
         </div>

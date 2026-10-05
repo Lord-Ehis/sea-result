@@ -149,6 +149,7 @@ function payloadFor(p: Awaited<ReturnType<typeof prepare>>, publication: { versi
     template: { id: p.previous.template.id, name: p.previous.template.name, versionId: p.previous.template.versionId, fields: p.fields },
     data: p.data,
     annual: p.annual,
+    signOff: p.previous.signOff ?? null, // as first published, like the school and student
     publication: { ...publication, publishedAt: new Date(p.previous.publication.publishedAt) },
   });
 }

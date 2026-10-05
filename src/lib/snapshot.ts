@@ -1,6 +1,8 @@
 import { createHash, randomInt } from "node:crypto";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
-import { buildGridResultData, type GridResultData } from "@/lib/grid-compute";
+import { buildGridResultData, gradingScaleLegend, performanceSummary, gradeAnalysis, type GridResultData, type GradingScaleLegendEntry, type PerformanceSummary, type GradeAnalysis } from "@/lib/grid-compute";
+import { attendanceSummary, type AttendanceSummary } from "@/lib/attendance";
+import { buildRatingGridData, type RatingGridData } from "@/lib/rating-grid";
 import type { AnnualSummaryPayload } from "@/lib/annual-summary";
 
 // A published result, frozen. The payload is self-contained — every label,
@@ -17,14 +19,85 @@ export type SnapshotSchool = {
   supportEmail?: string | null;
 };
 
+export type SnapshotStudent = {
+  name: string;
+  code: string;
+  className: string;
+  campusName: string;
+  gender?: string | null;
+  admissionNumber?: string | null;
+  dateOfBirth?: string | null;
+  age?: number | null;
+  height?: string | null;
+  weight?: string | null;
+  favouriteColour?: string | null;
+  clubOrSociety?: string | null;
+  photoUrl?: string | null;
+};
+
+// The bottom-of-page sign-off, frozen with the result: who taught it, who
+// signs for the school, the stamp, and when the next term starts.
+export type SnapshotSignOff = {
+  teacherName?: string | null;
+  principalName?: string | null;
+  principalSignatureUrl?: string | null;
+  stampUrl?: string | null;
+  nextTermBegins?: string | null;
+};
+
+/** null when there is nothing to show, so the block is left out entirely. */
+export function buildSignOff(input: {
+  school: { principalName?: string | null; principalSignatureUrl?: string | null; stampUrl?: string | null; nextTermBegins?: Date | null };
+  teacherName?: string | null;
+}): SnapshotSignOff | null {
+  const signOff: SnapshotSignOff = {
+    teacherName: input.teacherName ?? null,
+    principalName: input.school.principalName ?? null,
+    principalSignatureUrl: input.school.principalSignatureUrl ?? null,
+    stampUrl: input.school.stampUrl ?? null,
+    nextTermBegins: input.school.nextTermBegins ? input.school.nextTermBegins.toISOString() : null,
+  };
+  return Object.values(signOff).some(Boolean) ? signOff : null;
+}
+
+export type SnapshotRemarks = { teacher?: string; principal?: string };
+
+function remarksFrom(fields: TemplateField[], data: Record<string, string>): SnapshotRemarks | null {
+  const remarks: SnapshotRemarks = {};
+  for (const f of fields) {
+    if (!f.remark) continue;
+    const text = (data[f.id] ?? "").trim();
+    if (text) remarks[f.remark] = text;
+  }
+  return Object.keys(remarks).length > 0 ? remarks : null;
+}
+
 export type SnapshotPayload = {
   schemaVersion: 1;
   school: SnapshotSchool;
-  student: { name: string; code: string; className: string; campusName: string };
+  student: SnapshotStudent;
   period: { session: string; term: string };
   template: { id: string; name: string; versionId: string | null };
   fields: { name: string; value: string }[];
   grids: GridResultData[];
+  // Categorised "Rating scale" fields (Affective/Psychomotor domain etc.) as
+  // a checkbox-style grid — absent when the template has none.
+  ratingGrids?: RatingGridData[];
+  // Total obtained / obtainable / percentage / grade across the grid's
+  // subjects — absent when there is nothing to summarise.
+  performanceSummary?: PerformanceSummary;
+  // This student's subjects per grade + subjects offered — absent when
+  // nothing is graded.
+  gradeAnalysis?: GradeAnalysis;
+  signOff?: SnapshotSignOff;
+  // Times opened / present / absent and the percentage — absent when the
+  // template has no attendance switch or the numbers aren't there.
+  attendance?: AttendanceSummary;
+  // The teacher's and principal's written remarks — absent when neither was written.
+  remarks?: SnapshotRemarks;
+  // The template's grade bands/remarks at publish time, for a "Grade Scale"
+  // legend — absent when the template has no Grid field or no bands set.
+  gradingScale?: GradingScaleLegendEntry[];
   // Only on a 3rd Term result of an annual-enabled template. Part of the
   // checksummed payload, so the weights and sources it was built from are
   // frozen with it.
@@ -34,24 +107,54 @@ export type SnapshotPayload = {
 
 export function buildSnapshotPayload(input: {
   school: SnapshotSchool;
-  student: { name: string; code: string; className: string; campusName: string };
+  student: SnapshotStudent;
   period: { session: string; term: string };
   template: { id: string; name: string; versionId: string | null; fields: TemplateField[] };
   data: Record<string, string>;
   annual?: AnnualSummaryPayload | null;
+  signOff?: SnapshotSignOff | null;
   publication: { version: number; verificationCode: string; publishedAt: Date; amendedAt?: Date };
 }): SnapshotPayload {
   const { template, data } = input;
+  const gradingScale = gradingScaleLegend(template.fields);
+  const ratingGrids = buildRatingGridData(template.fields, data);
+  const summary = performanceSummary(template.fields, data);
+  const attendance = attendanceSummary(template.fields, data);
+  const analysis = gradeAnalysis(template.fields, data);
+  const remarks = remarksFrom(template.fields, data);
   return {
     schemaVersion: 1,
-    school: input.school,
+    // Picked field by field: callers pass a wider school row (sign-off
+    // columns, dates) that must not leak into — or break the checksum of —
+    // the frozen payload.
+    school: {
+      name: input.school.name,
+      slug: input.school.slug,
+      logoUrl: input.school.logoUrl,
+      address: input.school.address,
+      phone: input.school.phone,
+      supportEmail: input.school.supportEmail,
+    },
     student: input.student,
     period: input.period,
     template: { id: template.id, name: template.name, versionId: template.versionId },
     // Grid fields have no single value (their cells live under composite
-    // keys) — they're carried separately in `grids`.
-    fields: template.fields.filter((f) => f.type !== "Grid").map((f) => ({ name: f.name, value: data[f.id] ?? "—" })),
+    // keys) — they're carried separately in `grids`. Categorised rating
+    // fields and attendance are carried in `ratingGrids` / `attendance`
+    // instead of this flat list.
+    fields: template.fields
+      .filter((f) => f.type !== "Grid" && !(f.type === "Rating scale" && f.ratingCategory) && !f.attendance && !f.remark)
+      .map((f) => ({ name: f.name, value: data[f.id] ?? "—" })),
     grids: buildGridResultData(template.fields, data),
+    ...(summary ? { performanceSummary: summary } : {}),
+    ...(analysis ? { gradeAnalysis: analysis } : {}),
+    ...(remarks ? { remarks } : {}),
+    ...(input.signOff ? { signOff: input.signOff } : {}),
+    ...(attendance ? { attendance } : {}),
+    // Absent when the template has no categorised rating fields.
+    ...(ratingGrids.length > 0 ? { ratingGrids } : {}),
+    // Absent when the template's Grid has no configured bands.
+    ...(gradingScale.length > 0 ? { gradingScale } : {}),
     // Absent (not null) when there's no annual summary, so snapshots without
     // one keep exactly the shape — and checksum — they were published with.
     ...(input.annual ? { annual: input.annual } : {}),

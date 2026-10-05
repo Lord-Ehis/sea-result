@@ -8,6 +8,7 @@ import { Bell, Menu, LogOut, ChevronDown } from "lucide-react";
 type TopbarProps = {
   pageTitle: string;
   schoolName?: string;
+  schoolLogoUrl?: string | null;
   termBadge?: string;
   userName: string;
   userRoleLabel: string;
@@ -20,6 +21,7 @@ type TopbarProps = {
 export function Topbar({
   pageTitle,
   schoolName,
+  schoolLogoUrl,
   termBadge,
   userName,
   userRoleLabel,
@@ -29,6 +31,7 @@ export function Topbar({
   onOpenMobileNav,
 }: TopbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [logoBroken, setLogoBroken] = useState(false);
   const initials = userName
     .split(" ")
     .map((part) => part[0])
@@ -59,6 +62,15 @@ export function Topbar({
         {schoolName && (
           <>
             <span className="h-[19px] w-px flex-none bg-border" />
+            {schoolLogoUrl && !logoBroken && (
+              // eslint-disable-next-line @next/next/no-img-element -- arbitrary URL the school pasted/uploaded, not an optimizable local asset
+              <img
+                src={schoolLogoUrl}
+                alt=""
+                onError={() => setLogoBroken(true)}
+                className="h-6 w-6 flex-none rounded object-contain"
+              />
+            )}
             <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-text-primary">{schoolName}</span>
           </>
         )}

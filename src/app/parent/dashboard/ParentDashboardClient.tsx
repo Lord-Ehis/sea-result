@@ -6,8 +6,18 @@ import { FileText, Plus, ChevronDown } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ComparisonReport } from "@/components/results/ComparisonReport";
 import { GridResultTable } from "@/components/results/GridResultTable";
+import { RatingGridTable } from "@/components/results/RatingGridTable";
+import { GradingScaleTable } from "@/components/results/GradingScaleTable";
+import { RatingIndicesLegend } from "@/components/results/RatingIndicesLegend";
+import { RemarksBox } from "@/components/results/RemarksBox";
+import type { SnapshotRemarks } from "@/lib/snapshot";
+import { GradeAnalysisTable } from "@/components/results/GradeAnalysisTable";
+import { AttendanceSummaryBox } from "@/components/results/AttendanceSummaryBox";
+import { PerformanceSummaryBox } from "@/components/results/PerformanceSummaryBox";
 import { FieldValueRow } from "@/components/results/FieldValueRow";
-import type { GridResultData } from "@/lib/grid-compute";
+import type { GridResultData, GradingScaleLegendEntry, PerformanceSummary, GradeAnalysis } from "@/lib/grid-compute";
+import type { AttendanceSummary } from "@/lib/attendance";
+import type { RatingGridData } from "@/lib/rating-grid";
 import type { AnnualSummaryPayload } from "@/lib/annual-summary";
 import { AnnualSummaryTable } from "@/components/results/AnnualSummaryTable";
 
@@ -24,6 +34,12 @@ type ResultEntry = {
   intact: boolean;
   fields: { name: string; value: string }[];
   grids: GridResultData[];
+  ratingGrids: RatingGridData[];
+  performanceSummary: PerformanceSummary | null;
+  attendance: AttendanceSummary | null;
+  gradeAnalysis: GradeAnalysis | null;
+  remarks: SnapshotRemarks | null;
+  gradingScale: GradingScaleLegendEntry[];
   annual: AnnualSummaryPayload | null;
 };
 
@@ -142,6 +158,15 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
               {recent.grids.map((g, gi) => (
                 <GridResultTable key={gi} grid={g} />
               ))}
+              {recent.attendance && <AttendanceSummaryBox attendance={recent.attendance} />}
+              {recent.gradeAnalysis && <GradeAnalysisTable analysis={recent.gradeAnalysis} />}
+              {recent.performanceSummary && <PerformanceSummaryBox summary={recent.performanceSummary} />}
+              {recent.ratingGrids.map((g) => (
+                <RatingGridTable key={g.categoryId} grid={g} />
+              ))}
+              <RatingIndicesLegend grids={recent.ratingGrids} />
+              {recent.remarks && <RemarksBox remarks={recent.remarks} />}
+              {recent.gradingScale.length > 0 && <GradingScaleTable bands={recent.gradingScale} />}
               {recent.annual && <AnnualSummaryTable annual={recent.annual} />}
               <ResultFooter r={recent} />
             </div>
@@ -192,6 +217,15 @@ export function ParentDashboardClient({ students }: { students: Child[] }) {
                     {r.grids.map((g, gi) => (
                       <GridResultTable key={gi} grid={g} />
                     ))}
+                    {r.attendance && <AttendanceSummaryBox attendance={r.attendance} />}
+                    {r.gradeAnalysis && <GradeAnalysisTable analysis={r.gradeAnalysis} />}
+                    {r.performanceSummary && <PerformanceSummaryBox summary={r.performanceSummary} />}
+                    {r.ratingGrids.map((g) => (
+                      <RatingGridTable key={g.categoryId} grid={g} />
+                    ))}
+                    <RatingIndicesLegend grids={r.ratingGrids} />
+                    {r.remarks && <RemarksBox remarks={r.remarks} />}
+                    {r.gradingScale.length > 0 && <GradingScaleTable bands={r.gradingScale} />}
                     {r.annual && <AnnualSummaryTable annual={r.annual} />}
                     <ResultFooter r={r} />
                   </div>

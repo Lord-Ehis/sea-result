@@ -7,6 +7,7 @@ import { createTemplate, updateTemplateMeta, type TemplateField, type ComputedFo
 import {
   activateVersion,
   createDraftVersion,
+  createSubjectList,
   duplicateActiveVersionIntoDraft,
   getTemplateVersions,
   previewCompiledFields,
@@ -17,12 +18,38 @@ import { GradeBandsEditor } from "./GradeBandsEditor";
 import { SectionsEditor } from "./SectionsEditor";
 import { GradingScaleEditor } from "./GradingScaleEditor";
 import { RatingCategoriesEditor } from "./RatingCategoriesEditor";
-import { ratingOptionsFor } from "@/lib/field-options";
-import { PRESETS, type GradingScaleSummary, type PresetKey, type RatingCategoryInput, type SectionInput, type TemplateVersionSummary } from "./version-types";
+import {
+  PRESETS,
+  SUBJECT_LIST_STARTERS,
+  type GradingScaleSummary,
+  type PresetKey,
+  type RatingCategoryInput,
+  type SectionInput,
+  type SubjectListStarterKey,
+  type SubjectListSummary,
+  type TemplateVersionSummary,
+} from "./version-types";
 import type { ValidationResult } from "@/lib/version-validate";
 import { TERM_NUMBERS, isTermNumber, termLabel } from "@/lib/term-number";
 import type { AnnualSettings } from "@/lib/annual-summary";
 import { AnnualSettingsCard } from "./AnnualSettingsCard";
+import { computePublishData } from "@/lib/publish-compute";
+import { buildSnapshotPayload, type SnapshotSignOff } from "@/lib/snapshot";
+import { sampleDataFor } from "@/lib/template-sample-data";
+import { SnapshotView } from "@/components/results/SnapshotView";
+
+export type BuilderSchool = {
+  name: string;
+  slug: string;
+  logoUrl: string | null;
+  address: string | null;
+  phone: string | null;
+  supportEmail: string | null;
+  principalName: string | null;
+  principalSignatureUrl: string | null;
+  stampUrl: string | null;
+  nextTermBegins: string | null;
+};
 
 type ClassOption = { id: string; name: string };
 type Template = {
@@ -55,6 +82,7 @@ const FORMULA_LABEL: Record<ComputedFormula["kind"], string> = {
   average: "Average",
   grade: "Grade",
   position: "Position",
+  classAverage: "Class average",
   cumulative: "Cumulative (across terms)",
   remarksLookup: "Remarks lookup",
   promotion: "Promotion status",
@@ -65,6 +93,7 @@ function defaultFormula(kind: ComputedFormula["kind"]): ComputedFormula {
   if (kind === "weightedSum") return { kind, parts: [] }; // only ever synthesized for a compiled Grid, never picked in the builder
   if (kind === "grade") return { kind, of: "", bands: [] };
   if (kind === "position") return { kind, of: "" };
+  if (kind === "classAverage") return { kind, of: "" }; // only ever synthesized for a compiled Grid, never picked in the builder
   if (kind === "cumulative") return { kind, of: "", aggregate: "sum" };
   if (kind === "remarksLookup") return { kind, of: "", map: [] };
   if (kind === "resultAnalysis") return { kind, of: "" };
@@ -72,90 +101,6 @@ function defaultFormula(kind: ComputedFormula["kind"]): ComputedFormula {
     return { kind, subjectFields: [], compulsoryFields: [], passMark: 40, minOffered: 1, minPassed: 1, overallField: "", promotionScore: 40 };
   }
   return { kind, of: [] };
-}
-
-function previewValue(field: TemplateField) {
-  const n = field.name.toLowerCase();
-  if (field.type === "Grid") {
-    const grid = field.grid;
-    if (!grid || grid.subjects.length === 0 || grid.rawColumns.length === 0) {
-      return <span className="text-[9px] italic text-[#8a99a2]">Configure subjects below.</span>;
-    }
-    const sampleSubjects = grid.subjects.slice(0, 3);
-    return (
-      <div className="overflow-x-auto">
-        <table className="w-full text-[8px]">
-          <thead>
-            <tr className="text-left text-[#8b9aa3]">
-              <th className="py-1 pr-2 font-normal">Subject</th>
-              {grid.rawColumns.map((c) => (
-                <th key={c.id} className="py-1 pr-2 text-right font-normal">
-                  {c.name || "—"}
-                </th>
-              ))}
-              <th className="py-1 pr-2 text-right font-normal">Total</th>
-              <th className="py-1 text-right font-normal">Grade</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sampleSubjects.map((s, si) => (
-              <tr key={s.id} className="border-t border-[#e9edef]">
-                <td className="py-1.5 pr-2 text-[#637781]">{s.name || "Untitled subject"}</td>
-                {grid.rawColumns.map((c, ci) => (
-                  <td key={c.id} className="py-1.5 pr-2 text-right font-medium text-[#354b58]">
-                    {7 + ((si + ci) % 3)}
-                  </td>
-                ))}
-                <td className="py-1.5 pr-2 text-right font-medium text-[#354b58]">{80 + si * 4}</td>
-                <td className="py-1.5 text-right font-medium text-[#354b58]">{grid.gradeBands[0]?.label || "A"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
-  if (field.type === "Computed") {
-    const formula = field.formula;
-    return (
-      <span className="text-[9px] italic text-[#8a99a2]">
-        Auto-calculated{formula ? ` — ${FORMULA_LABEL[formula.kind].toLowerCase()}` : ""}
-      </span>
-    );
-  }
-  if (field.type === "Number") {
-    return (
-      <span className="text-[9px] font-medium text-[#384c58]">
-        {n.includes("attendance") ? "94 / 100 days" : n.includes("position") ? "3rd of 36" : "85"}
-      </span>
-    );
-  }
-  if (field.type === "Dropdown") {
-    return <span className="text-[9px] font-medium text-[#384c58]">{n.includes("grade") ? "Excellent" : "Achieved"}</span>;
-  }
-  if (field.type === "Rating scale") {
-    const options = ratingOptionsFor(field);
-    const selectedIndex = Math.max(0, options.length - 2);
-    return (
-      <span className="flex flex-wrap gap-1">
-        {options.map((opt, i) => (
-          <span
-            key={opt}
-            className={`rounded-full px-1.5 py-0.5 text-[8px] font-medium ${
-              i === selectedIndex ? "bg-primary text-white" : "bg-[#eef2f4] text-[#8b9aa3]"
-            }`}
-          >
-            {opt}
-          </span>
-        ))}
-      </span>
-    );
-  }
-  return (
-    <span className="text-[9px] font-medium text-[#384c58]">
-      {n.includes("comment") ? "Shows consistent progress and strong participation." : "Sample response"}
-    </span>
-  );
 }
 
 const STATUS_BADGE: Record<TemplateVersionSummary["status"], string> = {
@@ -169,17 +114,23 @@ export function TemplateBuilderClient({
   classes,
   levels,
   initialGradingScales,
+  initialSubjectLists,
   annualSettings,
+  school,
 }: {
   initialTemplates: Template[];
   classes: ClassOption[];
   levels: string[];
   initialGradingScales: GradingScaleSummary[];
+  initialSubjectLists: SubjectListSummary[];
   annualSettings: AnnualSettings;
+  school: BuilderSchool;
 }) {
   const [templates, setTemplates] = useState(initialTemplates);
   const [selectedId, setSelectedId] = useState<string | null>(initialTemplates[0]?.id ?? null);
   const [gradingScales, setGradingScales] = useState(initialGradingScales);
+  const [subjectLists, setSubjectLists] = useState(initialSubjectLists);
+  const [savingSubjectList, setSavingSubjectList] = useState(false);
   const [versions, setVersions] = useState<TemplateVersionSummary[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [loadingVersions, setLoadingVersions] = useState(false);
@@ -189,6 +140,8 @@ export function TemplateBuilderClient({
   const [draftGradingScaleId, setDraftGradingScaleId] = useState<string | null>(null);
   const [draftLegacyFields, setDraftLegacyFields] = useState<TemplateField[]>([]);
   const [draftIncludeAnnual, setDraftIncludeAnnual] = useState(false);
+  const [draftIncludeAttendance, setDraftIncludeAttendance] = useState(false);
+  const [draftIncludeRemarks, setDraftIncludeRemarks] = useState(false);
   const [previewFields, setPreviewFields] = useState<TemplateField[]>([]);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -222,6 +175,8 @@ export function TemplateBuilderClient({
     setDraftGradingScaleId(selectedVersion?.gradingScaleId ?? null);
     setDraftLegacyFields(selectedVersion?.legacyFields ?? []);
     setDraftIncludeAnnual(selectedVersion?.includeAnnualSummary ?? false);
+    setDraftIncludeAttendance(selectedVersion?.includeAttendance ?? false);
+    setDraftIncludeRemarks(selectedVersion?.includeRemarks ?? false);
     setValidation(null);
     setPreviewFields([]);
   }
@@ -251,12 +206,14 @@ export function TemplateBuilderClient({
         ratingCategories: draftRatingCategories,
         legacyFields: draftLegacyFields,
         includeAnnualSummary: draftIncludeAnnual,
+        includeAttendance: draftIncludeAttendance,
+        includeRemarks: draftIncludeRemarks,
       })
         .then(setPreviewFields)
         .catch(() => {});
     }, 400);
     return () => clearTimeout(handle);
-  }, [selectedVersion, draftGradingScaleId, draftSections, draftRatingCategories, draftLegacyFields, draftIncludeAnnual]);
+  }, [selectedVersion, draftGradingScaleId, draftSections, draftRatingCategories, draftLegacyFields, draftIncludeAnnual, draftIncludeAttendance, draftIncludeRemarks]);
 
   function updateSelected(patch: Partial<Template>) {
     if (!selected) return;
@@ -314,11 +271,35 @@ export function TemplateBuilderClient({
     });
   }
 
-  function handleNewDraft(preset?: PresetKey) {
+  function handleNewDraft(preset?: PresetKey, subjects?: string[]) {
     if (!selected) return;
     startTransition(async () => {
-      const id = await createDraftVersion(selected.id, preset ? { preset } : undefined);
+      const id = await createDraftVersion(selected.id, preset || subjects ? { preset, subjects } : undefined);
       await refreshVersions(id);
+    });
+  }
+
+  function handleSaveSubjectList() {
+    if (draftSections.length === 0) return;
+    const name = window.prompt("Name this subject list (e.g. \"SS2 Science\") so it can be reused for other classes or terms:");
+    if (!name || !name.trim()) return;
+    setSavingSubjectList(true);
+    setError(null);
+    startTransition(async () => {
+      try {
+        const subjects = draftSections.map((s) => s.name).filter((n) => n.trim());
+        const id = await createSubjectList({ name: name.trim(), subjects });
+        setSubjectLists((prev) => {
+          const withoutSame = prev.filter((l) => l.name !== name.trim());
+          return [...withoutSame, { id, name: name.trim(), subjects }].sort((a, b) => a.name.localeCompare(b.name));
+        });
+        setSavedMessage(`Saved subject list "${name.trim()}".`);
+        setTimeout(() => setSavedMessage(null), 3000);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not save the subject list.");
+      } finally {
+        setSavingSubjectList(false);
+      }
     });
   }
 
@@ -348,6 +329,8 @@ export function TemplateBuilderClient({
           ratingCategories: draftRatingCategories,
           legacyFields: draftLegacyFields,
           includeAnnualSummary: draftIncludeAnnual,
+          includeAttendance: draftIncludeAttendance,
+          includeRemarks: draftIncludeRemarks,
         });
         setSavedMessage("Draft saved.");
         setTimeout(() => setSavedMessage(null), 3000);
@@ -425,7 +408,37 @@ export function TemplateBuilderClient({
     setDragId(null);
   }
 
-  const previewList = previewFields.length > 0 ? previewFields : selected?.fields ?? [];
+  const previewList = useMemo(() => (previewFields.length > 0 ? previewFields : (selected?.fields ?? [])), [previewFields, selected?.fields]);
+
+  // The same fields a real publish would compile — rendered through the same
+  // SnapshotView every parent sees, fed with made-up-but-believable sample
+  // scores, so the live preview can never drift from what actually prints.
+  const previewPayload = useMemo(() => {
+    if (previewList.length === 0) return null;
+    const raw = sampleDataFor(previewList);
+    const [finalData] = computePublishData([{ studentId: "sample", session: "preview", data: raw }], previewList, []);
+    const signOff: SnapshotSignOff = {
+      teacherName: "Sample Teacher",
+      principalName: school.principalName,
+      principalSignatureUrl: school.principalSignatureUrl,
+      stampUrl: school.stampUrl,
+      nextTermBegins: school.nextTermBegins,
+    };
+    return buildSnapshotPayload({
+      school,
+      student: {
+        name: "Sample Student",
+        code: "SAMPLE-001",
+        className: selected?.className ?? (selected?.level ? `Level: ${selected.level}` : "All classes"),
+        campusName: "Main campus",
+      },
+      period: { session: "2026/2027", term: selected?.term || "Term not set" },
+      template: { id: selected?.id ?? "preview", name: selected?.name ?? "Template", versionId: selectedVersionId, fields: previewList },
+      data: finalData,
+      signOff: Object.values(signOff).some(Boolean) ? signOff : null,
+      publication: { version: 1, verificationCode: "PREVIEW", publishedAt: new Date() },
+    });
+  }, [previewList, school, selected, selectedVersionId]);
 
   return (
     <>
@@ -583,7 +596,13 @@ export function TemplateBuilderClient({
                         const value = e.target.value;
                         e.target.value = "";
                         if (value === "__blank__") handleNewDraft();
-                        else if (value) handleNewDraft(value as PresetKey);
+                        else if (value.startsWith("starter:")) {
+                          const key = value.slice("starter:".length) as SubjectListStarterKey;
+                          handleNewDraft(undefined, [...SUBJECT_LIST_STARTERS[key].subjects]);
+                        } else if (value.startsWith("list:")) {
+                          const list = subjectLists.find((l) => l.id === value.slice("list:".length));
+                          if (list) handleNewDraft(undefined, list.subjects);
+                        } else if (value) handleNewDraft(value as PresetKey);
                       }}
                       defaultValue=""
                       disabled={pending}
@@ -598,6 +617,22 @@ export function TemplateBuilderClient({
                           From preset: {preset.label}
                         </option>
                       ))}
+                      {subjectLists.length > 0 && (
+                        <optgroup label="From your saved subject lists (Simple 40/60 scoring)">
+                          {subjectLists.map((list) => (
+                            <option key={list.id} value={`list:${list.id}`}>
+                              {list.name} ({list.subjects.length} subjects)
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      <optgroup label="From a starter subject list (Simple 40/60 scoring)">
+                        {Object.entries(SUBJECT_LIST_STARTERS).map(([key, starter]) => (
+                          <option key={key} value={`starter:${key}`}>
+                            {starter.label} ({starter.subjects.length} subjects)
+                          </option>
+                        ))}
+                      </optgroup>
                     </select>
                     <button
                       type="button"
@@ -645,7 +680,7 @@ export function TemplateBuilderClient({
 
               {selectedVersion && (
                 <>
-                  <div className="flex items-center justify-between gap-2 border-b border-border px-5 py-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-4">
                     <div>
                       <h3 className="m-0 text-body font-medium text-text-primary">
                         Version {selectedVersion.versionNumber}
@@ -653,7 +688,7 @@ export function TemplateBuilderClient({
                       </h3>
                     </div>
                     {isEditableDraft && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <button
                           type="button"
                           onClick={handleValidate}
@@ -699,7 +734,18 @@ export function TemplateBuilderClient({
                   )}
 
                   <div className="border-b border-border px-5 py-5">
-                    <h3 className="m-0 mb-3 text-body font-medium text-text-primary">Subjects &amp; assessment components</h3>
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="m-0 text-body font-medium text-text-primary">Subjects &amp; assessment components</h3>
+                      <button
+                        type="button"
+                        onClick={handleSaveSubjectList}
+                        disabled={!isEditableDraft || pending || savingSubjectList || draftSections.length === 0}
+                        className="h-7 rounded-md border border-dashed border-border px-2.5 text-[10px] font-medium text-primary disabled:opacity-40"
+                        title="Save just these subjects' names, so a new draft for another class or term can start from them instead of being typed out again."
+                      >
+                        Save these subject names as a list
+                      </button>
+                    </div>
                     <fieldset disabled={!isEditableDraft} className="disabled:opacity-60">
                       <SectionsEditor sections={draftSections} onChange={setDraftSections} />
                     </fieldset>
@@ -722,6 +768,24 @@ export function TemplateBuilderClient({
                       <label className="flex items-center gap-2 text-caption text-text-secondary">
                         <input type="checkbox" checked={draftIncludeAnnual} onChange={(e) => setDraftIncludeAnnual(e.target.checked)} />
                         Show annual summary on 3rd Term results
+                      </label>
+                    </fieldset>
+                  </div>
+
+                  <div className="border-b border-border px-5 py-5">
+                    <h3 className="m-0 mb-1 text-body font-medium text-text-primary">Attendance</h3>
+                    <p className="m-0 mb-3 text-caption text-text-muted">
+                      Teachers enter how many times school opened and how many times each student was present; absences and the attendance percentage are worked out for the
+                      result.
+                    </p>
+                    <fieldset disabled={!isEditableDraft} className="disabled:opacity-60">
+                      <label className="flex items-center gap-2 text-caption text-text-secondary">
+                        <input type="checkbox" checked={draftIncludeAttendance} onChange={(e) => setDraftIncludeAttendance(e.target.checked)} />
+                        Record attendance on results
+                      </label>
+                      <label className="mt-2 flex items-center gap-2 text-caption text-text-secondary">
+                        <input type="checkbox" checked={draftIncludeRemarks} onChange={(e) => setDraftIncludeRemarks(e.target.checked)} />
+                        Teacher&apos;s and principal&apos;s remarks on results
                       </label>
                     </fieldset>
                   </div>
@@ -849,44 +913,16 @@ export function TemplateBuilderClient({
                   Live
                 </span>
               </div>
-              <div className="bg-[#f5f7f7] p-4">
-                <div className="rounded border border-[#e0e6e8] bg-white p-4 text-[#334651]">
-                  <div className="flex items-center gap-2 border-b border-[#e8ecee] pb-3">
-                    <div className="grid h-[27px] w-[27px] place-items-center rounded bg-primary text-[10px] font-medium text-white">GI</div>
-                    <div className="text-[9px] font-medium leading-tight">
-                      Your school name
-                      <small className="mt-0.5 block font-normal text-[#99a7af]">School address</small>
-                    </div>
+              <div className="max-h-[85vh] overflow-y-auto bg-[#f5f7f7] p-4">
+                {previewPayload ? (
+                  <div className="origin-top scale-[0.55]" style={{ width: "182%" }}>
+                    <SnapshotView payload={previewPayload} preview />
                   </div>
-                  <div className="py-3.5 text-center">
-                    <strong className="block text-caption font-medium">Student result sheet</strong>
-                    <span className="mt-1 block text-[8px] text-[#8e9ca5]">
-                      {selected.className ?? (selected.level ? `Level: ${selected.level}` : "All classes")} · {selected.term || "Term not set"}
-                    </span>
+                ) : (
+                  <div className="rounded border border-dashed border-[#e0e6e8] bg-white p-6 text-center text-[10px] text-text-muted">
+                    Add subjects or fields to see a preview here.
                   </div>
-                  <div className="grid grid-cols-2 gap-2 rounded bg-[#f6f8f9] p-2 text-[8px]">
-                    <div>
-                      <span className="mb-1 block text-[#8b9aa3]">Student</span>
-                      <b className="text-[#3d505a]">Sample Student</b>
-                    </div>
-                    <div>
-                      <span className="mb-1 block text-[#8b9aa3]">Student ID</span>
-                      <b className="text-[#3d505a]">SAMPLE-001</b>
-                    </div>
-                  </div>
-                  <div className="grid gap-2.5 pt-3.5">
-                    {previewList.length === 0 ? (
-                      <div className="rounded border border-[#e8ecee] p-2.5 text-[9px] text-text-muted">Add subjects or fields to see them here.</div>
-                    ) : (
-                      previewList.map((f) => (
-                        <div key={f.id} className="min-h-10 rounded border border-[#e8ecee] p-2.5">
-                          <div className="mb-1.5 text-[8px] text-[#8a99a2]">{f.name || "Untitled field"}</div>
-                          {previewValue(f)}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
+                )}
               </div>
               <p className="px-4 pb-4 text-center text-[10px] leading-relaxed text-text-muted">
                 {isEditableDraft ? "Preview reflects your unsaved draft." : "Preview reflects this version's saved configuration."}
@@ -926,6 +962,10 @@ function FormulaConfig({
   onChange: (formula: ComputedFormula) => void;
 }) {
   const formula = field.formula ?? defaultFormula("sum");
+  // Only for the promotion formula's Subjects/Compulsory-subjects pickers —
+  // every other formula kind below still uses the full otherFields list,
+  // since e.g. a Grade formula legitimately reads from a Computed Total field.
+  const subjectCandidates = otherFields.filter((of) => of.type === "Number");
 
   function changeKind(kind: ComputedFormula["kind"]) {
     onChange(defaultFormula(kind));
@@ -1027,11 +1067,15 @@ function FormulaConfig({
         <>
           <div className="grid gap-1.5">
             <span className="text-[10px] text-text-muted">Subjects</span>
-            {otherFields.length === 0 ? (
-              <p className="m-0 text-[10px] text-text-muted">Add other fields first.</p>
+            {/* Only raw Number fields make sense as "subjects" here — a Computed
+                field (e.g. a Total or Grade) isn't itself a subject a student
+                passes or fails, and letting one be picked produces a garbled
+                Result Analysis narrative (e.g. "You passed Total"). */}
+            {subjectCandidates.length === 0 ? (
+              <p className="m-0 text-[10px] text-text-muted">Add subject score fields first.</p>
             ) : (
               <div className="grid max-h-[140px] gap-1 overflow-y-auto rounded-md border border-border bg-bg-card p-1.5">
-                {otherFields.map((of) => (
+                {subjectCandidates.map((of) => (
                   <label key={of.id} className="flex cursor-pointer items-center gap-2 rounded-md p-1.5 text-[10px] text-text-secondary hover:bg-bg-page">
                     <input
                       type="checkbox"
@@ -1058,7 +1102,7 @@ function FormulaConfig({
               <p className="m-0 text-[10px] text-text-muted">Pick subjects above first.</p>
             ) : (
               <div className="grid max-h-[140px] gap-1 overflow-y-auto rounded-md border border-border bg-bg-card p-1.5">
-                {otherFields
+                {subjectCandidates
                   .filter((of) => formula.subjectFields.includes(of.id))
                   .map((of) => (
                     <label key={of.id} className="flex cursor-pointer items-center gap-2 rounded-md p-1.5 text-[10px] text-text-secondary hover:bg-bg-page">

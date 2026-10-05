@@ -6,7 +6,17 @@ export default async function SchoolProfilePage() {
   const { schoolId } = await requireFullAdminPage();
   const school = await prisma.school.findUniqueOrThrow({
     where: { id: schoolId },
-    select: { name: true, logoUrl: true, address: true, phone: true, supportEmail: true },
+    select: {
+      name: true,
+      logoUrl: true,
+      address: true,
+      phone: true,
+      supportEmail: true,
+      principalName: true,
+      principalSignatureUrl: true,
+      stampUrl: true,
+      nextTermBegins: true,
+    },
   });
 
   return (
@@ -16,6 +26,10 @@ export default async function SchoolProfilePage() {
       address={school.address}
       phone={school.phone}
       supportEmail={school.supportEmail}
+      principalName={school.principalName}
+      principalSignatureUrl={school.principalSignatureUrl}
+      stampUrl={school.stampUrl}
+      nextTermBegins={school.nextTermBegins ? school.nextTermBegins.toISOString().slice(0, 10) : null}
     />
   );
 }

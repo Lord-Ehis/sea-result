@@ -175,12 +175,19 @@ export function ResultEntryClient({
     const statuses = students.map((s) => s.status).filter(Boolean);
     if (statuses.length === 0) return "Not started";
     if (statuses.some((s) => s === "REJECTED")) return "Sent back for corrections";
+    // Published is its own, later status — a batch reaches it only after
+    // being submitted *and* approved *and* published, so it must be checked
+    // before the broader "Submitted" bucket below, or a published batch
+    // would still show as "Submitted" / "locked while it's under review"
+    // forever, with no way for a teacher to tell it's actually finished.
     if (statuses.length === students.length && statuses.every((s) => s === "PUBLISHED")) return "Published";
     if (statuses.length === students.length && statuses.every((s) => s === "SUBMITTED" || s === "APPROVED" || s === "PUBLISHED")) return "Submitted";
     return "In progress";
   }, [students]);
 
   const locked = overallStatus === "Submitted" || overallStatus === "Published";
+  const lockedNote =
+    overallStatus === "Published" ? "This result has been published to parents." : "This batch is locked while it's under review.";
   const rejectionNote = students.find((s) => s.rejectionNote)?.rejectionNote;
 
   const expandedFields = useMemo(() => expandThisTermFields(fields), [fields]);
@@ -450,11 +457,7 @@ export function ResultEntryClient({
             </div>
           </div>
           <div className="border-t border-border px-5 py-3.5 text-caption text-text-muted">
-            {overallStatus === "Published"
-              ? "Results have been published to parents."
-              : locked
-                ? "Results have been submitted for approval."
-                : "Changes are saved to your account, not just this browser."}
+            {locked ? lockedNote : "Changes are saved to your account, not just this browser."}
           </div>
         </section>
       ) : (
@@ -522,26 +525,20 @@ export function ResultEntryClient({
             ))}
           </div>
           <div className="border-t border-border px-5 py-3.5 text-caption text-text-muted">
-            {overallStatus === "Published"
-              ? "Results have been published to parents."
-              : locked
-                ? "Results have been submitted for approval."
-                : "Changes are saved to your account, not just this browser."}
+            {locked ? lockedNote : "Changes are saved to your account, not just this browser."}
           </div>
         </section>
       )}
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
         <p className="m-0 text-caption text-text-muted">
-          {overallStatus === "Published"
-            ? "This batch is locked because results have been published to parents."
-            : locked
-              ? "This batch is locked while it's under review."
-              : errorIssues.length > 0
-                ? `${errorIssues.length} score(s) need fixing before you can save or submit.`
-                : canSubmit
-                  ? "All student records are complete and ready to submit."
-                  : `${students.length - completedCount} student record(s) still need scores.`}
+          {locked
+            ? lockedNote
+            : errorIssues.length > 0
+              ? `${errorIssues.length} score(s) need fixing before you can save or submit.`
+              : canSubmit
+                ? "All student records are complete and ready to submit."
+                : `${students.length - completedCount} student record(s) still need scores.`}
         </p>
         <div className="flex gap-2">
           <button

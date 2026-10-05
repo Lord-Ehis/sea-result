@@ -1,5 +1,7 @@
 import type { TemplateField } from "@/app/admin/result-templates/actions";
 import { SCORE_STATE_LABEL, explicitScoreState, formatScore } from "@/lib/score-state";
+import { gradeForValue } from "@/lib/grade-lookup";
+import { ordinal } from "@/lib/template-compute";
 
 // Pure translation layer for the "Grid" field type (a subjects × columns
 // table, e.g. a report card's Cognitive Domain section). Rather than a
@@ -91,6 +93,21 @@ export function expandGridPositionFields(field: TemplateField): TemplateField[] 
     name: `${subject.name} Position`,
     type: "Computed",
     formula: { kind: "position", of: gridKey(field.id, subject.id, "termTotal") },
+  }));
+}
+
+/**
+ * Per subject: Class Average — the mean Term Total across every student in
+ * the published batch. Same value for every student, unlike Subject
+ * Position. Publish-time only, for the same reason as Subject Position.
+ */
+export function expandGridClassAverageFields(field: TemplateField): TemplateField[] {
+  if (field.type !== "Grid" || !field.grid) return [];
+  return field.grid.subjects.map((subject) => ({
+    id: gridKey(field.id, subject.id, "classAverage"),
+    name: `${subject.name} Class Average`,
+    type: "Computed",
+    formula: { kind: "classAverage", of: gridKey(field.id, subject.id, "termTotal") },
   }));
 }
 
@@ -194,6 +211,7 @@ export function expandForPublish(fields: TemplateField[]): TemplateField[] {
     ...fields.filter((f) => f.type !== "Grid"),
     ...gridFields.flatMap(expandGridThisTermFields),
     ...gridFields.flatMap(expandGridPositionFields),
+    ...gridFields.flatMap(expandGridClassAverageFields),
     ...gridFields.flatMap(expandGridCumulativeFields),
   ];
 }
@@ -207,6 +225,7 @@ export function gridDisplayColumns(field: TemplateField): { key: string; label: 
     { key: "grade", label: "Grade" },
     { key: "subjectPosition", label: "Position" },
     { key: "remarks", label: "Remarks" },
+    { key: "classAverage", label: "Class Avg" },
   ];
   if (field.grid.includeCumulative) {
     columns.push(
@@ -255,4 +274,143 @@ export function buildGridResultData(fields: TemplateField[], data: Record<string
         ),
       };
     });
+}
+
+export type GradingScaleLegendEntry = { gradeCode: string; minScore: number; maxScore: number; remark: string };
+
+/**
+ * The grading scale legend (e.g. "70–100 = A (Excellent)") for a template's
+ * first Grid field, highest band first — the same bands/remarks already
+ * compiled onto the grid for live grading (src/lib/version-compile.ts), just
+ * read back out for display rather than computation. A template with no Grid
+ * field, or a Grid with no configured bands, has no legend to show.
+ */
+export function gradingScaleLegend(fields: TemplateField[]): GradingScaleLegendEntry[] {
+  const grid = fields.find((f) => f.type === "Grid" && !!f.grid)?.grid;
+  if (!grid || grid.gradeBands.length === 0) return [];
+  const remarkFor = new Map(grid.remarksMap.map((r) => [r.grade, r.remarks]));
+  return [...grid.gradeBands]
+    .sort((a, b) => b.min - a.min)
+    .map((b) => ({ gradeCode: b.label, minScore: b.min, maxScore: b.max, remark: remarkFor.get(b.label) ?? "" }));
+}
+
+export type PerformanceSummary = {
+  totalObtained: number;
+  totalObtainable: number;
+  percentage: string;
+  grade: string;
+  remark: string;
+  // This student's rank in the class by overall percentage — batch-wide,
+  // like a Grid's Subject Position, so only ever filled in at publish time
+  // (computeOverallPositions writes it into `data` first). Absent during
+  // live entry/review, when only one student's data is in view.
+  position?: string;
+};
+
+// Fixed id so a computed overall position survives, in `data`, from
+// computeOverallPositions through to performanceSummary reading it back out
+// — the same pattern attendance's fixed field ids use.
+export const OVERALL_POSITION_ID = "overall-position";
+
+/**
+ * Overall performance across a Grid's subjects: total obtained, total
+ * obtainable, percentage, and the grade/remark that percentage earns on the
+ * grid's own scale. Only subjects with a numeric Term Total count — a
+ * subject the student was exempted from or has no score in adds nothing to
+ * either side, so it can't drag the percentage down. null when there is
+ * nothing to summarise.
+ */
+export function performanceSummary(fields: TemplateField[], data: Record<string, string>): PerformanceSummary | null {
+  const field = fields.find((f) => f.type === "Grid" && !!f.grid);
+  const grid = field?.grid;
+  if (!field || !grid) return null;
+
+  const weighted = grid.weighted === true && grid.rawColumns.every((c) => typeof c.weight === "number");
+  const perSubjectMax = weighted ? grid.rawColumns.reduce((sum, c) => sum + (c.weight ?? 0), 0) : grid.rawColumns.reduce((sum, c) => sum + c.maxMark, 0);
+
+  let totalObtained = 0;
+  let counted = 0;
+  for (const subject of grid.subjects) {
+    const raw = (data[gridKey(field.id, subject.id, "termTotal")] ?? "").trim();
+    if (raw === "") continue;
+    const value = Number(raw);
+    if (!Number.isFinite(value)) continue;
+    totalObtained += value;
+    counted++;
+  }
+  const totalObtainable = counted * perSubjectMax;
+  if (counted === 0 || totalObtainable <= 0) return null;
+
+  const percentage = (totalObtained / totalObtainable) * 100;
+  const grade = gradeForValue(percentage, grid.gradeBands);
+  return {
+    totalObtained: Math.round(totalObtained * 100) / 100,
+    totalObtainable,
+    percentage: percentage.toFixed(1),
+    grade,
+    remark: grid.remarksMap.find((r) => r.grade === grade)?.remarks ?? "",
+    ...(data[OVERALL_POSITION_ID] ? { position: data[OVERALL_POSITION_ID] } : {}),
+  };
+}
+
+/**
+ * This student's rank in the whole class by overall percentage — the same
+ * competition ranking (tied values share a rank, the next distinct value
+ * skips ahead) as a Grid's per-subject Position. Batch-wide, so only ever
+ * meaningful at publish time. A student with nothing to summarise (see
+ * performanceSummary) gets "—", the same as an ungraded subject position.
+ */
+export function computeOverallPositions(fields: TemplateField[], studentsData: Record<string, string>[]): Record<string, string>[] {
+  const results = studentsData.map((d) => ({ ...d }));
+
+  const ranked = studentsData
+    .map((d, index) => ({ index, value: Number(performanceSummary(fields, d)?.percentage) }))
+    .filter((r) => Number.isFinite(r.value))
+    .sort((a, b) => b.value - a.value);
+
+  let rank = 0;
+  let lastValue: number | null = null;
+  ranked.forEach((r, i) => {
+    if (lastValue === null || r.value !== lastValue) rank = i + 1;
+    lastValue = r.value;
+    results[r.index][OVERALL_POSITION_ID] = ordinal(rank);
+  });
+
+  for (const d of results) if (d[OVERALL_POSITION_ID] === undefined) d[OVERALL_POSITION_ID] = "—";
+  return results;
+}
+
+export type GradeAnalysis = {
+  counts: { grade: string; count: number }[];
+  totalSubjects: number;
+};
+
+/**
+ * "Grade analysis": how many of this student's subjects earned each grade on
+ * the grid's scale (highest band first, zero counts kept so the table has a
+ * stable shape), plus the number of subjects offered. Like the performance
+ * summary, only subjects with a numeric Term Total count — an exempted or
+ * unscored subject isn't "offered". Derived from this student's own data, so
+ * publish, preview and correction all agree. null when nothing is graded.
+ */
+export function gradeAnalysis(fields: TemplateField[], data: Record<string, string>): GradeAnalysis | null {
+  const field = fields.find((f) => f.type === "Grid" && !!f.grid);
+  const grid = field?.grid;
+  if (!field || !grid || grid.gradeBands.length === 0) return null;
+
+  const labels: string[] = [];
+  for (const band of [...grid.gradeBands].sort((a, b) => b.min - a.min)) if (!labels.includes(band.label)) labels.push(band.label);
+  const tally = new Map(labels.map((l) => [l, 0]));
+
+  let totalSubjects = 0;
+  for (const subject of grid.subjects) {
+    const raw = (data[gridKey(field.id, subject.id, "termTotal")] ?? "").trim();
+    if (raw === "" || !Number.isFinite(Number(raw))) continue;
+    totalSubjects++;
+    const grade = data[gridKey(field.id, subject.id, "grade")] ?? "";
+    if (tally.has(grade)) tally.set(grade, (tally.get(grade) ?? 0) + 1);
+  }
+  if (totalSubjects === 0) return null;
+
+  return { counts: labels.map((grade) => ({ grade, count: tally.get(grade) ?? 0 })), totalSubjects };
 }

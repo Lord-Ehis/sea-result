@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
-import { computeOwnFields, computePositions, computeWeightedTotal } from "@/lib/template-compute";
-import { expandForPublish, expandThisTermFields, gridKey } from "@/lib/grid-compute";
+import { computeOwnFields, computePositions, computeClassAverages, computeWeightedTotal } from "@/lib/template-compute";
+import { expandForPublish, expandThisTermFields, gridKey, performanceSummary } from "@/lib/grid-compute";
 import { gradeForValue } from "@/lib/grade-lookup";
 import { BANDS, makeGridTemplate } from "./fixtures";
 
@@ -73,9 +73,48 @@ describe("positions (RT-11)", () => {
   });
 });
 
+describe("class averages (RT-11 follow-up)", () => {
+  const fields: TemplateField[] = [{ id: "avg", name: "Class Average", type: "Computed", formula: { kind: "classAverage", of: "total" } }];
+  it("gives every student the same mean, to two decimals", () => {
+    const out = computeClassAverages(fields, [{ total: "90" }, { total: "80" }, { total: "70" }]);
+    expect(out.map((d) => d.avg)).toEqual(["80.00", "80.00", "80.00"]);
+  });
+  it("excludes students with no numeric total from both the sum and the count", () => {
+    const out = computeClassAverages(fields, [{ total: "90" }, { total: "" }, { total: "70" }]);
+    expect(out.map((d) => d.avg)).toEqual(["80.00", "80.00", "80.00"]);
+  });
+  it("is a dash when nobody has a numeric total", () => {
+    const out = computeClassAverages(fields, [{ total: "" }, { total: "" }]);
+    expect(out.map((d) => d.avg)).toEqual(["—", "—"]);
+  });
+});
+
 describe("publish expansion", () => {
   it("adds a per-subject position field for a grid template", () => {
     const ids = expandForPublish(makeGridTemplate(2, 2)).map((f) => f.id);
     expect(ids).toContain(gridKey("grid", "s1", "subjectPosition"));
+  });
+  it("adds a per-subject class average field for a grid template", () => {
+    const ids = expandForPublish(makeGridTemplate(2, 2)).map((f) => f.id);
+    expect(ids).toContain(gridKey("grid", "s1", "classAverage"));
+  });
+});
+
+describe("performance summary", () => {
+  const fields = makeGridTemplate(3, 2); // weighted, per-subject max 100, BANDS A>=70
+  const total = (s: number) => gridKey("grid", `s${s}`, "termTotal");
+  it("totals obtained/obtainable, percentage and grade", () => {
+    const out = performanceSummary(fields, { [total(0)]: "90", [total(1)]: "80", [total(2)]: "70" });
+    expect(out).toEqual({ totalObtained: 240, totalObtainable: 300, percentage: "80.0", grade: "A", remark: "remark A" });
+  });
+  it("leaves a blank subject out of both sides", () => {
+    const out = performanceSummary(fields, { [total(0)]: "60", [total(1)]: "", [total(2)]: "60" });
+    expect(out?.totalObtainable).toBe(200);
+    expect(out?.percentage).toBe("60.0");
+    expect(out?.grade).toBe("B");
+  });
+  it("is null with nothing numeric, or no grid", () => {
+    expect(performanceSummary(fields, {})).toBeNull();
+    expect(performanceSummary([], {})).toBeNull();
   });
 });

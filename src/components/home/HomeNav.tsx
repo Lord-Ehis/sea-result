@@ -17,12 +17,12 @@ export function HomeNav() {
         </Link>
 
         <div className="hidden items-center gap-2 sm:flex">
-          <a href="#why-sea" className="inline-flex h-[42px] items-center rounded-[9px] px-4 text-[0.86rem] font-medium text-[#36556a] hover:bg-[#edf2f4]">
+          <Link href="/why-sea" className="inline-flex h-[42px] items-center rounded-[9px] px-4 text-[0.86rem] font-medium text-[#36556a] hover:bg-[#edf2f4]">
             Why SEA
-          </a>
-          <a href="#how-it-works" className="inline-flex h-[42px] items-center rounded-[9px] px-4 text-[0.86rem] font-medium text-[#36556a] hover:bg-[#edf2f4]">
+          </Link>
+          <Link href="/how-it-works" className="inline-flex h-[42px] items-center rounded-[9px] px-4 text-[0.86rem] font-medium text-[#36556a] hover:bg-[#edf2f4]">
             How it works
-          </a>
+          </Link>
           <Link
             href="/login"
             className="inline-flex h-[42px] items-center rounded-[9px] border border-[#cedbe1] bg-white px-4 text-[0.86rem] font-medium text-[#173f5c] hover:border-[#aac3d1]"
@@ -51,12 +51,12 @@ export function HomeNav() {
 
       {open && (
         <div className="mx-auto mt-3 grid max-w-[1320px] gap-2 rounded-xl border border-[#dfe7ea] bg-white p-3 sm:hidden">
-          <a href="#why-sea" onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-[0.86rem] font-medium text-[#36556a]">
+          <Link href="/why-sea" onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-[0.86rem] font-medium text-[#36556a]">
             Why SEA
-          </a>
-          <a href="#how-it-works" onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-[0.86rem] font-medium text-[#36556a]">
+          </Link>
+          <Link href="/how-it-works" onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-[0.86rem] font-medium text-[#36556a]">
             How it works
-          </a>
+          </Link>
           <Link href="/login" className="rounded-lg border border-[#cedbe1] px-3 py-2.5 text-center text-[0.86rem] font-medium text-[#173f5c]">
             Sign in
           </Link>

@@ -1,6 +1,6 @@
 import type { TemplateField } from "@/app/admin/result-templates/actions";
-import { computeOwnFields, computePositions, aggregateCumulative } from "@/lib/template-compute";
-import { expandForPublish, fillGridCumulativeTermSlots } from "@/lib/grid-compute";
+import { computeOwnFields, computePositions, computeClassAverages, aggregateCumulative } from "@/lib/template-compute";
+import { expandForPublish, fillGridCumulativeTermSlots, computeOverallPositions } from "@/lib/grid-compute";
 
 // Everything that only becomes known once a whole batch is published: the
 // per-student totals/grades, cross-term Cumulative values, and class
@@ -64,5 +64,9 @@ export function computePublishData(rows: PublishRow[], fields: TemplateField[], 
     afterCumulative = afterCumulative.map((d) => computeOwnFields(expandedFields, d));
   }
 
-  return computePositions(expandedFields, afterCumulative);
+  const withPositions = computeClassAverages(expandedFields, computePositions(expandedFields, afterCumulative));
+  // Overall position uses the *original* (unexpanded) fields — same as
+  // buildSnapshotPayload's own performanceSummary call — since it ranks by
+  // the Grid's real percentage, not any one virtual per-subject field.
+  return computeOverallPositions(fields, withPositions);
 }

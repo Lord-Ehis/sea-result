@@ -36,6 +36,8 @@ export type RatingCategoryInput = {
   name: string;
   displayOrder: number;
   ratingOptions: string[];
+  // What each option means, by index; optional.
+  ratingMeanings?: string[];
   items: RatingItemInput[];
 };
 
@@ -54,6 +56,15 @@ export type GradingScaleSummary = {
   bands: GradingScaleBandInput[];
 };
 
+// A school's own saved subject list ("SS2 Science", "JSS Core", ...) — just
+// names, in order, reused to quick-fill a new draft instead of adding
+// subjects one by one every term.
+export type SubjectListSummary = {
+  id: string;
+  name: string;
+  subjects: string[];
+};
+
 export type TemplateVersionSummary = {
   id: string;
   versionNumber: number;
@@ -65,6 +76,8 @@ export type TemplateVersionSummary = {
   ratingCategories: RatingCategoryInput[];
   legacyFields: TemplateField[];
   includeAnnualSummary: boolean;
+  includeAttendance: boolean;
+  includeRemarks: boolean;
 };
 
 export const PRESETS = {
@@ -97,6 +110,58 @@ export const PRESETS = {
 
 export type PresetKey = keyof typeof PRESETS;
 
+// Ready-made starting points for the three Nigerian school tiers, so a
+// school isn't stuck typing 10+ subject names into a blank template. A
+// school's own class levels and elective mix vary too much (a senior
+// secondary class alone can mix Science/Arts/Commercial subjects, or split
+// into separate streams) for one canonical list per tier to fit everyone —
+// these are deliberately just a starting point to edit, and "Senior
+// secondary" only lists the subjects every school offers regardless of
+// stream. A school's edited list is meant to be saved as its own (see
+// SubjectListSummary) and reused from then on.
+export const SUBJECT_LIST_STARTERS = {
+  "primary-core": {
+    label: "Primary — core",
+    subjects: [
+      "English Studies",
+      "Mathematics",
+      "Basic Science and Technology",
+      "National Values Education",
+      "Cultural and Creative Arts",
+      "Religious Studies",
+      "Nigerian Language",
+      "Handwriting",
+      "Physical and Health Education",
+      "Computer Studies",
+    ],
+  },
+  "jss-core": {
+    label: "Junior secondary — core",
+    subjects: [
+      "English Language",
+      "Mathematics",
+      "Basic Science",
+      "Basic Technology",
+      "Business Studies",
+      "Social Studies",
+      "Civic Education",
+      "Religious Studies",
+      "Nigerian Language",
+      "Cultural and Creative Arts",
+      "French",
+      "Physical and Health Education",
+      "Computer Studies",
+      "Agricultural Science",
+    ],
+  },
+  "sss-core": {
+    label: "Senior secondary — compulsory only",
+    subjects: ["English Language", "Mathematics", "Civic Education"],
+  },
+} as const;
+
+export type SubjectListStarterKey = keyof typeof SUBJECT_LIST_STARTERS;
+
 const componentSchema = z.object({
   id: z.string().min(1),
   componentName: z.string().trim().min(1),
@@ -126,6 +191,7 @@ export const ratingCategorySchema = z.object({
   name: z.string().trim().min(1),
   displayOrder: z.number().int(),
   ratingOptions: z.array(z.string()),
+  ratingMeanings: z.array(z.string()).default([]),
   items: z.array(ratingItemSchema),
 });
 
@@ -136,4 +202,6 @@ export const updateVersionDraftSchema = z.object({
   ratingCategories: z.array(ratingCategorySchema),
   legacyFields: z.array(fieldSchema),
   includeAnnualSummary: z.boolean().default(false),
+  includeAttendance: z.boolean().default(false),
+  includeRemarks: z.boolean().default(false),
 });

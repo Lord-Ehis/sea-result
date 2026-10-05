@@ -65,6 +65,8 @@ const scoreChecker =
   };
 
 function flatChecker(f: TemplateField): ValueChecker {
+  // A count of days: a whole number, never negative.
+  if (f.type === "Number" && f.attendance) return (v) => (/^\d+$/.test(v) ? null : "Must be a whole number of days, 0 or more.");
   if (f.type === "Number") return (v) => (Number.isFinite(Number(v)) ? null : "Must be a number.");
   if (f.type === "Dropdown") return (v) => (DROPDOWN_OPTIONS.includes(v) ? null : "Not a valid option.");
   if (f.type === "Rating scale") return (v) => (ratingOptionsFor(f).includes(v) ? null : "Not a valid rating.");
@@ -129,6 +131,17 @@ export function validateStudentEntry(fields: TemplateField[], data: Record<strin
     }
     const problem = flatChecker(f)(value);
     if (problem) errors.push({ key: f.id, label: f.name, message: problem });
+  }
+
+  // Someone can't have been present more often than school opened.
+  const opened = fields.find((f) => f.attendance === "opened");
+  const present = fields.find((f) => f.attendance === "present");
+  if (opened && present && !errors.some((e) => e.key === opened.id || e.key === present.id)) {
+    const o = (data[opened.id] ?? "").trim();
+    const p = (data[present.id] ?? "").trim();
+    if (o !== "" && p !== "" && Number(p) > Number(o)) {
+      errors.push({ key: present.id, label: present.name, message: `Can't be more than "${opened.name}".` });
+    }
   }
 
   return { errors, missing };

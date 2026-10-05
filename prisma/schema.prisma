@@ -140,6 +140,12 @@ model School {
   address              String?
   phone                String?
   supportEmail         String?
+  // Sign-off block on printed results: principal, their signature and the
+  // school stamp (pasted image URLs), and when the next term starts.
+  principalName         String?
+  principalSignatureUrl String?
+  stampUrl              String?
+  nextTermBegins        DateTime?
   allowParentAccounts  Boolean      @default(true)
   allowResultLookup    Boolean      @default(true)
   createdAt            DateTime     @default(now())
@@ -170,6 +176,7 @@ model School {
   annualSettings      AnnualSummarySettings?
   termExceptions       StudentTermException[]
   resultSnapshots      PublishedResultSnapshot[]
+  subjectLists         SubjectList[]
 
   @@map("schools")
 }
@@ -311,22 +318,31 @@ model TeacherClassAssignment {
 // ---------------------------------------------------------------------------
 
 model Student {
-  id            String    @id @default(cuid())
-  schoolId      String
-  campusId      String
-  classId       String?
-  studentCode   String // unique per school, used for no-login result lookup
-  firstName     String
-  lastName      String
-  dateOfBirth   DateTime?
+  id              String    @id @default(cuid())
+  schoolId        String
+  campusId        String
+  classId         String?
+  studentCode     String // unique per school, used for no-login result lookup
+  firstName       String
+  lastName        String
+  dateOfBirth     DateTime?
   // Plain contact details for notifications — not a linked parent account.
   // See ParentStudentLink for actual parent/student login access.
-  guardianName  String?
-  guardianPhone String?
-  guardianEmail String?
-  isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  guardianName    String?
+  guardianPhone   String?
+  guardianEmail   String?
+  // Printed on results (bio-data row). All optional, filled in by an admin
+  // after enrolment — never required to create a student.
+  gender          String?
+  admissionNumber String?
+  height          String?
+  weight          String?
+  favouriteColour String?
+  clubOrSociety   String?
+  photoUrl        String?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   school          School                    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   campus          Campus                    @relation(fields: [campusId], references: [id], onDelete: Cascade)
@@ -432,6 +448,12 @@ model TemplateVersion {
   // Show the Term 1–3 annual summary on Term 3 results. Part of the immutable
   // version because it changes what the result contains.
   includeAnnualSummary   Boolean               @default(false)
+  // Ask teachers for times school opened / times present, and show the
+  // attendance summary on results. Part of the immutable version because it
+  // changes what the result contains.
+  includeAttendance      Boolean               @default(false)
+  // Ask for a teacher's and a principal's remark, shown boxed on results.
+  includeRemarks         Boolean               @default(false)
   // Snapshot of exactly what was compiled onto ResultTemplate.fields at
   // activation — audit-log-ready even though no audit log exists yet.
   compiledFieldsSnapshot Json?
@@ -531,6 +553,27 @@ model GradingScaleBand {
   @@map("grading_scale_bands")
 }
 
+// A school-saved subject list ("SS2 Science", "JSS Core", ...) — just names,
+// in order, reused to quick-fill a new draft's subjects instead of typing
+// them one by one every term. Deliberately separate from a version's
+// TemplateSection/AssessmentComponent rows: a subject list outlives any one
+// version and carries no scoring shape (that still comes from a component
+// preset, chosen alongside it when filling a draft).
+model SubjectList {
+  id        String   @id @default(cuid())
+  schoolId  String
+  name      String
+  subjects  Json // string[], in order
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+  @@map("subject_lists")
+}
+
 model RatingCategory {
   id            String   @id @default(cuid())
   schoolId      String
@@ -538,6 +581,9 @@ model RatingCategory {
   name          String // e.g. "Affective domain"
   displayOrder  Int
   ratingOptions Json     @default("[\"1\",\"2\",\"3\",\"4\",\"5\"]") // string[] shared by items in this category
+  // What each option means, by index ("Maintains an excellent degree of
+  // observable traits") — printed as a "Rating indices" legend. Optional.
+  ratingMeanings Json    @default("[]")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -782,6 +828,36 @@ model Notification {
 
   @@index([schoolId])
   @@map("notifications")
+}
+
+// ---------------------------------------------------------------------------
+// Platform-wide announcements (Platform Owner managed)
+// ---------------------------------------------------------------------------
+
+enum AnnouncementTone {
+  INFO
+  WARNING
+}
+
+// A sticky banner the Platform Owner can show across every school, teacher
+// and parent view at once (rendered by the shared AppShell, so one place
+// covers every role). Only one is ever "live" — createAnnouncement turns off
+// any other active row in the same write, rather than letting several fight
+// for the same banner — but past ones are kept, not deleted, as a simple
+// history of what's been announced.
+model PlatformAnnouncement {
+  id              String           @id @default(cuid())
+  message         String
+  tone            AnnouncementTone @default(INFO)
+  linkUrl         String?
+  linkLabel       String?
+  isActive        Boolean          @default(true)
+  createdByUserId String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([isActive, createdAt])
+  @@map("platform_announcements")
 }
 
 // ---------------------------------------------------------------------------

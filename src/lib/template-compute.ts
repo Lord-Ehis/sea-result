@@ -25,15 +25,19 @@ function round4(n: number): number {
 export function computeWeightedTotal(parts: WeightedPart[], data: Record<string, string>): string {
   let includedWeight = 0;
   let earned = 0;
+  let anyEntered = false;
 
   for (const part of parts) {
     const state = readScoreState(data, part.key);
     if (state === "exempted" || state === "not_applicable") continue;
     includedWeight += part.weight;
+    if (state !== "missing") anyEntered = true;
     if (state === "scored" && part.max > 0) earned += (toNumber(data[part.key]) / part.max) * part.weight;
   }
 
-  if (includedWeight <= 0) return "";
+  // Nothing entered at all (a subject the student doesn't take) is no result,
+  // not a zero — otherwise it would print as a failed subject.
+  if (includedWeight <= 0 || !anyEntered) return "";
   return String(round4((earned * 100) / includedWeight));
 }
 
@@ -105,7 +109,7 @@ export function computeOwnFields(fields: TemplateField[], data: Record<string, s
     } else if (formula.kind === "average") {
       result[field.id] = formula.of.length === 0 ? "" : (formula.of.reduce((sum, id) => sum + toNumber(result[id]), 0) / formula.of.length).toFixed(2);
     } else if (formula.kind === "grade") {
-      result[field.id] = gradeForValue(toNumber(result[formula.of]), formula.bands);
+      result[field.id] = (result[formula.of] ?? "").trim() === "" ? "" : gradeForValue(toNumber(result[formula.of]), formula.bands);
     } else if (formula.kind === "promotion") {
       const offered = formula.subjectFields.filter((id) => (result[id] ?? "").trim() !== "");
       const passed = offered.filter((id) => toNumber(result[id]) >= formula.passMark);
@@ -168,6 +172,34 @@ export function computePositions(fields: TemplateField[], studentsData: Record<s
     for (const d of results) {
       if (d[field.id] === undefined) d[field.id] = "—";
     }
+  }
+
+  return results;
+}
+
+/**
+ * Fills in every classAverage-kind field with the mean of its source
+ * field's numeric values across every student in the batch — the same
+ * number for every student, since it's a class-wide statistic rather than a
+ * per-student rank. A student with no numeric source value (blank, ABS/EXM)
+ * doesn't count toward the average or its denominator; a batch with no
+ * numeric values at all gets "—".
+ */
+export function computeClassAverages(fields: TemplateField[], studentsData: Record<string, string>[]): Record<string, string>[] {
+  const results = studentsData.map((d) => ({ ...d }));
+
+  for (const field of fields) {
+    if (field.type !== "Computed" || field.formula?.kind !== "classAverage") continue;
+    const sourceId = field.formula.of;
+
+    const values = studentsData
+      .map((d) => (d[sourceId] ?? "").trim())
+      .filter((v) => v !== "")
+      .map(Number)
+      .filter((v) => Number.isFinite(v));
+
+    const average = values.length > 0 ? (values.reduce((sum, v) => sum + v, 0) / values.length).toFixed(2) : "—";
+    for (const d of results) d[field.id] = average;
   }
 
   return results;

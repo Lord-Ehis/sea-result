@@ -34,6 +34,9 @@ export type ComputedFormula =
   | { kind: "average"; of: string[] }
   | { kind: "grade"; of: string; bands: GradeBand[] }
   | { kind: "position"; of: string }
+  // The mean of `of` across every student in the batch — the same value for
+  // every student, unlike position. Publish-time only, like position.
+  | { kind: "classAverage"; of: string }
   | { kind: "cumulative"; of: string; aggregate: "sum" | "average" }
   | { kind: "remarksLookup"; of: string; map: GridRemarksEntry[] }
   | {
@@ -67,6 +70,24 @@ export type TemplateField = {
   // fixed 1-5 scale everywhere it's read, so already-published "3"s keep
   // meaning "3 of 5" rather than being silently reinterpreted.
   ratingOptions?: string[];
+  // Only meaningful for type === "Rating scale" — the parent RatingCategory's
+  // name (e.g. "Affective domain"), set by compileVersionToFields so items
+  // can be regrouped into a rating grid at render time. Undefined for a
+  // rating field with no category (older/legacy fields), which renders as a
+  // plain row instead of being grouped.
+  ratingCategory?: string;
+  // The category's own id — used to group items (names aren't guaranteed
+  // unique; two categories can share a name).
+  ratingCategoryId?: string;
+  // Set on the two Number fields compiled for a version's attendance switch
+  // (times school opened / times present); they render as one attendance
+  // summary instead of as plain rows.
+  attendance?: "opened" | "present";
+  // Set on the two Text fields compiled for a version's remarks switch; they
+  // print as boxed remarks instead of plain rows.
+  remark?: "teacher" | "principal";
+  // What each rating option means, by index (a category-level legend).
+  ratingMeanings?: string[];
 };
 
 export const gradeBandSchema = z.object({ min: z.number(), max: z.number(), label: z.string() });
@@ -80,6 +101,7 @@ export const formulaSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("average"), of: z.array(z.string()) }),
   z.object({ kind: z.literal("grade"), of: z.string(), bands: z.array(gradeBandSchema) }),
   z.object({ kind: z.literal("position"), of: z.string() }),
+  z.object({ kind: z.literal("classAverage"), of: z.string() }),
   z.object({ kind: z.literal("cumulative"), of: z.string(), aggregate: z.enum(["sum", "average"]) }),
   z.object({ kind: z.literal("remarksLookup"), of: z.string(), map: z.array(gridRemarksEntrySchema) }),
   z.object({
@@ -120,4 +142,9 @@ export const fieldSchema = z.object({
   formula: formulaSchema.optional(),
   grid: gridConfigSchema.optional(),
   ratingOptions: z.array(z.string()).optional(),
+  ratingCategory: z.string().optional(),
+  ratingCategoryId: z.string().optional(),
+  attendance: z.enum(["opened", "present"]).optional(),
+  remark: z.enum(["teacher", "principal"]).optional(),
+  ratingMeanings: z.array(z.string()).optional(),
 });

@@ -14,7 +14,8 @@ import { recordResultEvent } from "@/lib/result-events";
 import { computeBatchAnnual, describeIssues } from "@/lib/annual-context";
 import { termLabel, termNumberFromLabel, isTermNumber } from "@/lib/term-number";
 import { findAnnualGrid } from "@/lib/annual-summary";
-import { buildSnapshotPayload, generateVerificationCode, snapshotChecksum, type SnapshotPayload } from "@/lib/snapshot";
+import { buildSignOff, buildSnapshotPayload, generateVerificationCode, snapshotChecksum, type SnapshotPayload, type SnapshotStudent } from "@/lib/snapshot";
+import { computeAge } from "@/lib/student-age";
 import { pickAllowedData, summarizeIssues, validateSingleValue, validateStudentEntry, type EntryIssue } from "@/lib/result-validate";
 import { UserError, toResult, type ActionResult } from "@/lib/user-error";
 import type { TemplateField } from "@/app/admin/result-templates/actions";
@@ -44,9 +45,29 @@ function templateFields(template: { fields: unknown }): TemplateField[] {
 function loadRows(schoolId: string, batchId: string) {
   return prisma.result.findMany({
     where: { schoolId, batchId },
-    include: { student: { include: { campus: true } } },
+    include: { student: { include: { campus: true } }, submittedBy: { select: { name: true } } },
     orderBy: { student: { firstName: "asc" } },
   });
+}
+
+// Frozen into the snapshot at publish time, same as the school's own profile
+// — a result always shows the bio-data a student had when it was issued.
+function studentSnapshotFields(student: Awaited<ReturnType<typeof loadRows>>[number]["student"], className: string): SnapshotStudent {
+  return {
+    name: `${student.firstName} ${student.lastName}`,
+    code: student.studentCode,
+    className,
+    campusName: student.campus.name,
+    gender: student.gender,
+    admissionNumber: student.admissionNumber,
+    dateOfBirth: student.dateOfBirth ? student.dateOfBirth.toISOString() : null,
+    age: computeAge(student.dateOfBirth),
+    height: student.height,
+    weight: student.weight,
+    favouriteColour: student.favouriteColour,
+    clubOrSociety: student.clubOrSociety,
+    photoUrl: student.photoUrl,
+  };
 }
 
 // The annual summary for a 3rd Term batch of an annual-enabled template; null
@@ -171,7 +192,7 @@ export async function publishBatch(batchId: string): Promise<ActionResult<{ alre
       }
 
       const fields = templateFields(batch.template);
-      const school = await prisma.school.findUniqueOrThrow({ where: { id: schoolId }, select: { name: true, slug: true, logoUrl: true, address: true, phone: true, supportEmail: true } });
+      const school = await prisma.school.findUniqueOrThrow({ where: { id: schoolId }, select: { name: true, slug: true, logoUrl: true, address: true, phone: true, supportEmail: true, principalName: true, principalSignatureUrl: true, stampUrl: true, nextTermBegins: true } });
       const prior = needsPriorRows(fields) ? await loadPriorPublished(batch.templateId, rows.map((r) => r.studentId)) : [];
       const finalData = computePublishData(
         rows.map((r) => ({ studentId: r.studentId, session: r.session, data: (r.data as Record<string, string>) ?? {} })),
@@ -196,12 +217,8 @@ export async function publishBatch(batchId: string): Promise<ActionResult<{ alre
           const verificationCode = generateVerificationCode();
           const payload = buildSnapshotPayload({
             school,
-            student: {
-              name: `${r.student.firstName} ${r.student.lastName}`,
-              code: r.student.studentCode,
-              className: batch.class.name,
-              campusName: r.student.campus.name,
-            },
+            student: studentSnapshotFields(r.student, batch.class.name),
+            signOff: buildSignOff({ school, teacherName: r.submittedBy?.name }),
             period: { session: r.session, term: r.term },
             template: { id: batch.templateId, name: batch.template.name, versionId: batch.templateVersionId, fields },
             data: finalData[i],
@@ -362,7 +379,7 @@ export async function previewBatchPayload(batchId: string, resultId: string): Pr
     if (index < 0) throw new UserError("That result isn't part of this batch.");
 
     const fields = templateFields(batch.template);
-    const school = await prisma.school.findUniqueOrThrow({ where: { id: schoolId }, select: { name: true, slug: true, logoUrl: true, address: true, phone: true, supportEmail: true } });
+    const school = await prisma.school.findUniqueOrThrow({ where: { id: schoolId }, select: { name: true, slug: true, logoUrl: true, address: true, phone: true, supportEmail: true, principalName: true, principalSignatureUrl: true, stampUrl: true, nextTermBegins: true } });
     const prior = needsPriorRows(fields) ? await loadPriorPublished(batch.templateId, rows.map((r) => r.studentId)) : [];
     const finalData = computePublishData(
       rows.map((r) => ({ studentId: r.studentId, session: r.session, data: (r.data as Record<string, string>) ?? {} })),
@@ -374,7 +391,8 @@ export async function previewBatchPayload(batchId: string, resultId: string): Pr
     const r = rows[index];
     const payload = buildSnapshotPayload({
       school,
-      student: { name: `${r.student.firstName} ${r.student.lastName}`, code: r.student.studentCode, className: batch.class.name, campusName: r.student.campus.name },
+      student: studentSnapshotFields(r.student, batch.class.name),
+      signOff: buildSignOff({ school, teacherName: r.submittedBy?.name }),
       period: { session: r.session, term: r.term },
       template: { id: batch.templateId, name: batch.template.name, versionId: batch.templateVersionId, fields },
       data: finalData[index],

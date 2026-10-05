@@ -63,6 +63,10 @@ export default async function MyClassesPage() {
         completed = results.length;
         const allStudentsCovered = results.length === klass.students.length;
         if (results.some((r) => r.status === "REJECTED")) status = "Sent back for corrections";
+        // Published is checked first — it's a later, narrower status than
+        // the general "still with an admin" Submitted bucket below, so a
+        // published batch doesn't keep showing as merely "Submitted" with
+        // no way to tell it's actually finished.
         else if (allStudentsCovered && results.every((r) => r.status === "PUBLISHED")) status = "Published";
         else if (allStudentsCovered && results.every((r) => r.status === "SUBMITTED" || r.status === "APPROVED" || r.status === "PUBLISHED")) status = "Submitted";
         else if (results.length > 0) status = "In progress";

@@ -75,7 +75,7 @@ export default async function PrintResultPage({
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-6 print:max-w-none print:p-0">
+    <main className="mx-auto max-w-5xl px-4 py-6 print:max-w-none print:p-0">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
         <Link href="/" className="text-caption text-text-muted hover:text-primary">
           &larr; Back
