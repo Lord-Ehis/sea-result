@@ -915,7 +915,7 @@ export function TemplateBuilderClient({
               </div>
               <div className="max-h-[85vh] overflow-y-auto bg-[#f5f7f7] p-4">
                 {previewPayload ? (
-                  <div className="origin-top scale-[0.55]" style={{ width: "182%" }}>
+                  <div className="origin-top-left scale-[0.37]" style={{ width: "270%" }}>
                     <SnapshotView payload={previewPayload} preview />
                   </div>
                 ) : (
