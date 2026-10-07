@@ -1,16 +1,17 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Plus, Building2, Pencil } from "lucide-react";
+import { Plus, Building2, Pencil, Upload } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { createCampus, createStudent, updateStudent } from "./actions";
+import { ImportStudentsDialog } from "./ImportStudentsDialog";
 import { PhotoUploadField } from "./PhotoUploadField";
 import { inputClass } from "./styles";
 
 type Campus = { id: string; name: string };
-type ClassOption = { id: string; name: string };
+type ClassOption = { id: string; name: string; campusId: string };
 type Student = {
   id: string;
   firstName: string;
@@ -50,6 +51,7 @@ export function StudentsClient({ campuses, classes, students, canAddCampus }: St
   const [classFilter, setClassFilter] = useState(ALL);
   const [statusFilter, setStatusFilter] = useState(ALL);
   const [addOpen, setAddOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [campusModalOpen, setCampusModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -136,6 +138,14 @@ export function StudentsClient({ campuses, classes, students, canAddCampus }: St
               New campus
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            className="inline-flex h-[39px] items-center gap-2 rounded-md border border-border bg-bg-card px-3.5 text-caption font-medium text-text-secondary hover:bg-bg-page"
+          >
+            <Upload size={16} strokeWidth={1.8} />
+            Import students
+          </button>
           <button
             type="button"
             onClick={() => setAddOpen(true)}
@@ -323,6 +333,8 @@ export function StudentsClient({ campuses, classes, students, canAddCampus }: St
           Showing {filtered.length} of {students.length} student records
         </div>
       </section>
+
+      <ImportStudentsDialog open={importOpen} onClose={() => setImportOpen(false)} campuses={campuses} classes={classes} existingCodes={students.map((s) => s.studentCode)} />
 
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add student" description="Enter a new student record.">
         <form action={handleAddStudent} className="contents">
