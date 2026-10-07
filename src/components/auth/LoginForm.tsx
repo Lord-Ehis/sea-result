@@ -6,7 +6,7 @@ import { signIn, getSession } from "next-auth/react";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 
 const DASHBOARD_BY_ROLE: Record<string, string> = {
-  PLATFORM_OWNER: "/owner/schools",
+  PLATFORM_OWNER: "/owner/dashboard",
   SCHOOL_ADMIN: "/admin/dashboard",
   TEACHER: "/teacher/classes",
   PARENT: "/parent/dashboard",
