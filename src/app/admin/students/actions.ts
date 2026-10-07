@@ -10,6 +10,7 @@ import { defaultSessionLabel } from "@/lib/academic-term";
 import { ImageError, validateImage } from "@/lib/image-validate";
 import { StorageNotConfigured, putPublicImage } from "@/lib/storage";
 import { UserError, toResult, type ActionResult } from "@/lib/user-error";
+import { MAX_STUDENT_IMPORT_BYTES, classKey, parseStudentSheet } from "@/lib/student-csv";
 
 const createCampusSchema = z.object({
   name: z.string().trim().min(1, "Campus name is required"),
@@ -198,6 +199,74 @@ export async function updateStudent(studentId: string, formData: FormData) {
   if (updated.count === 0) throw new Error("Student not found.");
 
   revalidatePath("/admin/students");
+}
+
+// Enrols a whole spreadsheet of students at once. The file is checked again
+// here against the database (the browser's preview is only a convenience), and
+// it is all or nothing: one bad row and nobody is added, so a corrected file
+// can simply be uploaded again.
+export async function importStudents(csv: string): Promise<ActionResult<{ created: number; classesCreated: number }>> {
+  const access = await getAdminAccess();
+  const { schoolId } = access;
+  return toResult(async () => {
+    if (typeof csv !== "string" || csv.length === 0) throw new UserError("Choose a file to import.");
+    if (csv.length > MAX_STUDENT_IMPORT_BYTES) throw new UserError("That file is too large to import (limit 2 MB).");
+
+    const [campuses, classes] = await Promise.all([
+      prisma.campus.findMany({ where: { schoolId, ...campusWhere(access) }, select: { id: true, name: true } }),
+      prisma.class.findMany({ where: { schoolId, ...classWhere(access) }, select: { id: true, name: true, campusId: true } }),
+    ]);
+    if (campuses.length === 0) throw new UserError("You have no campus to add students to.");
+
+    // Look up only the codes in the file, not the whole school.
+    const codes = parseStudentSheet(csv, { campuses, classes, existingCodes: new Set() }).rows.map((r) => r.studentCode);
+    const taken = await prisma.student.findMany({ where: { schoolId, studentCode: { in: codes } }, select: { studentCode: true } });
+    const preview = parseStudentSheet(csv, { campuses, classes, existingCodes: new Set(taken.map((t) => t.studentCode.toLowerCase())) });
+    if (preview.errors.length > 0) {
+      throw new UserError(`The file has ${preview.errors.length} problem${preview.errors.length === 1 ? "" : "s"}, starting with row ${preview.errors[0].row}: ${preview.errors[0].message} Nothing was imported.`);
+    }
+    if (preview.rows.length === 0) throw new UserError("The file has no students in it.");
+
+    const session = defaultSessionLabel();
+    try {
+      const out = await prisma.$transaction(async (tx) => {
+        const created = new Map<string, string>(); // campus|class -> new class id
+        for (const r of preview.rows) {
+          if (!r.newClassName) continue;
+          const key = classKey(r.campusId, r.newClassName);
+          if (created.has(key)) continue;
+          const klass = await tx.class.create({ data: { schoolId, campusId: r.campusId, name: r.newClassName, session }, select: { id: true } });
+          created.set(key, klass.id);
+        }
+        await tx.student.createMany({
+          data: preview.rows.map((r) => ({
+            schoolId,
+            campusId: r.campusId,
+            classId: r.newClassName ? created.get(classKey(r.campusId, r.newClassName))! : r.classId,
+            studentCode: r.studentCode,
+            firstName: r.firstName,
+            lastName: r.lastName,
+            guardianName: r.guardianName,
+            guardianPhone: r.guardianPhone,
+            guardianEmail: r.guardianEmail,
+            dateOfBirth: r.dateOfBirth ? new Date(r.dateOfBirth) : null,
+            gender: r.gender,
+            admissionNumber: r.admissionNumber,
+          })),
+        });
+        return { created: preview.rows.length, classesCreated: created.size };
+      });
+      revalidatePath("/admin/students");
+      revalidatePath("/admin/classes");
+      return out;
+    } catch (err) {
+      // Someone added one of these codes between the check and the write.
+      if (typeof err === "object" && err !== null && (err as { code?: string }).code === "P2002") {
+        throw new UserError("One of these student codes was just added by someone else. Nothing was imported; upload the file again.");
+      }
+      throw err;
+    }
+  });
 }
 
 export async function setStudentActive(studentId: string, isActive: boolean) {

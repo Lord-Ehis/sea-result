@@ -45,7 +45,7 @@ export default async function StudentsPage() {
     <StudentsClient
       canAddCampus={access.campusIds === null}
       campuses={campuses.map((c) => ({ id: c.id, name: c.name }))}
-      classes={classes.map((c) => ({ id: c.id, name: c.name }))}
+      classes={classes.map((c) => ({ id: c.id, name: c.name, campusId: c.campusId }))}
       students={students.map((s) => ({
         id: s.id,
         firstName: s.firstName,
