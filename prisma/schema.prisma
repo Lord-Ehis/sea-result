@@ -1001,6 +1001,31 @@ model AccountEvent {
   @@map("account_events")
 }
 
+// Append-only record of platform-owner actions that nothing else records:
+// switching a school off or on, changing a provider's keys (never the keys
+// themselves), and sending someone a password link. IDs are plain strings so
+// history survives deletion. A database trigger blocks UPDATE.
+enum PlatformEventAction {
+  SCHOOL_SUSPENDED
+  SCHOOL_REACTIVATED
+  PROVIDER_CONFIGURED
+  PROVIDER_CLEARED
+  PASSWORD_LINK_SENT
+}
+
+model PlatformEvent {
+  id           String              @id @default(cuid())
+  action       PlatformEventAction
+  actorUserId  String?
+  schoolId     String?
+  targetUserId String?
+  metadata     Json?
+  createdAt    DateTime            @default(now())
+
+  @@index([createdAt])
+  @@map("platform_events")
+}
+
 // Which campuses a campus admin (User.campusScoped) may access.
 model UserCampusAccess {
   userId    String

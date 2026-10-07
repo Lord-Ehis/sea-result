@@ -7,6 +7,8 @@ import { setProviderConfig, clearProviderConfig } from "@/lib/provider-settings"
 import { validatePricing } from "@/lib/billing-pricing";
 import { savePricing } from "@/lib/pricing-settings";
 import { UserError, toResult, type ActionResult } from "@/lib/user-error";
+import { prisma } from "@/lib/prisma";
+import { recordPlatformEvent } from "@/lib/platform-events";
 import type { ProviderKind } from "@prisma/client";
 
 async function requirePlatformOwner() {
@@ -32,29 +34,33 @@ const resendSchema = z.object({
 });
 
 export async function savePaystackConfig(input: { secretKey: string; publicKey?: string }) {
-  await requirePlatformOwner();
+  const ownerId = await requirePlatformOwner();
   const parsed = paystackSchema.parse(input);
   await setProviderConfig("PAYSTACK", parsed);
+  await recordPlatformEvent(prisma, { action: "PROVIDER_CONFIGURED", actorUserId: ownerId, metadata: { provider: "PAYSTACK" } });
   revalidatePath("/owner/settings");
 }
 
 export async function saveTermiiConfig(input: { apiKey: string; baseUrl: string; senderId: string }) {
-  await requirePlatformOwner();
+  const ownerId = await requirePlatformOwner();
   const parsed = termiiSchema.parse(input);
   await setProviderConfig("SMS_TERMII", parsed);
+  await recordPlatformEvent(prisma, { action: "PROVIDER_CONFIGURED", actorUserId: ownerId, metadata: { provider: "SMS_TERMII" } });
   revalidatePath("/owner/settings");
 }
 
 export async function saveResendConfig(input: { apiKey: string; from: string }) {
-  await requirePlatformOwner();
+  const ownerId = await requirePlatformOwner();
   const parsed = resendSchema.parse(input);
   await setProviderConfig("EMAIL_RESEND", parsed);
+  await recordPlatformEvent(prisma, { action: "PROVIDER_CONFIGURED", actorUserId: ownerId, metadata: { provider: "EMAIL_RESEND" } });
   revalidatePath("/owner/settings");
 }
 
 export async function clearProvider(provider: ProviderKind) {
-  await requirePlatformOwner();
+  const ownerId = await requirePlatformOwner();
   await clearProviderConfig(provider);
+  await recordPlatformEvent(prisma, { action: "PROVIDER_CLEARED", actorUserId: ownerId, metadata: { provider } });
   revalidatePath("/owner/settings");
 }
 
