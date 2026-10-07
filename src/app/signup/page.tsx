@@ -2,6 +2,9 @@ import { derivedPrices, startingOffer } from "@/lib/billing-pricing";
 import { getPricing } from "@/lib/pricing-settings";
 import { SignupWizard, type SignupOffer } from "./SignupWizard";
 
+// Reads the live prices and today's date, so it must be built per request, not once at deploy time.
+export const dynamic = "force-dynamic";
+
 export default async function SignupPage() {
   // What a school registering today can start with, priced by the same rules and prices Billing uses.
   const pricing = await getPricing();
