@@ -7,6 +7,7 @@ import { forgetSchoolAccess } from "@/lib/school-access-lookup";
 import { defaultSessionLabel } from "@/lib/academic-term";
 import { UserError, toResult, type ActionResult } from "@/lib/user-error";
 import { changeUserEmail } from "@/lib/change-email";
+import { recordPlatformEvent } from "@/lib/platform-events";
 
 async function requirePlatformOwner() {
   const session = await auth();
@@ -15,8 +16,16 @@ async function requirePlatformOwner() {
 }
 
 export async function setSchoolStatus(schoolId: string, status: "ACTIVE" | "SUSPENDED") {
-  await requirePlatformOwner();
-  await prisma.school.update({ where: { id: schoolId }, data: { status } });
+  const ownerId = await requirePlatformOwner();
+  await prisma.$transaction(async (tx) => {
+    const current = await tx.school.findUnique({ where: { id: schoolId }, select: { status: true } });
+    if (!current) throw new Error("School not found.");
+    await tx.school.update({ where: { id: schoolId }, data: { status } });
+    // Only a real change is worth an audit entry (switching an active school "on" again is not one).
+    if (current.status !== status) {
+      await recordPlatformEvent(tx, { action: status === "SUSPENDED" ? "SCHOOL_SUSPENDED" : "SCHOOL_REACTIVATED", actorUserId: ownerId, schoolId });
+    }
+  });
   forgetSchoolAccess(schoolId); // this instance sees the change at once; others within seconds
   revalidatePath("/owner/schools");
   revalidatePath(`/owner/schools/${schoolId}`);
