@@ -288,6 +288,13 @@ export default async function OwnerOverviewPage() {
             />
           ))
         )}
+        <p className="m-0 border-t border-border bg-[#fafbfb] px-5 py-3 text-caption text-text-muted">
+          For how every school is using the platform, including schools that have gone quiet, see{" "}
+          <Link href="/owner/adoption" className="text-primary hover:underline">
+            Adoption
+          </Link>
+          .
+        </p>
       </Section>
 
       <Section id="system" title="System" intro="Background jobs the platform relies on. See Go-live for the full checklist." count={systemCount} tone="danger">

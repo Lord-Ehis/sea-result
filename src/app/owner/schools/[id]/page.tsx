@@ -8,6 +8,8 @@ import { resolveSchoolAccess } from "@/lib/school-access";
 import { SchoolStatusToggle } from "./SchoolStatusToggle";
 import { ComplimentaryAccessPanel } from "./ComplimentaryAccessPanel";
 import { DeletionRequestPanel } from "./DeletionRequestPanel";
+import { loadAdoption } from "@/lib/owner-adoption-load";
+import { HEALTH_LABEL, HEALTH_TONE, PUBLISHED_WINDOW_DAYS } from "@/lib/owner-adoption";
 import { SchoolAdminsList } from "./SchoolAdminsList";
 
 const naira = (n: number) => `₦${n.toLocaleString()}`;
@@ -41,6 +43,7 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ i
     );
   }
 
+  const adoption = (await loadAdoption({ schoolId: school.id }))[0];
   const activeSubscription = school.subscriptions.find((s) => s.status === "ACTIVE") ?? null;
   // What the school can actually do right now, from its status and subscriptions.
   const access = resolveSchoolAccess({ status: school.status, subscriptions: school.subscriptions, now: new Date() });
@@ -95,6 +98,33 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ i
       )}
 
       <ComplimentaryAccessPanel schoolId={school.id} />
+
+      {adoption && (
+        <section className="mb-7 overflow-hidden rounded-md border border-border bg-bg-card" aria-label="Adoption">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
+            <div>
+              <h2 className="m-0 text-heading font-medium text-text-primary">Adoption</h2>
+              <p className="mt-1 text-caption text-text-muted">{adoption.reason}</p>
+            </div>
+            <StatusPill label={HEALTH_LABEL[adoption.health]} tone={HEALTH_TONE[adoption.health]} />
+          </div>
+          <dl className="m-0 grid grid-cols-2 gap-5 p-5 sm:grid-cols-3 lg:grid-cols-6">
+            {[
+              ["Students", adoption.students.toLocaleString()],
+              ["Teachers", adoption.teachers.toLocaleString()],
+              ["Result templates", adoption.templates.toLocaleString()],
+              ["Parents linked", adoption.parentCoveragePct === null ? "—" : `${adoption.parentCoveragePct}% (${adoption.studentsWithParent} of ${adoption.students})`],
+              [`Published, last ${PUBLISHED_WINDOW_DAYS} days`, adoption.publishedRecently.toLocaleString()],
+              ["Last result activity", adoption.lastActivityAt ? adoption.lastActivityAt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "Never"],
+            ].map(([label, value]) => (
+              <div key={label}>
+                <dt className="mb-1.5 text-[10px] text-text-muted">{label}</dt>
+                <dd className="m-0 text-body font-medium text-text-primary">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
 
       <section className="mb-7 grid grid-cols-2 gap-4 lg:grid-cols-4" aria-label="School metrics">
         {[

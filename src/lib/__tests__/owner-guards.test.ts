@@ -9,9 +9,11 @@ const read = (...p: string[]) => readFileSync(join(process.cwd(), "src", "app", 
 
 describe("owner-only pages and actions", () => {
   it("the user search and audit pages check the role before reading anything", () => {
-    for (const page of [read("users", "page.tsx"), read("audit", "page.tsx")]) {
+    for (const page of [read("users", "page.tsx"), read("audit", "page.tsx"), read("adoption", "page.tsx")]) {
       expect(page).toMatch(/session\?\.user\.role !== "PLATFORM_OWNER"\) redirect\("\/login"\)/);
-      expect(page.indexOf("PLATFORM_OWNER")).toBeLessThan(page.indexOf("prisma."));
+      const firstRead = page.search(/prisma\.|loadAdoption\(/);
+      expect(firstRead).toBeGreaterThan(-1);
+      expect(page.indexOf("PLATFORM_OWNER")).toBeLessThan(firstRead);
     }
   });
 
