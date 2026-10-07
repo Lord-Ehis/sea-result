@@ -4,6 +4,7 @@ export const ownerNavItems: NavItem[] = [
   { label: "Overview", href: "/owner/dashboard", icon: "LayoutGrid" },
   { label: "Schools", href: "/owner/schools", icon: "Building2" },
   { label: "Find a user", href: "/owner/users", icon: "Users" },
+  { label: "Adoption", href: "/owner/adoption", icon: "GraduationCap" },
   { label: "Analytics", href: "/owner/analytics", icon: "BarChart3" },
   { label: "Announcements", href: "/owner/announcements", icon: "Megaphone" },
   { label: "Audit log", href: "/owner/audit", icon: "ClipboardList" },
