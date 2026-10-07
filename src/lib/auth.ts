@@ -5,6 +5,8 @@ import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { checkSession } from "@/lib/session-validity";
+import { recordPlatformEvent } from "@/lib/platform-events";
+import { consumeSecondFactor } from "@/lib/two-step";
 import type { Role } from "@prisma/client";
 
 declare module "next-auth" {
@@ -32,6 +34,15 @@ class TooManyAttempts extends CredentialsSignin {
   code = "too_many_attempts";
 }
 
+// The password was right but this account has two-step sign-in on: the form asks for the code.
+class TwoStepRequired extends CredentialsSignin {
+  code = "two_step_required";
+}
+
+class InvalidTwoStepCode extends CredentialsSignin {
+  code = "invalid_two_step_code";
+}
+
 const LOGIN_WINDOW_SEC = 900; // 15 minutes
 const PER_ACCOUNT_LIMIT = 8; // wrong passwords for one account, from one place
 const PER_CALLER_LIMIT = 40; // wrong passwords from one place across all accounts
@@ -57,10 +68,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       credentials: {
         email: {},
         password: {},
+        code: {},
       },
       authorize: async (credentials) => {
         const email = credentials?.email as string | undefined;
         const password = credentials?.password as string | undefined;
+        const code = ((credentials?.code as string | undefined) ?? "").trim();
         if (!email || !password) return null;
 
         const keys = await loginKeys(email);
@@ -75,6 +88,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // Only failures count, so signing in correctly is never blocked by earlier good logins.
           if (keys) await Promise.all([hit(keys.account, PER_ACCOUNT_LIMIT, LOGIN_WINDOW_SEC), hit(keys.caller, PER_CALLER_LIMIT, LOGIN_WINDOW_SEC)]);
           return null;
+        }
+
+        if (user.totpEnabledAt) {
+          if (!code) throw new TwoStepRequired();
+          const used = await consumeSecondFactor(user, code);
+          if (!used) {
+            if (keys) await Promise.all([hit(keys.account, PER_ACCOUNT_LIMIT, LOGIN_WINDOW_SEC), hit(keys.caller, PER_CALLER_LIMIT, LOGIN_WINDOW_SEC)]);
+            throw new InvalidTwoStepCode();
+          }
+          // A recovery code is worth a line in the history: it usually means the phone is gone.
+          if (used === "recovery") await recordPlatformEvent(prisma, { action: "RECOVERY_CODE_USED", actorUserId: user.id, targetUserId: user.id }).catch(() => {});
         }
 
         return {
