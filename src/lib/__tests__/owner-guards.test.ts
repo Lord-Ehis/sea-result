@@ -9,12 +9,19 @@ const read = (...p: string[]) => readFileSync(join(process.cwd(), "src", "app", 
 
 describe("owner-only pages and actions", () => {
   it("the user search and audit pages check the role before reading anything", () => {
-    for (const page of [read("users", "page.tsx"), read("audit", "page.tsx"), read("adoption", "page.tsx")]) {
+    for (const page of [read("users", "page.tsx"), read("audit", "page.tsx"), read("adoption", "page.tsx"), read("revenue", "page.tsx")]) {
       expect(page).toMatch(/session\?\.user\.role !== "PLATFORM_OWNER"\) redirect\("\/login"\)/);
       const firstRead = page.search(/prisma\.|loadAdoption\(/);
       expect(firstRead).toBeGreaterThan(-1);
       expect(page.indexOf("PLATFORM_OWNER")).toBeLessThan(firstRead);
     }
+  });
+
+  it("the payments download checks the role itself and answers 401 otherwise", () => {
+    const route = read("revenue", "export", "route.ts");
+    expect(route).toMatch(/session\?\.user\.role !== "PLATFORM_OWNER"\) return new Response\("Not authorized\.", \{ status: 401 \}\)/);
+    expect(route.indexOf("PLATFORM_OWNER")).toBeLessThan(route.indexOf("prisma."));
+    expect(route).toMatch(/status: "SUCCESS"/);
   });
 
   it("every support action requires the platform owner", () => {
