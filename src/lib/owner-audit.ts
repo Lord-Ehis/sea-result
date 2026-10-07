@@ -57,6 +57,14 @@ export function describePlatformEvent(action: PlatformEventAction, metadata: unk
       return { category: "SETTINGS", title: `${provider} settings saved`, detail: "Keys were entered or replaced. The keys themselves are never logged." };
     case "PROVIDER_CLEARED":
       return { category: "SETTINGS", title: `${provider} settings removed`, detail: null };
+    case "TWO_STEP_ENABLED":
+      return { category: "ACCOUNTS", title: "Two-step sign-in switched on", detail: "The platform owner account now asks for a code from an authenticator app." };
+    case "TWO_STEP_DISABLED":
+      return { category: "ACCOUNTS", title: "Two-step sign-in switched off", detail: "The platform owner account is back to a password only." };
+    case "RECOVERY_CODES_REGENERATED":
+      return { category: "ACCOUNTS", title: "New recovery codes made", detail: "The old recovery codes no longer work." };
+    case "RECOVERY_CODE_USED":
+      return { category: "ACCOUNTS", title: "Signed in with a recovery code", detail: "Usually means the phone with the authenticator app was not available." };
     case "PASSWORD_LINK_SENT":
       return {
         category: "ACCOUNTS",

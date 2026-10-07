@@ -59,6 +59,7 @@ Open the **Schools in the database** table on the Go-live page. Anything that is
 ## 7. Security housekeeping
 
 - Change the **Supabase database password** (it has been typed into chat during development). Tell me when you have, and I will update Vercel and redeploy straight away so the site is only down for a moment.
+- **You** — Sign in to SEA as the platform owner and open **Security** in the menu to turn on two-step sign-in for SEA itself (an authenticator app on your phone). Save the ten recovery codes it shows once, somewhere that is not your computer. If you ever lose both the phone and the codes, run this in the Supabase SQL editor, then sign in with just your password and set it up again: `UPDATE users SET "totpSecret" = NULL, "totpEnabledAt" = NULL, "totpLastStep" = NULL, "totpRecoveryHashes" = '{}' WHERE email = 'your-owner-email';`
 - Turn on **two-step sign-in** for Vercel, Supabase, GitHub, Paystack, Resend and Termii.
 - Only the people who must have access should be members of the Vercel project and the Supabase project.
 

@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, ShieldAlert } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusPill } from "@/components/ui/StatusPill";
+import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getHeartbeat } from "@/lib/heartbeat";
 import {
@@ -72,7 +73,8 @@ export default async function OwnerOverviewPage() {
   const stuckBefore = new Date(now.getTime() - STUCK_PAYMENT_MINUTES * 60_000);
   const stuckAfter = new Date(now.getTime() - STUCK_PAYMENT_MAX_DAYS * 86_400_000);
 
-  const [schools, teacherCounts, deletionRequests, failedMessages, stuckPayments, failedPayments, cronAt, webhookAt] = await Promise.all([
+  const session = await auth();
+  const [schools, teacherCounts, deletionRequests, failedMessages, stuckPayments, failedPayments, cronAt, webhookAt, me] = await Promise.all([
     prisma.school.findMany({
       select: {
         id: true,
@@ -104,6 +106,7 @@ export default async function OwnerOverviewPage() {
     }),
     getHeartbeat("cron_subscriptions"),
     getHeartbeat("paystack_webhook"),
+    session ? prisma.user.findUnique({ where: { id: session.user.id }, select: { totpEnabledAt: true } }) : null,
   ]);
 
   const schoolName = new Map(schools.map((s) => [s.id, s.name]));
@@ -154,6 +157,15 @@ export default async function OwnerOverviewPage() {
         title="Needs attention"
         intro="What needs you today, across every school. Reload the page to check again."
       />
+
+      {me && !me.totpEnabledAt && (
+        <Link href="/owner/security" className="mb-6 flex items-center gap-3 rounded-md border border-warning/30 bg-warning-bg px-5 py-4 text-body text-warning hover:border-warning">
+          <ShieldAlert size={20} strokeWidth={1.8} />
+          <span>
+            Your account can see every school, but it signs in with a password only. <strong className="font-medium underline">Turn on two-step sign-in</strong>
+          </span>
+        </Link>
+      )}
 
       {allClear ? (
         <div className="mb-6 flex items-center gap-3 rounded-md border border-success/30 bg-success-bg px-5 py-4 text-body text-success">

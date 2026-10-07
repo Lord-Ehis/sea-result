@@ -17,6 +17,8 @@ export function LoginForm() {
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Set once the password was right for an account that has two-step sign-in on.
+  const [needsCode, setNeedsCode] = useState(false);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -27,12 +29,25 @@ export function LoginForm() {
     const result = await signIn("credentials", {
       email: formData.get("email"),
       password: formData.get("password"),
+      code: formData.get("code") ?? "",
       redirect: false,
     });
 
     if (result?.error) {
       setLoading(false);
-      setError(result.code === "too_many_attempts" ? "Too many failed attempts. Please wait about 15 minutes and try again." : "Incorrect email or password.");
+      if (result.code === "two_step_required") {
+        setNeedsCode(true);
+        setError(null);
+        return;
+      }
+      setError(
+        result.code === "too_many_attempts"
+          ? "Too many failed attempts. Please wait about 15 minutes and try again."
+          : result.code === "invalid_two_step_code"
+            ? "That code didn't work. Check the code in your authenticator app, or use a recovery code."
+            : "Incorrect email or password.",
+      );
+      if (result.code !== "invalid_two_step_code") setNeedsCode(false);
       return;
     }
 
@@ -71,6 +86,22 @@ export function LoginForm() {
           className="rounded-sm border border-border bg-bg-card px-3 py-2.5 text-body text-text-primary outline-none focus:border-primary"
         />
       </label>
+      {needsCode && (
+        <label className="grid gap-1.5 text-caption font-medium text-text-secondary">
+          Sign-in code
+          <input
+            name="code"
+            required
+            autoFocus
+            autoComplete="one-time-code"
+            inputMode="text"
+            maxLength={16}
+            placeholder="6-digit code"
+            className="rounded-sm border border-border bg-bg-card px-3 py-2.5 text-body tracking-widest text-text-primary outline-none focus:border-primary"
+          />
+          <span className="font-normal text-text-muted">Open your authenticator app and enter the 6-digit code. Lost your phone? Enter one of your recovery codes instead.</span>
+        </label>
+      )}
       <button
         type="submit"
         disabled={loading}

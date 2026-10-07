@@ -227,6 +227,15 @@ model User {
   // was collected.
   termsAcceptedAt DateTime?
   termsVersion    String?
+  // Two-step sign-in with an authenticator app. The secret is stored encrypted
+  // (src/lib/crypto.ts) and only counts once `totpEnabledAt` is set; before
+  // that it is a half-finished setup. `totpLastStep` is the newest 30-second
+  // step already accepted, so a code can't be used twice. Recovery codes are
+  // kept as hashes and removed as they are used.
+  totpSecret         String?
+  totpEnabledAt      DateTime?
+  totpLastStep       Int?
+  totpRecoveryHashes String[] @default([])
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -1011,6 +1020,10 @@ enum PlatformEventAction {
   PROVIDER_CONFIGURED
   PROVIDER_CLEARED
   PASSWORD_LINK_SENT
+  TWO_STEP_ENABLED
+  TWO_STEP_DISABLED
+  RECOVERY_CODES_REGENERATED
+  RECOVERY_CODE_USED
 }
 
 model PlatformEvent {

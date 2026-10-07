@@ -11,6 +11,7 @@ export const ownerNavItems: NavItem[] = [
   { label: "Announcements", href: "/owner/announcements", icon: "Megaphone" },
   { label: "Audit log", href: "/owner/audit", icon: "ClipboardList" },
   { label: "Global settings", href: "/owner/settings", icon: "Settings" },
+  { label: "Security", href: "/owner/security", icon: "ShieldCheck" },
   { label: "Go-live", href: "/owner/readiness", icon: "ShieldCheck" },
 ];
 
