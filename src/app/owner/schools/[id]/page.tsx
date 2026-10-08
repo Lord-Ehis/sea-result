@@ -11,6 +11,9 @@ import { DeletionRequestPanel } from "./DeletionRequestPanel";
 import { loadAdoption } from "@/lib/owner-adoption-load";
 import { HEALTH_LABEL, HEALTH_TONE, PUBLISHED_WINDOW_DAYS } from "@/lib/owner-adoption";
 import { SchoolAdminsList } from "./SchoolAdminsList";
+import { SchoolDataPanel } from "./SchoolDataPanel";
+import { auth } from "@/lib/auth";
+import { countSchoolData, paidTotal } from "@/lib/school-data";
 
 const naira = (n: number) => `₦${n.toLocaleString()}`;
 
@@ -44,6 +47,12 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ i
   }
 
   const adoption = (await loadAdoption({ schoolId: school.id }))[0];
+  const session = await auth();
+  const [dataCounts, dataPaidTotal, me] = await Promise.all([
+    countSchoolData(prisma, school.id),
+    paidTotal(prisma, school.id),
+    session ? prisma.user.findUnique({ where: { id: session.user.id }, select: { totpEnabledAt: true } }) : null,
+  ]);
   const activeSubscription = school.subscriptions.find((s) => s.status === "ACTIVE") ?? null;
   // What the school can actually do right now, from its status and subscriptions.
   const access = resolveSchoolAccess({ status: school.status, subscriptions: school.subscriptions, now: new Date() });
@@ -98,6 +107,8 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ i
       )}
 
       <ComplimentaryAccessPanel schoolId={school.id} />
+
+      <SchoolDataPanel schoolId={school.id} schoolName={school.name} active={school.status === "ACTIVE"} counts={dataCounts} paidTotal={dataPaidTotal} twoStepOn={!!me?.totpEnabledAt} />
 
       {adoption && (
         <section className="mb-7 overflow-hidden rounded-md border border-border bg-bg-card" aria-label="Adoption">

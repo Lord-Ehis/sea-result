@@ -227,9 +227,13 @@ export default async function OwnerAuditPage({ searchParams }: { searchParams: P
                     <td className="px-4 py-3 text-caption text-text-secondary">{e.actor ?? "—"}</td>
                     <td className="px-4 py-3 text-caption">
                       {e.schoolId ? (
-                        <Link href={`/owner/schools/${e.schoolId}`} className="text-primary hover:underline">
-                          {schoolName.get(e.schoolId) ?? "Unknown school"}
-                        </Link>
+                        schoolName.has(e.schoolId) ? (
+                          <Link href={`/owner/schools/${e.schoolId}`} className="text-primary hover:underline">
+                            {schoolName.get(e.schoolId)}
+                          </Link>
+                        ) : (
+                          <span className="text-text-muted">Deleted school</span>
+                        )
                       ) : (
                         <span className="text-text-muted">—</span>
                       )}
