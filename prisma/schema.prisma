@@ -1111,3 +1111,28 @@ model StudentTermException {
   @@index([schoolId])
   @@map("student_term_exceptions")
 }
+
+// One row per distinct server error, with how often it has happened. Written by
+// instrumentation.ts (see src/lib/error-capture.ts); read by the owner's
+// Errors page. Repeats of the same problem bump `count` instead of adding rows.
+model ErrorEvent {
+  id              String    @id @default(cuid())
+  // Hash of the error's name, tidied message and route: what "the same error" means.
+  fingerprint     String    @unique
+  name            String
+  message         String
+  stack           String?
+  // The route pattern, e.g. "/admin/results/[batchId]", never the real URL (no ids, no query strings).
+  route           String
+  routeType       String // render | route | action | middleware
+  count           Int       @default(1)
+  firstSeenAt     DateTime  @default(now())
+  lastSeenAt      DateTime  @default(now())
+  // When the owner was last emailed about it: repeats stay quiet for an hour.
+  lastAlertedAt   DateTime?
+  // Set when the owner marks it fixed; the next occurrence clears it and alerts again.
+  resolvedAt      DateTime?
+
+  @@index([lastSeenAt])
+  @@map("error_events")
+}
