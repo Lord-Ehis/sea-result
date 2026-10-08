@@ -9,6 +9,7 @@ export const ownerNavItems: NavItem[] = [
   { label: "Messages", href: "/owner/messages", icon: "Bell" },
   { label: "Analytics", href: "/owner/analytics", icon: "BarChart3" },
   { label: "Announcements", href: "/owner/announcements", icon: "Megaphone" },
+  { label: "Site errors", href: "/owner/errors", icon: "TriangleAlert" },
   { label: "Audit log", href: "/owner/audit", icon: "ClipboardList" },
   { label: "Global settings", href: "/owner/settings", icon: "Settings" },
   { label: "Security", href: "/owner/security", icon: "ShieldCheck" },

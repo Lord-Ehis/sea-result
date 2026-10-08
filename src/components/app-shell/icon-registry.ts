@@ -18,6 +18,7 @@ import {
   ClipboardList,
   ShieldCheck,
   Megaphone,
+  TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
 import type { IconName } from "./types";
@@ -46,4 +47,5 @@ export const iconRegistry: Record<IconName, LucideIcon> = {
   ClipboardList,
   ShieldCheck,
   Megaphone,
+  TriangleAlert,
 };

@@ -63,6 +63,11 @@ Open the **Schools in the database** table on the Go-live page. Anything that is
 - Turn on **two-step sign-in** for Vercel, Supabase, GitHub, Paystack, Resend and Termii.
 - Only the people who must have access should be members of the Vercel project and the Supabase project.
 
+## 7b. Know when the site breaks
+
+- **Errors are watched for you.** Anything that crashes on the server is listed on **Site errors** in the owner menu, and you are emailed the first time it happens and then at most once an hour per problem. The emails need the email provider set up (section 3).
+- **You** — Set up a free uptime monitor so you hear when the whole site is down (when nothing can email you from inside). In UptimeRobot (or Better Stack): add an **HTTP(s)** monitor for `https://<your-domain>/api/health`, check every 5 minutes, alert your email and phone. That address answers 200 when the site and its database are fine and 503 when they are not.
+
 ## 8. The legal pages
 
 - **You** — Have a Nigerian lawyer read the **Terms of Use** (`/terms`) and **Privacy Policy** (`/privacy`). They were drafted from how SEA really works, but they are not legal advice.

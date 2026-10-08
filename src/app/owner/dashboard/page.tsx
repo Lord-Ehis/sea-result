@@ -74,7 +74,7 @@ export default async function OwnerOverviewPage() {
   const stuckAfter = new Date(now.getTime() - STUCK_PAYMENT_MAX_DAYS * 86_400_000);
 
   const session = await auth();
-  const [schools, teacherCounts, deletionRequests, failedMessages, stuckPayments, failedPayments, cronAt, webhookAt, me] = await Promise.all([
+  const [schools, teacherCounts, deletionRequests, failedMessages, stuckPayments, failedPayments, cronAt, webhookAt, me, openErrors] = await Promise.all([
     prisma.school.findMany({
       select: {
         id: true,
@@ -107,6 +107,7 @@ export default async function OwnerOverviewPage() {
     getHeartbeat("cron_subscriptions"),
     getHeartbeat("paystack_webhook"),
     session ? prisma.user.findUnique({ where: { id: session.user.id }, select: { totpEnabledAt: true } }) : null,
+    prisma.errorEvent.count({ where: { resolvedAt: null, lastSeenAt: { gte: new Date(now.getTime() - 86_400_000) } } }),
   ]);
 
   const schoolName = new Map(schools.map((s) => [s.id, s.name]));
@@ -138,7 +139,7 @@ export default async function OwnerOverviewPage() {
 
   const paymentCount = stuckPayments.length + failedPayments.length;
   const cronStale = cronLooksStale(cronAt, now);
-  const systemCount = cronStale ? 1 : 0;
+  const systemCount = (cronStale ? 1 : 0) + (openErrors > 0 ? 1 : 0);
 
   const tiles: { label: string; count: number; href: string; tone: Tone; note: string }[] = [
     { label: "Subscriptions", count: subscriptionCount, href: "#subscriptions", tone: subs.lapsed.length > 0 ? "danger" : "warning", note: subs.lapsed.length > 0 ? `${subs.lapsed.length} locked out` : "ending soon" },
@@ -146,7 +147,7 @@ export default async function OwnerOverviewPage() {
     { label: "Failed messages", count: failedTotal, href: "#messages", tone: "warning", note: `last ${FAILED_MESSAGE_DAYS} days` },
     { label: "Payments", count: paymentCount, href: "#payments", tone: "warning", note: "stuck or failed" },
     { label: "Setup stalled", count: stalled.length, href: "#onboarding", tone: "neutral", note: "schools not set up" },
-    { label: "System", count: systemCount, href: "#system", tone: "danger", note: "background jobs" },
+    { label: "System", count: systemCount, href: "#system", tone: "danger", note: "jobs or errors" },
   ];
   const allClear = tiles.every((t) => t.count === 0);
 
@@ -309,7 +310,7 @@ export default async function OwnerOverviewPage() {
         </p>
       </Section>
 
-      <Section id="system" title="System" intro="Background jobs the platform relies on. See Go-live for the full checklist." count={systemCount} tone="danger">
+      <Section id="system" title="System" intro="Background jobs and server errors. See Go-live for the full checklist." count={systemCount} tone="danger">
         <Row
           name="Daily subscription job"
           detail={cronAt ? `Last ran ${ago(cronAt, now)} (${fmtDate(cronAt)})` : "Has never run"}
@@ -320,6 +321,13 @@ export default async function OwnerOverviewPage() {
           detail={webhookAt ? `Last received ${ago(webhookAt, now)} (${fmtDate(webhookAt)})` : "Nothing received yet"}
           pill={<StatusPill label={webhookAt ? "Seen" : "Not seen yet"} tone={webhookAt ? "success" : "neutral"} />}
         />
+        <Link href="/owner/errors" className="block hover:bg-[#fafbfb]">
+          <Row
+            name="Site errors"
+            detail={openErrors > 0 ? `${openErrors} open in the last 24 hours. Open the list to see what failed.` : "Nothing has failed on the server in the last 24 hours."}
+            pill={<StatusPill label={openErrors > 0 ? `${openErrors} open` : "None"} tone={openErrors > 0 ? "danger" : "success"} />}
+          />
+        </Link>
       </Section>
     </>
   );
