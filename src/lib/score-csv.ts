@@ -52,7 +52,9 @@ export function scoreColumns(fields: TemplateField[]): ScoreColumn[] {
 
 function csvCell(value: string): string {
   // A cell a spreadsheet would run as a formula is neutralised with a leading apostrophe.
-  const safe = /^[=+@\t\r]/.test(value) ? `'${value}` : value;
+  // A phone number such as +234 801 234 5678 is left alone: it can't run anything, and an apostrophe would show in the cell.
+  const isPhone = /^\+\d[\d\s().-]*$/.test(value);
+  const safe = /^[=+@\t\r]/.test(value) && !isPhone ? `'${value}` : value;
   return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 

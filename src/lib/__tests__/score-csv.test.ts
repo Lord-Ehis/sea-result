@@ -88,3 +88,9 @@ describe("score sheet import", () => {
     expect(parseCsv(buildErrorReport(out.errors))[0]).toEqual(["Row", "Student code", "Column", "Problem"]);
   });
 });
+
+describe("toCsv formula guard", () => {
+  it("neutralises formulas but leaves a phone number readable", () => {
+    expect(toCsv([["=SUM(A1)", "+cmd|calc", "@x", "+234 801 234 5678", "+2348012345678"]])).toBe("'=SUM(A1),'+cmd|calc,'@x,+234 801 234 5678,+2348012345678");
+  });
+});

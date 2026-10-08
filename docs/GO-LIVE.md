@@ -54,7 +54,7 @@ Do this **before any real school exists**, or at a quiet time, because prices ap
 
 ## 6. Clean out test data
 
-Open the **Schools in the database** table on the Go-live page. Anything that is not a real school (test or demo schools, "QA" schools): suspend it from its page under *Schools*. If you want one removed from the database completely, tell me and I will do it.
+Open the **Schools in the database** table on the Go-live page. Anything that is not a real school (test or demo schools, "QA" schools): open its page under *Schools* and suspend it. Then, in the **School data** section on the same page, you can **Download all data (ZIP)** if you want a copy, and **Delete all of this school's data** to remove it completely (students, results, payments, staff and parent accounts, uploaded files). Deleting needs the school's exact name and your password (and two-step code), and cannot be undone. Look at the numbers on that page before you delete: a school with real payments or real students is not test data. Each download and deletion is recorded in the **Audit log**.
 
 ## 7. Security housekeeping
 

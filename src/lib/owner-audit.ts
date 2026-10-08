@@ -65,6 +65,15 @@ export function describePlatformEvent(action: PlatformEventAction, metadata: unk
       return { category: "ACCOUNTS", title: "New recovery codes made", detail: "The old recovery codes no longer work." };
     case "RECOVERY_CODE_USED":
       return { category: "ACCOUNTS", title: "Signed in with a recovery code", detail: "Usually means the phone with the authenticator app was not available." };
+    case "SCHOOL_DATA_EXPORTED":
+      return { category: "SCHOOLS", title: "School data downloaded", detail: "A ZIP of the school's students, results and payments was downloaded." };
+    case "SCHOOL_DATA_DELETED": {
+      const name = typeof m.schoolName === "string" ? m.schoolName : "A school";
+      const counts = m.counts && typeof m.counts === "object" ? (m.counts as Record<string, number>) : {};
+      const parts = [counts.students !== undefined ? `${counts.students} students` : null, counts.results !== undefined ? `${counts.results} results` : null, counts.payments !== undefined ? `${counts.payments} payments` : null].filter(Boolean);
+      const paid = typeof m.paidTotal === "number" && m.paidTotal > 0 ? ` It had paid ${naira(m.paidTotal)}.` : "";
+      return { category: "SCHOOLS", title: `${name}: all data deleted permanently`, detail: `${parts.join(", ")}.${paid}`.trim() };
+    }
     case "PASSWORD_LINK_SENT":
       return {
         category: "ACCOUNTS",

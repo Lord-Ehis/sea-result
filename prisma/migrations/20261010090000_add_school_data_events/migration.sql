@@ -1,0 +1,3 @@
+-- AlterEnum
+ALTER TYPE "PlatformEventAction" ADD VALUE 'SCHOOL_DATA_EXPORTED';
+ALTER TYPE "PlatformEventAction" ADD VALUE 'SCHOOL_DATA_DELETED';
