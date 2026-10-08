@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ALERT_EVERY_MINUTES, MESSAGE_MAX, STACK_MAX, alertEmail, describeError, fingerprintFor, isAlertDue, shouldIgnore, tidyMessage } from "@/lib/error-rules";
+import { ALERT_EVERY_MINUTES, MESSAGE_MAX, STACK_MAX, alertEmail, cleanStack, describeError, fingerprintFor, isAlertDue, redact, shouldIgnore, summarise, tidyMessage } from "@/lib/error-rules";
 
 describe("shouldIgnore", () => {
   it("skips the errors Next.js throws on purpose", () => {
@@ -44,11 +44,13 @@ describe("describeError", () => {
   });
 
   it("trims long messages and stacks, and copes with odd input", () => {
-    const long = new Error("x".repeat(5000));
-    long.stack = "s".repeat(9000);
+    const long = new Error("word ".repeat(1000));
+    long.stack = "Error: boom\n" + "    at somewhere (file.ts:1:1)\n".repeat(400);
     const e = describeError(long, { routePath: "/p", routeType: "route" })!;
     expect(e.message).toHaveLength(MESSAGE_MAX);
-    expect(e.stack).toHaveLength(STACK_MAX);
+    expect(e.stack!.split("\n")).toHaveLength(12); // the first twelve frames only
+    expect(e.stack!.length).toBeLessThanOrEqual(STACK_MAX);
+    expect(e.stack).not.toContain("boom");
     expect(describeError("plain text", {})).toMatchObject({ message: "plain text", route: "unknown", routeType: "unknown" });
     expect(describeError(new Error(""), {})!.message).toBe("No message");
   });
@@ -75,5 +77,44 @@ describe("alertEmail", () => {
     expect(mail.text).toContain("Error: boom");
     expect(mail.text).toContain("Times seen: 3");
     expect(mail.text).toContain("https://example.com/owner/errors");
+  });
+});
+
+describe("redact", () => {
+  it("blanks emails, password hashes, phone numbers, long tokens and logins inside addresses", () => {
+    const hash = "$2b$10$" + "a".repeat(53);
+    const out = redact(`user ada@example.com hash ${hash} phone +234 801 234 5678 token ${"A1b2".repeat(10)} at postgresql://postgres:secret@host:6543/db`);
+    expect(out).not.toMatch(/ada@example|\$2b\$|234 801|A1b2A1b2|secret/);
+    expect(out).toContain("[email]");
+    expect(out).toContain("[hash]");
+    expect(out).toContain("[number]");
+    expect(out).toContain("[token]");
+    expect(out).toContain("[address-with-login]@host");
+  });
+
+  it("leaves ordinary text and short ids alone", () => {
+    expect(redact("Student cmu8ig76q0009hov5hq8smm1t not found in batch 42")).toBe("Student cmu8ig76q0009hov5hq8smm1t not found in batch 42");
+  });
+});
+
+describe("summarise and cleanStack", () => {
+  it("keeps the first and last lines of a database error, not the data between", () => {
+    const m = "\nInvalid `prisma.user.create()` invocation:\n\n{ data: { email: 'x' } }\n\nUnique constraint failed on the fields: (`email`)";
+    expect(summarise(m)).toBe("Invalid `prisma.user.create()` invocation: … Unique constraint failed on the fields: (`email`)");
+    expect(summarise("plain\nsecond line")).toBe("plain");
+    expect(summarise(undefined)).toBe("");
+  });
+
+  it("gives different database errors on one page different fingerprints", () => {
+    const a = new Error("\nInvalid `prisma.user.create()` invocation:\n\nUnique constraint failed on the fields: (`email`)");
+    const b = new Error("\nInvalid `prisma.user.create()` invocation:\n\nForeign key constraint failed");
+    expect(fingerprintFor(a, "/x")).not.toBe(fingerprintFor(b, "/x"));
+  });
+
+  it("keeps only stack frames, never the message lines above them", () => {
+    const stack = "Error: contains ada@example.com\n    at one (a.ts:1:1)\n    at two (b.ts:2:2)";
+    expect(cleanStack(stack)).toBe("    at one (a.ts:1:1)\n    at two (b.ts:2:2)");
+    expect(cleanStack("no frames here")).toBeNull();
+    expect(cleanStack(undefined)).toBeNull();
   });
 });

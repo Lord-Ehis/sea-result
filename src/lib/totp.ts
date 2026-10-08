@@ -91,8 +91,10 @@ export function otpauthUri(secret: string, accountEmail: string, issuer = "SEA")
 
 // ---- Recovery codes ------------------------------------------------------
 // One-time codes for a lost phone. Letters and digits without look-alikes
-// (no 0/O, 1/I/L), shown as XXXXX-XXXXX. Only a hash is stored: they are long
-// and random, so a plain SHA-256 is enough and the originals can't be read back.
+// (no 0/O, 1/I/L), shown as XXXXX-XXXXX. Only a hash is stored. The codes carry
+// about 50 bits, which a plain SHA-256 would not protect if the database leaked
+// (they could be guessed offline), so they are hashed with HMAC-SHA256 under the
+// server's secret key: stolen hashes alone are worthless.
 
 const RECOVERY_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
@@ -106,7 +108,16 @@ export function generateRecoveryCodes(count = RECOVERY_CODE_COUNT): string[] {
 /** Typed any way (case, spaces, with or without the dash) it compares the same. */
 export const normaliseRecoveryCode = (code: string) => code.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
-export const hashRecoveryCode = (code: string) => createHash("sha256").update(normaliseRecoveryCode(code)).digest("hex");
+function recoveryKey(): Buffer {
+  const raw = process.env.PROVIDER_CONFIG_KEY;
+  if (!raw) throw new Error("PROVIDER_CONFIG_KEY is not configured.");
+  return Buffer.from(raw, "base64");
+}
+
+export const hashRecoveryCode = (code: string) => createHmac("sha256", recoveryKey()).update(`recovery-code:${normaliseRecoveryCode(code)}`).digest("hex");
+
+/** How codes were hashed before the server key was added; still accepted so an owner who already set up two-step isn't locked out. */
+export const legacyHashRecoveryCode = (code: string) => createHash("sha256").update(normaliseRecoveryCode(code)).digest("hex");
 
 /** A recovery code looks like 10 letters/digits (a 6-digit app code never does). */
 export const looksLikeRecoveryCode = (input: string) => normaliseRecoveryCode(input).length === 10;

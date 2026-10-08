@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
-  errorEvent: { findUnique: vi.fn(), upsert: vi.fn(), updateMany: vi.fn() },
+  errorEvent: { findUnique: vi.fn(), upsert: vi.fn(), updateMany: vi.fn(), count: vi.fn(), deleteMany: vi.fn() },
   user: { findMany: vi.fn() },
 }));
 const email = vi.hoisted(() => vi.fn());
@@ -18,6 +18,8 @@ const ctx = { routePath: "/admin/students", routeType: "render" };
 beforeEach(() => {
   vi.clearAllMocks();
   db.errorEvent.findUnique.mockResolvedValue(null);
+  db.errorEvent.count.mockResolvedValue(5);
+  db.errorEvent.deleteMany.mockResolvedValue({ count: 0 });
   db.errorEvent.upsert.mockResolvedValue({ id: "e1", count: 1 });
   db.errorEvent.updateMany.mockResolvedValue({ count: 1 });
   db.user.findMany.mockResolvedValue([{ email: "owner@example.com" }]);
@@ -72,5 +74,29 @@ describe("captureServerError", () => {
     email.mockRejectedValue(new Error("resend down"));
     await expect(captureServerError(new Error("boom"), ctx, now)).resolves.toBeUndefined();
     spy.mockRestore();
+  });
+});
+
+describe("captureServerError limits", () => {
+  it("does not add new distinct errors once the table is full, but still counts known ones", async () => {
+    db.errorEvent.count.mockResolvedValue(2000);
+    await captureServerError(new Error("a brand new failure"), ctx, now);
+    expect(db.errorEvent.upsert).not.toHaveBeenCalled();
+    expect(email).not.toHaveBeenCalled();
+
+    db.errorEvent.findUnique.mockResolvedValue({ resolvedAt: null });
+    await captureServerError(new Error("a brand new failure"), ctx, now);
+    expect(db.errorEvent.upsert).toHaveBeenCalled();
+  });
+
+  it("stores no personal details quoted in a database error", async () => {
+    const prismaStyle = new Error("\nInvalid `prisma.user.create()` invocation in /app/x.ts:10:5\n\n  data: {\n    email: \"ada@example.com\",\n    passwordHash: \"$2b$10$" + "a".repeat(53) + "\"\n  }\n\nUnique constraint failed on the fields: (`email`)");
+    await captureServerError(prismaStyle, ctx, now);
+    const created = db.errorEvent.upsert.mock.calls[0][0].create;
+    const stored = JSON.stringify(created);
+    expect(stored).not.toContain("ada@example.com");
+    expect(stored).not.toContain("$2b$");
+    expect(created.message).toContain("Unique constraint failed");
+    expect(created.stack ?? "").not.toContain("Invalid `prisma");
   });
 });

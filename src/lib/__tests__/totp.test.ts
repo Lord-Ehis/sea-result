@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
+
+// Recovery codes are hashed under the server key, as in production.
+process.env.PROVIDER_CONFIG_KEY = Buffer.alloc(32, 7).toString("base64");
+
 import {
   base32Decode,
   base32Encode,
   generateRecoveryCodes,
   generateTotpSecret,
   hashRecoveryCode,
+  legacyHashRecoveryCode,
   looksLikeRecoveryCode,
   normaliseRecoveryCode,
   otpauthUri,
@@ -78,6 +83,19 @@ describe("recovery codes", () => {
     expect(normaliseRecoveryCode(" abcde-fgh23 ")).toBe("ABCDEFGH23");
     expect(hashRecoveryCode("abcde-fgh23")).toBe(hashRecoveryCode("ABCDEFGH23"));
     expect(hashRecoveryCode("ABCDE-FGH23")).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("hashes under the server key, so stolen hashes cannot be checked offline", () => {
+    const keyed = hashRecoveryCode("ABCDE-FGH23");
+    expect(keyed).not.toBe(legacyHashRecoveryCode("ABCDE-FGH23"));
+    process.env.PROVIDER_CONFIG_KEY = Buffer.alloc(32, 9).toString("base64");
+    expect(hashRecoveryCode("ABCDE-FGH23")).not.toBe(keyed);
+    process.env.PROVIDER_CONFIG_KEY = Buffer.alloc(32, 7).toString("base64");
+    expect(hashRecoveryCode("ABCDE-FGH23")).toBe(keyed);
+    const saved = process.env.PROVIDER_CONFIG_KEY;
+    delete process.env.PROVIDER_CONFIG_KEY;
+    expect(() => hashRecoveryCode("ABCDE-FGH23")).toThrow(/PROVIDER_CONFIG_KEY/);
+    process.env.PROVIDER_CONFIG_KEY = saved;
   });
 
   it("tells a recovery code from an app code", () => {

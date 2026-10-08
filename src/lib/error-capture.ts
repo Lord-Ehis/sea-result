@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email";
 import { hit } from "@/lib/rate-limit";
-import { ALERT_EMAILS_PER_HOUR, ALERT_EVERY_MINUTES, alertEmail, describeError } from "@/lib/error-rules";
+import { ALERT_EMAILS_PER_HOUR, ALERT_EVERY_MINUTES, MAX_ERROR_ROWS, RETENTION_DAYS, alertEmail, describeError } from "@/lib/error-rules";
 
 // Records a server error and, the first time (and then at most hourly), emails
 // the platform owner. Called from instrumentation.ts for every error Next.js
@@ -17,6 +17,10 @@ export async function captureServerError(err: unknown, context: { routePath?: un
     if (!error) return;
 
     const existing = await prisma.errorEvent.findUnique({ where: { fingerprint: error.fingerprint }, select: { resolvedAt: true } });
+    // Anyone can make a public page fail with odd input, so a flood of different errors can't fill the table:
+    // past the cap only errors already on the list are counted.
+    if (!existing && (await prisma.errorEvent.count()) >= MAX_ERROR_ROWS) return;
+    if (Math.random() < 0.02) void prisma.errorEvent.deleteMany({ where: { lastSeenAt: { lt: new Date(now.getTime() - RETENTION_DAYS * 86_400_000) } } }).catch(() => {});
     const row = await prisma.errorEvent.upsert({
       where: { fingerprint: error.fingerprint },
       create: { fingerprint: error.fingerprint, name: error.name, message: error.message, stack: error.stack, route: error.route, routeType: error.routeType, firstSeenAt: now, lastSeenAt: now },

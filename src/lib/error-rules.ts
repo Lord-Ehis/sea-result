@@ -9,6 +9,9 @@ export const ALERT_EVERY_MINUTES = 60;
 export const ALERT_EMAILS_PER_HOUR = 10;
 export const MESSAGE_MAX = 400;
 export const STACK_MAX = 1800;
+/** The most distinct errors kept at once, and how long an untouched one is kept. */
+export const MAX_ERROR_ROWS = 2000;
+export const RETENTION_DAYS = 60;
 
 // Next.js throws these on purpose to redirect, show "not found" and so on: they are control flow, not failures.
 const CONTROL_FLOW_DIGESTS = ["NEXT_REDIRECT", "NEXT_NOT_FOUND", "NEXT_HTTP_ERROR_FALLBACK", "DYNAMIC_SERVER_USAGE", "BAILOUT_TO_CLIENT_SIDE_RENDERING", "NEXT_PRERENDER_INTERRUPTED"];
@@ -27,10 +30,52 @@ export function shouldIgnore(err: unknown): boolean {
   return false;
 }
 
+/**
+ * Takes personal details and secrets out of an error's text before it is stored
+ * or emailed. Database errors can quote the values being saved (a person's
+ * email, a password hash), so those patterns are blanked wherever they appear.
+ */
+export function redact(text: string): string {
+  return text
+    .replace(/\$2[aby]\$\d\d\$[./A-Za-z0-9]{53}/g, "[hash]")
+    .replace(/[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s/@:]+:[^\s/@]+@/g, "[address-with-login]@")
+    .replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, "[email]")
+    .replace(/\+?\d[\d\s().-]{8,}\d/g, "[number]")
+    .replace(/\b[A-Za-z0-9_-]{32,}\b/g, "[token]");
+}
+
+/**
+ * The part of a message worth keeping. Prisma errors open with a code frame that
+ * quotes the data being written, so only their first line and last line (the
+ * actual reason) are kept; anything else keeps its first line.
+ */
+export function summarise(message: unknown): string {
+  const lines = (typeof message === "string" ? message : "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return "";
+  if (lines.length > 1 && /invocation/i.test(lines[0])) return `${lines[0]} … ${lines[lines.length - 1]}`;
+  return lines[0];
+}
+
+/** Only the "at …" lines: the first lines of a stack repeat the message, with whatever data it quotes. */
+export function cleanStack(stack: unknown): string | null {
+  if (typeof stack !== "string") return null;
+  const frames = stack
+    .split("\n")
+    .filter((l) => /^\s+at\s/.test(l))
+    .slice(0, 12);
+  return frames.length ? frames.join("\n").slice(0, STACK_MAX) : null;
+}
+
 /** One line, ids and numbers blurred, so "student 123 not found" and "student 456 not found" are one problem. */
 export function tidyMessage(message: unknown): string {
-  const text = typeof message === "string" ? message : "";
-  return text.split("\n")[0].replace(/\b[a-z0-9]{24,}\b/gi, "#").replace(/\d+/g, "#").replace(/\s+/g, " ").trim();
+  return redact(summarise(message))
+    .replace(/\b[a-z0-9]{24,}\b/gi, "#")
+    .replace(/\d+/g, "#")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function fingerprintFor(err: unknown, route: string): string {
@@ -49,8 +94,8 @@ export function describeError(err: unknown, context: { routePath?: unknown; rout
   const routeType = typeof context.routeType === "string" ? context.routeType : "unknown";
   return {
     name: (typeof e.name === "string" ? e.name : "Error").slice(0, 100),
-    message: (typeof e.message === "string" && e.message ? e.message : "No message").slice(0, MESSAGE_MAX),
-    stack: typeof e.stack === "string" ? e.stack.slice(0, STACK_MAX) : null,
+    message: redact(summarise(e.message) || "No message").slice(0, MESSAGE_MAX),
+    stack: cleanStack(e.stack),
     fingerprint: fingerprintFor(err, route),
     route,
     routeType,
