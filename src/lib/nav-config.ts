@@ -31,17 +31,22 @@ export const schoolAdminNavItems: NavItem[] = [
   { label: "Notifications", href: "/admin/notifications", icon: "Bell" },
   { label: "Custom domain", href: "/admin/domain", icon: "Globe" },
   { label: "Deletion request", href: "/admin/deletion-request", icon: "Trash2" },
+  { label: "Help", href: "/admin/help", icon: "CircleHelp" },
 ];
 
 // What a campus admin sees: their campuses' day-to-day work, none of the
 // school-wide settings (templates, billing, domain, deletion request, team).
 export const campusAdminNavItems: NavItem[] = schoolAdminNavItems.filter((item) =>
-  ["/admin/dashboard", "/admin/students", "/admin/classes", "/admin/results", "/admin/published", "/admin/audit", "/admin/teachers", "/admin/notifications"].includes(item.href),
+  ["/admin/dashboard", "/admin/students", "/admin/classes", "/admin/results", "/admin/published", "/admin/audit", "/admin/teachers", "/admin/notifications", "/admin/help"].includes(item.href),
 );
 
-export const teacherNavItems: NavItem[] = [{ label: "My classes", href: "/teacher/classes", icon: "GraduationCap" }];
+export const teacherNavItems: NavItem[] = [
+  { label: "My classes", href: "/teacher/classes", icon: "GraduationCap" },
+  { label: "Help", href: "/teacher/help", icon: "CircleHelp" },
+];
 
 export const parentNavItems: NavItem[] = [
   { label: "Dashboard", href: "/parent/dashboard", icon: "LayoutGrid" },
   { label: "Link a child", href: "/parent/link-child", icon: "UserPlus" },
+  { label: "Help", href: "/parent/help", icon: "CircleHelp" },
 ];

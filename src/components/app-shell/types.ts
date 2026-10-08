@@ -18,7 +18,8 @@ export type IconName =
   | "ClipboardList"
   | "ShieldCheck"
   | "Megaphone"
-  | "TriangleAlert";
+  | "TriangleAlert"
+  | "CircleHelp";
 
 export type NavItem = {
   label: string;
