@@ -52,4 +52,10 @@ describe("consumeSecondFactor", () => {
     db.$executeRaw.mockResolvedValue(0);
     expect(await consumeSecondFactor(user(), "ABCDEFGH23", now)).toBeNull();
   });
+
+  it("still honours a code stored the old way, so an existing owner is not locked out", async () => {
+    db.$executeRaw.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+    expect(await consumeSecondFactor(user(), "abcde-fgh23", now)).toBe("recovery");
+    expect(db.$executeRaw).toHaveBeenCalledTimes(2);
+  });
 });

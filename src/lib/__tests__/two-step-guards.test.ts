@@ -15,6 +15,23 @@ describe("two-step sign-in wiring", () => {
     expect(wrong).toMatch(/hit\(keys\.account/);
   });
 
+  it("wrong codes for one account are counted across every place, not only per computer", () => {
+    const auth = read("lib", "auth.ts");
+    expect(auth).toMatch(/secondFactor: `login-2fa:\$\{account\}`/);
+    expect(auth).toMatch(/isOverLimit\(keys\.secondFactor, SECOND_FACTOR_LIMIT/);
+    expect(auth).toMatch(/hit\(keys\.secondFactor, SECOND_FACTOR_LIMIT/);
+    expect(auth.indexOf("isOverLimit(keys.secondFactor")).toBeLessThan(auth.indexOf("consumeSecondFactor(user, code)"));
+  });
+
+  it("sign-in only follows a callback address inside this site", () => {
+    const form = read("components", "auth", "LoginForm.tsx");
+    const found = /if \(callbackUrl && \/(.*)\/\.test\(callbackUrl\)\)/.exec(form);
+    expect(found).toBeTruthy();
+    const ok = new RegExp(found![1]);
+    for (const good of ["/admin/results", "/owner/schools/abc?x=1"]) expect(ok.test(good), good).toBe(true);
+    for (const bad of ["https://evil.example", "//evil.example", "/\\evil.example", "javascript:alert(1)", "evil.example"]) expect(ok.test(bad), bad).toBe(false);
+  });
+
   it("the security page and every action require the platform owner", () => {
     expect(read("app", "owner", "security", "page.tsx")).toMatch(/session\?\.user\.role !== "PLATFORM_OWNER"\) redirect\("\/login"\)/);
     const actions = read("app", "owner", "security", "actions.ts");

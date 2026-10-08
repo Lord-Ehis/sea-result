@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { decryptJson } from "@/lib/crypto";
-import { hashRecoveryCode, looksLikeRecoveryCode, verifyTotp } from "@/lib/totp";
+import { hashRecoveryCode, legacyHashRecoveryCode, looksLikeRecoveryCode, verifyTotp } from "@/lib/totp";
 
 // The database side of two-step sign-in: checking the second factor and, in
 // the same breath, using it up, so a code can never be accepted twice even if
@@ -20,10 +20,13 @@ export async function consumeSecondFactor(user: SecondFactorUser & { totpLastSte
 
   if (looksLikeRecoveryCode(input)) {
     // Removing the hash is the check: only one request can remove it.
-    const removed = await prisma.$executeRaw`
-      UPDATE users SET "totpRecoveryHashes" = array_remove("totpRecoveryHashes", ${hashRecoveryCode(input)})
-      WHERE id = ${user.id} AND ${hashRecoveryCode(input)} = ANY("totpRecoveryHashes")`;
-    return removed === 1 ? "recovery" : null;
+    for (const hash of [hashRecoveryCode(input), legacyHashRecoveryCode(input)]) {
+      const removed = await prisma.$executeRaw`
+        UPDATE users SET "totpRecoveryHashes" = array_remove("totpRecoveryHashes", ${hash})
+        WHERE id = ${user.id} AND ${hash} = ANY("totpRecoveryHashes")`;
+      if (removed === 1) return "recovery";
+    }
+    return null;
   }
 
   const secret = decryptJson<{ secret: string }>(user.totpSecret).secret;

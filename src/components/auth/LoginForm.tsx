@@ -51,8 +51,9 @@ export function LoginForm() {
       return;
     }
 
+    // Only an address inside this site: "//evil.example" and "https://…" would send a signed-in person somewhere else.
     const callbackUrl = searchParams.get("callbackUrl");
-    if (callbackUrl) {
+    if (callbackUrl && /^\/(?![/\\])/.test(callbackUrl)) {
       router.push(callbackUrl);
       return;
     }

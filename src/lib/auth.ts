@@ -46,13 +46,16 @@ class InvalidTwoStepCode extends CredentialsSignin {
 const LOGIN_WINDOW_SEC = 900; // 15 minutes
 const PER_ACCOUNT_LIMIT = 8; // wrong passwords for one account, from one place
 const PER_CALLER_LIMIT = 40; // wrong passwords from one place across all accounts
+// Wrong two-step codes for one account from anywhere. The per-place limits above stop one
+// computer, but a 6-digit code is only worth guessing across many, so this counts them all.
+const SECOND_FACTOR_LIMIT = 12;
 
 /** The counters for this attempt, or null if the caller can't be identified (then no throttling). */
 async function loginKeys(email: string) {
   try {
     const caller = await callerId();
     const account = createHash("sha256").update(email.toLowerCase()).digest("hex").slice(0, 16);
-    return { account: `login:${caller}:${account}`, caller: `login-all:${caller}` };
+    return { account: `login:${caller}:${account}`, caller: `login-all:${caller}`, secondFactor: `login-2fa:${account}` };
   } catch {
     return null;
   }
@@ -92,9 +95,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (user.totpEnabledAt) {
           if (!code) throw new TwoStepRequired();
+          if (keys && !(await isOverLimit(keys.secondFactor, SECOND_FACTOR_LIMIT, LOGIN_WINDOW_SEC)).allowed) throw new TooManyAttempts();
           const used = await consumeSecondFactor(user, code);
           if (!used) {
-            if (keys) await Promise.all([hit(keys.account, PER_ACCOUNT_LIMIT, LOGIN_WINDOW_SEC), hit(keys.caller, PER_CALLER_LIMIT, LOGIN_WINDOW_SEC)]);
+            if (keys) await Promise.all([hit(keys.account, PER_ACCOUNT_LIMIT, LOGIN_WINDOW_SEC), hit(keys.caller, PER_CALLER_LIMIT, LOGIN_WINDOW_SEC), hit(keys.secondFactor, SECOND_FACTOR_LIMIT, LOGIN_WINDOW_SEC)]);
             throw new InvalidTwoStepCode();
           }
           // A recovery code is worth a line in the history: it usually means the phone is gone.
