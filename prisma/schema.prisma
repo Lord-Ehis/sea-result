@@ -471,6 +471,10 @@ model TemplateVersion {
   includeAttendance      Boolean               @default(false)
   // Ask for a teacher's and a principal's remark, shown boxed on results.
   includeRemarks         Boolean               @default(false)
+  // Which student details are left off the printed result (gender, height, weight...).
+  // Empty means all are shown, which is how every template behaved before this existed.
+  // Part of the immutable version, and left out of the frozen published result itself.
+  hiddenStudentDetails   String[]              @default([])
   // Snapshot of exactly what was compiled onto ResultTemplate.fields at
   // activation — audit-log-ready even though no audit log exists yet.
   compiledFieldsSnapshot Json?

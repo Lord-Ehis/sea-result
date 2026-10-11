@@ -116,7 +116,7 @@ export const HELP_VIDEOS: Record<string, HelpVideo> = {
       "Add subjects and their score components. Each subject's weights must add up to 100%.",
       "Watch the live preview as you build.",
       "Save draft, then Validate, and fix anything shown in red.",
-      "Choose a grading scale, and tick attendance and remarks if you want them.",
+      "Choose a grading scale, and tick attendance and remarks if you want them. Under Student details on the result, untick anything this result should leave out, such as height, weight or favourite colour.",
       "Add rating categories such as Behaviour.",
       "Activate when you are happy. To change it later, duplicate it into a new draft.",
     ],

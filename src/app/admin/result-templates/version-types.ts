@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { fieldSchema, type TemplateField } from "./field-schemas";
+import { cleanHiddenDetails } from "@/lib/student-details";
 
 // Client-facing shapes for the version editor. Rows carry a client-generated
 // id (crypto.randomUUID(), same convention as Grid subjects/columns in
@@ -78,6 +79,8 @@ export type TemplateVersionSummary = {
   includeAnnualSummary: boolean;
   includeAttendance: boolean;
   includeRemarks: boolean;
+  /** Student details left off the printed result (see src/lib/student-details.ts). Empty shows them all. */
+  hiddenStudentDetails: string[];
 };
 
 export const PRESETS = {
@@ -204,4 +207,5 @@ export const updateVersionDraftSchema = z.object({
   includeAnnualSummary: z.boolean().default(false),
   includeAttendance: z.boolean().default(false),
   includeRemarks: z.boolean().default(false),
+  hiddenStudentDetails: z.array(z.string()).default([]).transform(cleanHiddenDetails),
 });
