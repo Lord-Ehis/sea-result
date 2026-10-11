@@ -3,9 +3,9 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import { Download, Upload } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
-import { buildErrorReport } from "@/lib/score-csv";
+import { buildErrorReport, toCsv } from "@/lib/score-csv";
 import { MAX_STUDENT_IMPORT_BYTES, buildStudentTemplate, parseStudentSheet, type StudentImportPreview } from "@/lib/student-csv";
-import { importStudents } from "./actions";
+import { importStudents, type ImportedStudent } from "./actions";
 
 type Props = {
   open: boolean;
@@ -14,6 +14,8 @@ type Props = {
   classes: { id: string; name: string; campusId: string }[];
   /** Every code already in the school, so the preview can flag clashes before anything is sent. */
   existingCodes: string[];
+  /** Automatic student codes are on, so the Student code column may be left empty. */
+  autoCodes: boolean;
 };
 
 function downloadText(filename: string, text: string) {
@@ -28,17 +30,17 @@ function downloadText(filename: string, text: string) {
 const secondary = "inline-flex h-9 items-center gap-2 rounded-md border border-border bg-bg-card px-3.5 text-caption font-medium text-text-secondary hover:bg-bg-page";
 const primary = "inline-flex h-9 items-center gap-2 rounded-md border border-primary bg-primary px-3.5 text-caption font-medium text-white hover:bg-primary-hover disabled:opacity-60";
 
-export function ImportStudentsDialog({ open, onClose, campuses, classes, existingCodes }: Props) {
+export function ImportStudentsDialog({ open, onClose, campuses, classes, existingCodes, autoCodes }: Props) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [csv, setCsv] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
   const [fileError, setFileError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ created: number; classesCreated: number } | null>(null);
+  const [done, setDone] = useState<{ created: number; classesCreated: number; students: ImportedStudent[] } | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const existing = useMemo(() => new Set(existingCodes.map((c) => c.toLowerCase())), [existingCodes]);
-  const preview: StudentImportPreview | null = useMemo(() => (csv === null ? null : parseStudentSheet(csv, { campuses, classes, existingCodes: existing })), [csv, campuses, classes, existing]);
+  const preview: StudentImportPreview | null = useMemo(() => (csv === null ? null : parseStudentSheet(csv, { campuses, classes, existingCodes: existing, autoCodes })), [csv, campuses, classes, existing, autoCodes]);
 
   function reset() {
     setCsv(null);
@@ -76,13 +78,24 @@ export function ImportStudentsDialog({ open, onClose, campuses, classes, existin
     setServerError(null);
     startTransition(async () => {
       const result = await importStudents(csv);
-      if (result.ok) setDone({ created: result.created, classesCreated: result.classesCreated });
+      if (result.ok) setDone({ created: result.created, classesCreated: result.classesCreated, students: result.students });
       else setServerError(result.error);
     });
   }
 
   const problems = preview?.errors.length ?? 0;
   const ready = preview?.rows.length ?? 0;
+  const getCodes = preview?.rows.filter((r) => !r.studentCode).length ?? 0;
+  const newCodes = done?.students.filter((x) => x.generated).length ?? 0;
+
+  // The codes just given out, as a sheet to hand to parents or keep.
+  function downloadCodes() {
+    if (!done) return;
+    downloadText(
+      "student-codes.csv",
+      "\uFEFF" + toCsv([["Student code", "First name", "Last name", "Class"], ...done.students.map((x) => [x.studentCode, x.firstName, x.lastName, x.className])]),
+    );
+  }
 
   return (
     <Modal open={open} onClose={close} title="Import students" description="Add many students at once from a spreadsheet saved as CSV." width={680}>
@@ -92,8 +105,13 @@ export function ImportStudentsDialog({ open, onClose, campuses, classes, existin
             <p className="m-0 rounded-md bg-success-bg px-3 py-2 text-body text-success">
               {done.created} student{done.created === 1 ? "" : "s"} added
               {done.classesCreated > 0 ? ` and ${done.classesCreated} new class${done.classesCreated === 1 ? "" : "es"} created` : ""}.
+              {newCodes > 0 ? ` ${newCodes} student code${newCodes === 1 ? " was" : "s were"} created automatically.` : ""}
             </p>
-            <div className="flex justify-end">
+            <div className="flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={downloadCodes} className={secondary}>
+                <Download size={14} strokeWidth={1.8} />
+                Download the student codes
+              </button>
               <button type="button" onClick={close} className={primary}>
                 Done
               </button>
@@ -102,7 +120,9 @@ export function ImportStudentsDialog({ open, onClose, campuses, classes, existin
         ) : (
           <>
             <ol className="m-0 grid gap-1.5 pl-5 text-caption text-text-secondary">
-              <li>Download the template and fill in one row per student. Student code, first name and last name are required.</li>
+              <li>
+                Download the template and fill in one row per student. {autoCodes ? "First name and last name are required. Leave Student code empty and Sophie creates it." : "Student code, first name and last name are required."}
+              </li>
               <li>
                 {campuses.length > 1 ? `Campus must match one of: ${campuses.map((c) => c.name).join(", ")}. ` : ""}A class that doesn&apos;t exist yet is created for you.
               </li>
@@ -127,7 +147,7 @@ export function ImportStudentsDialog({ open, onClose, campuses, classes, existin
               <>
                 {problems === 0 ? (
                   <p className="m-0 rounded-md bg-success-bg px-3 py-2 text-caption text-success">
-                    {ready} student{ready === 1 ? "" : "s"} ready to add.
+                    {ready} student{ready === 1 ? "" : "s"} ready to add.{getCodes > 0 ? ` ${getCodes} will get a student code created automatically.` : ""}
                     {preview.newClasses.length > 0 && ` New class${preview.newClasses.length === 1 ? "" : "es"} to create: ${preview.newClasses.slice(0, 8).join(", ")}${preview.newClasses.length > 8 ? "…" : ""}.`}
                   </p>
                 ) : (

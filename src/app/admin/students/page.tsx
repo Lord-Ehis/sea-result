@@ -4,13 +4,15 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { getAdminAccess } from "@/lib/admin-access";
 import { campusWhere, classWhere, studentWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
+import { readStudentCodeSettings } from "@/lib/student-code-db";
+import { exampleCode } from "@/lib/student-code";
 import { StudentsClient } from "./StudentsClient";
 
 export default async function StudentsPage() {
   const access = await getAdminAccess();
   const { schoolId } = access;
 
-  const [campuses, classes, students] = await Promise.all([
+  const [campuses, classes, students, codeSettings] = await Promise.all([
     prisma.campus.findMany({ where: { schoolId, ...campusWhere(access) }, orderBy: { name: "asc" } }),
     prisma.class.findMany({ where: { schoolId, ...classWhere(access) }, orderBy: { name: "asc" } }),
     prisma.student.findMany({
@@ -18,6 +20,7 @@ export default async function StudentsPage() {
       include: { campus: true, class: true },
       orderBy: { createdAt: "desc" },
     }),
+    readStudentCodeSettings(prisma, schoolId),
   ]);
 
   if (campuses.length === 0) {
@@ -44,6 +47,8 @@ export default async function StudentsPage() {
   return (
     <StudentsClient
       canAddCampus={access.campusIds === null}
+      autoCodes={codeSettings.auto}
+      nextCode={codeSettings.auto ? exampleCode(codeSettings, new Date()) : null}
       campuses={campuses.map((c) => ({ id: c.id, name: c.name }))}
       classes={classes.map((c) => ({ id: c.id, name: c.name, campusId: c.campusId }))}
       students={students.map((s) => ({

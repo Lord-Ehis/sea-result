@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { ImageError, validateImage } from "@/lib/image-validate";
 import { StorageNotConfigured, putPublicImage } from "@/lib/storage";
 import { UserError, toResult, type ActionResult } from "@/lib/user-error";
+import { exampleCode, validateSettings, type SettingsInput } from "@/lib/student-code";
 
 // School-wide branding shown on printed results and (later) other public
 // pages. A campus admin is refused (see src/lib/admin-access.ts).
@@ -74,5 +75,23 @@ export async function uploadSchoolImage(formData: FormData): Promise<ActionResul
       if (err instanceof ImageError || err instanceof StorageNotConfigured) throw new UserError(err.message);
       throw err;
     }
+  });
+}
+
+// How student codes are made for this school: on or off, and the shape. A new
+// format only affects students added from now on; existing codes never change.
+export async function saveStudentCodeSettings(input: SettingsInput): Promise<ActionResult<{ example: string }>> {
+  const { schoolId } = await requireFullAdmin();
+  return toResult(async () => {
+    const checked = validateSettings(input);
+    if (!checked.ok) throw new UserError(checked.error);
+    const v = checked.value;
+    await prisma.school.update({
+      where: { id: schoolId },
+      data: { studentCodeAuto: v.auto, studentCodePrefix: v.prefix, studentCodeYear: v.year, studentCodeSeparator: v.separator, studentCodeDigits: v.digits, studentCodeNext: v.next },
+    });
+    revalidatePath("/admin/school-profile");
+    revalidatePath("/admin/students");
+    return { example: exampleCode(v, new Date()) };
   });
 }

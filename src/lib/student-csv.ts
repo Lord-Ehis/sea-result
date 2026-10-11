@@ -49,6 +49,8 @@ export type StudentImportContext = {
   classes: { id: string; name: string; campusId: string }[];
   /** Codes already used in this school (compared case-insensitively). */
   existingCodes: Set<string>;
+  /** Automatic student codes are on: the Student code column is optional, and a blank one is created for that student. */
+  autoCodes?: boolean;
 };
 
 export type StudentImportRow = {
@@ -116,7 +118,8 @@ export function parseStudentSheet(text: string, ctx: StudentImportContext): Stud
     if (col && !index.has(col.key)) index.set(col.key, i);
     else unknownColumns.push(h);
   });
-  const missing = REQUIRED.filter((k) => !index.has(k)).map((k) => COLUMNS.find((c) => c.key === k)!.header);
+  const required = ctx.autoCodes ? REQUIRED.filter((k) => k !== "studentCode") : REQUIRED;
+  const missing = required.filter((k) => !index.has(k)).map((k) => COLUMNS.find((c) => c.key === k)!.header);
   if (missing.length > 0) return fatal(`The first row must include these columns: ${missing.join(", ")}. Download the template and fill that in.`);
 
   const campusByName = new Map(ctx.campuses.map((c) => [norm(c.name), c]));
@@ -137,7 +140,9 @@ export function parseStudentSheet(text: string, ctx: StudentImportContext): Stud
     const errors: ImportError[] = [];
     const bad = (column: ColumnKey, message: string) => errors.push({ row: rowNumber, studentCode: code, column: COLUMNS.find((c) => c.key === column)!.header, message });
 
-    if (!code) bad("studentCode", "Student code is blank.");
+    if (!code) {
+      if (!ctx.autoCodes) bad("studentCode", "Student code is blank.");
+    }
     else if (code.length > 50) bad("studentCode", "Student code is too long (50 characters at most).");
     else if (ctx.existingCodes.has(code.toLowerCase())) bad("studentCode", "A student with this code already exists in your school.");
     else if (seen.has(code.toLowerCase())) bad("studentCode", `This code is already used on row ${seen.get(code.toLowerCase())} of the file.`);

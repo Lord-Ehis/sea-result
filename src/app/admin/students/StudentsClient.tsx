@@ -39,6 +39,9 @@ type Student = {
 type StudentsClientProps = {
   // Only the main School Admin may add campuses; a campus admin never sees the button.
   canAddCampus: boolean;
+  // Automatic student codes: the code box is optional, and this is what the next one will look like.
+  autoCodes: boolean;
+  nextCode: string | null;
   campuses: Campus[];
   classes: ClassOption[];
   students: Student[];
@@ -46,7 +49,7 @@ type StudentsClientProps = {
 
 const ALL = "all";
 
-export function StudentsClient({ campuses, classes, students, canAddCampus }: StudentsClientProps) {
+export function StudentsClient({ campuses, classes, students, canAddCampus, autoCodes, nextCode }: StudentsClientProps) {
   const [campusFilter, setCampusFilter] = useState(ALL);
   const [classFilter, setClassFilter] = useState(ALL);
   const [statusFilter, setStatusFilter] = useState(ALL);
@@ -55,6 +58,7 @@ export function StudentsClient({ campuses, classes, students, canAddCampus }: St
   const [campusModalOpen, setCampusModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const filtered = useMemo(
@@ -70,13 +74,15 @@ export function StudentsClient({ campuses, classes, students, canAddCampus }: St
 
   function handleAddStudent(formData: FormData) {
     setError(null);
+    setNotice(null);
     startTransition(async () => {
-      try {
-        await createStudent(formData);
-        setAddOpen(false);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not add student.");
+      const result = await createStudent(formData);
+      if (!result.ok) {
+        setError(result.error);
+        return;
       }
+      setAddOpen(false);
+      setNotice(result.generated ? `Student added. Their code is ${result.studentCode}. Parents use it, with the child's full name, to find results.` : null);
     });
   }
 
@@ -156,6 +162,8 @@ export function StudentsClient({ campuses, classes, students, canAddCampus }: St
           </button>
         </div>
       </div>
+
+      {notice && <p className="mb-5 rounded-md bg-success-bg px-4 py-3 text-body text-success">{notice}</p>}
 
       <div className="mb-5 flex flex-wrap items-center gap-3 rounded-md border border-border bg-bg-card px-5 py-4">
         <span className="text-caption text-text-muted">Filter students</span>
@@ -334,7 +342,7 @@ export function StudentsClient({ campuses, classes, students, canAddCampus }: St
         </div>
       </section>
 
-      <ImportStudentsDialog open={importOpen} onClose={() => setImportOpen(false)} campuses={campuses} classes={classes} existingCodes={students.map((s) => s.studentCode)} />
+      <ImportStudentsDialog open={importOpen} onClose={() => setImportOpen(false)} campuses={campuses} classes={classes} existingCodes={students.map((s) => s.studentCode)} autoCodes={autoCodes} />
 
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add student" description="Enter a new student record.">
         <form action={handleAddStudent} className="contents">
@@ -346,7 +354,7 @@ export function StudentsClient({ campuses, classes, students, canAddCampus }: St
               <input name="lastName" required placeholder="Last name" className={inputClass} />
             </Field>
             <Field label="Student ID/code">
-              <input name="studentCode" required placeholder="e.g. GI-2026-113" className={inputClass} />
+              <input name="studentCode" required={!autoCodes} placeholder={autoCodes && nextCode ? `Leave empty for ${nextCode}` : "e.g. GI-2026-113"} className={inputClass} />
             </Field>
             <Field label="Campus">
               <select name="campusId" required defaultValue={campuses[0]?.id} className={inputClass}>
