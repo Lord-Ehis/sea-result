@@ -128,3 +128,30 @@ describe("buildStudentTemplate", () => {
     expect(buildStudentTemplate().replace("﻿", "")).toBe(HEAD);
   });
 });
+
+describe("parseStudentSheet with automatic student codes", () => {
+  const auto = (over: Partial<StudentImportContext> = {}) => ctx({ autoCodes: true, ...over });
+
+  it("lets the code be blank, and says so by leaving it empty", () => {
+    const r = parseStudentSheet(`${HEAD}\n,Ada,Obi,,,,,,,,\nB2,Bola,Eze,,,,,,,,`, auto());
+    expect(r.errors).toEqual([]);
+    expect(r.rows.map((x) => x.studentCode)).toEqual(["", "B2"]);
+  });
+
+  it("does not need a Student code column at all", () => {
+    const r = parseStudentSheet("First name,Last name\nAda,Obi\nBola,Eze", auto());
+    expect(r.errors).toEqual([]);
+    expect(r.rows).toHaveLength(2);
+    expect(r.rows.every((x) => x.studentCode === "")).toBe(true);
+  });
+
+  it("still checks the codes that are typed, and still needs the names", () => {
+    const r = parseStudentSheet("Student code,First name,Last name\nX1,Ada,Obi\nx1,Bola,Eze\nOLD,Chi,Eze\n,,Ngozi", auto({ existingCodes: new Set(["old"]) }));
+    expect(r.errors.map((e) => [e.row, e.column])).toEqual([[3, "Student code"], [4, "Student code"], [5, "First name"]]);
+  });
+
+  it("without automatic codes, a blank code or a missing column is still an error", () => {
+    expect(parseStudentSheet(`${HEAD}\n,Ada,Obi,,,,,,,,`, ctx()).errors[0].message).toMatch(/blank/);
+    expect(parseStudentSheet("First name,Last name\nAda,Obi", ctx()).errors[0].message).toMatch(/Student code/);
+  });
+});

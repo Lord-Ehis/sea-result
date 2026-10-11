@@ -148,6 +148,14 @@ model School {
   nextTermBegins        DateTime?
   allowParentAccounts  Boolean      @default(true)
   allowResultLookup    Boolean      @default(true)
+  // Automatic student codes (rules in src/lib/student-code.ts). Off until the school
+  // switches it on. `studentCodeNext` only ever goes up, so a number is never reused.
+  studentCodeAuto      Boolean      @default(false)
+  studentCodePrefix    String       @default("")
+  studentCodeYear      String       @default("YYYY") // NONE | YY | YYYY
+  studentCodeSeparator String       @default("-") // "-", "/" or ""
+  studentCodeDigits    Int          @default(4)
+  studentCodeNext      Int          @default(1)
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt
 
