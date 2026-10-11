@@ -14,6 +14,7 @@ import { recordResultEvent } from "@/lib/result-events";
 import { computeBatchAnnual, describeIssues } from "@/lib/annual-context";
 import { termLabel, termNumberFromLabel, isTermNumber } from "@/lib/term-number";
 import { findAnnualGrid } from "@/lib/annual-summary";
+import { hideStudentDetails } from "@/lib/student-details";
 import { buildSignOff, buildSnapshotPayload, generateVerificationCode, snapshotChecksum, type SnapshotPayload, type SnapshotStudent } from "@/lib/snapshot";
 import { computeAge } from "@/lib/student-age";
 import { pickAllowedData, summarizeIssues, validateSingleValue, validateStudentEntry, type EntryIssue } from "@/lib/result-validate";
@@ -68,6 +69,14 @@ function studentSnapshotFields(student: Awaited<ReturnType<typeof loadRows>>[num
     clubOrSociety: student.clubOrSociety,
     photoUrl: student.photoUrl,
   };
+}
+
+// The student details this template version leaves off the result. No version
+// (a template from before versions existed) shows everything, as it always did.
+async function hiddenDetailsFor(versionId: string | null): Promise<string[]> {
+  if (!versionId) return [];
+  const version = await prisma.templateVersion.findUnique({ where: { id: versionId }, select: { hiddenStudentDetails: true } });
+  return version?.hiddenStudentDetails ?? [];
 }
 
 // The annual summary for a 3rd Term batch of an annual-enabled template; null
@@ -192,6 +201,7 @@ export async function publishBatch(batchId: string): Promise<ActionResult<{ alre
       }
 
       const fields = templateFields(batch.template);
+      const hidden = await hiddenDetailsFor(batch.templateVersionId);
       const school = await prisma.school.findUniqueOrThrow({ where: { id: schoolId }, select: { name: true, slug: true, logoUrl: true, address: true, phone: true, supportEmail: true, principalName: true, principalSignatureUrl: true, stampUrl: true, nextTermBegins: true } });
       const prior = needsPriorRows(fields) ? await loadPriorPublished(batch.templateId, rows.map((r) => r.studentId)) : [];
       const finalData = computePublishData(
@@ -217,7 +227,7 @@ export async function publishBatch(batchId: string): Promise<ActionResult<{ alre
           const verificationCode = generateVerificationCode();
           const payload = buildSnapshotPayload({
             school,
-            student: studentSnapshotFields(r.student, batch.class.name),
+            student: hideStudentDetails(studentSnapshotFields(r.student, batch.class.name), hidden),
             signOff: buildSignOff({ school, teacherName: r.submittedBy?.name }),
             period: { session: r.session, term: r.term },
             template: { id: batch.templateId, name: batch.template.name, versionId: batch.templateVersionId, fields },
@@ -379,6 +389,7 @@ export async function previewBatchPayload(batchId: string, resultId: string): Pr
     if (index < 0) throw new UserError("That result isn't part of this batch.");
 
     const fields = templateFields(batch.template);
+    const hidden = await hiddenDetailsFor(batch.templateVersionId);
     const school = await prisma.school.findUniqueOrThrow({ where: { id: schoolId }, select: { name: true, slug: true, logoUrl: true, address: true, phone: true, supportEmail: true, principalName: true, principalSignatureUrl: true, stampUrl: true, nextTermBegins: true } });
     const prior = needsPriorRows(fields) ? await loadPriorPublished(batch.templateId, rows.map((r) => r.studentId)) : [];
     const finalData = computePublishData(
@@ -391,7 +402,7 @@ export async function previewBatchPayload(batchId: string, resultId: string): Pr
     const r = rows[index];
     const payload = buildSnapshotPayload({
       school,
-      student: studentSnapshotFields(r.student, batch.class.name),
+      student: hideStudentDetails(studentSnapshotFields(r.student, batch.class.name), hidden),
       signOff: buildSignOff({ school, teacherName: r.submittedBy?.name }),
       period: { session: r.session, term: r.term },
       template: { id: batch.templateId, name: batch.template.name, versionId: batch.templateVersionId, fields },

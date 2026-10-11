@@ -35,6 +35,7 @@ import type { AnnualSettings } from "@/lib/annual-summary";
 import { AnnualSettingsCard } from "./AnnualSettingsCard";
 import { computePublishData } from "@/lib/publish-compute";
 import { buildSnapshotPayload, type SnapshotSignOff } from "@/lib/snapshot";
+import { STUDENT_DETAILS, cleanHiddenDetails, hideStudentDetails } from "@/lib/student-details";
 import { sampleDataFor } from "@/lib/template-sample-data";
 import { SnapshotView } from "@/components/results/SnapshotView";
 
@@ -142,6 +143,7 @@ export function TemplateBuilderClient({
   const [draftIncludeAnnual, setDraftIncludeAnnual] = useState(false);
   const [draftIncludeAttendance, setDraftIncludeAttendance] = useState(false);
   const [draftIncludeRemarks, setDraftIncludeRemarks] = useState(false);
+  const [draftHiddenDetails, setDraftHiddenDetails] = useState<string[]>([]);
   const [previewFields, setPreviewFields] = useState<TemplateField[]>([]);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -177,6 +179,7 @@ export function TemplateBuilderClient({
     setDraftIncludeAnnual(selectedVersion?.includeAnnualSummary ?? false);
     setDraftIncludeAttendance(selectedVersion?.includeAttendance ?? false);
     setDraftIncludeRemarks(selectedVersion?.includeRemarks ?? false);
+    setDraftHiddenDetails(selectedVersion?.hiddenStudentDetails ?? []);
     setValidation(null);
     setPreviewFields([]);
   }
@@ -331,6 +334,7 @@ export function TemplateBuilderClient({
           includeAnnualSummary: draftIncludeAnnual,
           includeAttendance: draftIncludeAttendance,
           includeRemarks: draftIncludeRemarks,
+          hiddenStudentDetails: draftHiddenDetails,
         });
         setSavedMessage("Draft saved.");
         setTimeout(() => setSavedMessage(null), 3000);
@@ -426,19 +430,31 @@ export function TemplateBuilderClient({
     };
     return buildSnapshotPayload({
       school,
-      student: {
-        name: "Sample Student",
-        code: "SAMPLE-001",
-        className: selected?.className ?? (selected?.level ? `Level: ${selected.level}` : "All classes"),
-        campusName: "Main campus",
-      },
+      // Every detail filled in, so ticking and unticking a detail shows its effect at once.
+      student: hideStudentDetails(
+        {
+          name: "Sample Student",
+          code: "SAMPLE-001",
+          className: selected?.className ?? (selected?.level ? `Level: ${selected.level}` : "All classes"),
+          campusName: "Main campus",
+          gender: "Female",
+          admissionNumber: "ADM/2026/001",
+          dateOfBirth: "2014-03-12T00:00:00.000Z",
+          age: 12,
+          height: "142 cm",
+          weight: "38 kg",
+          favouriteColour: "Blue",
+          clubOrSociety: "Science Club",
+        },
+        draftHiddenDetails,
+      ),
       period: { session: "2026/2027", term: selected?.term || "Term not set" },
       template: { id: selected?.id ?? "preview", name: selected?.name ?? "Template", versionId: selectedVersionId, fields: previewList },
       data: finalData,
       signOff: Object.values(signOff).some(Boolean) ? signOff : null,
       publication: { version: 1, verificationCode: "PREVIEW", publishedAt: new Date() },
     });
-  }, [previewList, school, selected, selectedVersionId]);
+  }, [previewList, school, selected, selectedVersionId, draftHiddenDetails]);
 
   return (
     <>
@@ -787,6 +803,25 @@ export function TemplateBuilderClient({
                         <input type="checkbox" checked={draftIncludeRemarks} onChange={(e) => setDraftIncludeRemarks(e.target.checked)} />
                         Teacher&apos;s and principal&apos;s remarks on results
                       </label>
+                    </fieldset>
+                  </div>
+
+                  <div className="border-b border-border px-5 py-5">
+                    <h3 className="m-0 mb-1 text-body font-medium text-text-primary">Student details on the result</h3>
+                    <p className="m-0 mb-3 text-caption text-text-muted">
+                      Name, student code, class and session are always shown. Untick anything this result should leave out. It is also left out of the saved published result.
+                    </p>
+                    <fieldset disabled={!isEditableDraft} className="grid gap-2 disabled:opacity-60 sm:grid-cols-2">
+                      {STUDENT_DETAILS.map((d) => (
+                        <label key={d.key} className="flex items-center gap-2 text-caption text-text-secondary">
+                          <input
+                            type="checkbox"
+                            checked={!draftHiddenDetails.includes(d.key)}
+                            onChange={(e) => setDraftHiddenDetails((cur) => cleanHiddenDetails(e.target.checked ? cur.filter((k) => k !== d.key) : [...cur, d.key]))}
+                          />
+                          {d.label}
+                        </label>
+                      ))}
                     </fieldset>
                   </div>
 

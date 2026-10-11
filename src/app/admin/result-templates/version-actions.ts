@@ -51,6 +51,7 @@ function serializeVersion(version: VersionWithRelations): TemplateVersionSummary
     includeAnnualSummary: version.includeAnnualSummary,
     includeAttendance: version.includeAttendance,
     includeRemarks: version.includeRemarks,
+    hiddenStudentDetails: version.hiddenStudentDetails,
     sections: version.sections.map((s) => ({
       id: s.id,
       name: s.name,
@@ -137,6 +138,7 @@ export async function createDraftVersion(
       includeAnnualSummary: source?.includeAnnualSummary ?? false,
       includeAttendance: source?.includeAttendance ?? false,
       includeRemarks: source?.includeRemarks ?? false,
+      hiddenStudentDetails: source?.hiddenStudentDetails ?? [],
       sections: source
         ? {
             create: source.sections.map((s) => ({
@@ -241,6 +243,7 @@ export async function updateVersionDraft(input: {
   includeAnnualSummary?: boolean;
   includeAttendance?: boolean;
   includeRemarks?: boolean;
+  hiddenStudentDetails?: string[];
 }) {
   const { schoolId } = await requireSchoolAdmin();
   const parsed = updateVersionDraftSchema.parse(input);
@@ -252,7 +255,7 @@ export async function updateVersionDraft(input: {
   await prisma.$transaction(async (tx) => {
     await tx.templateVersion.update({
       where: { id: version.id },
-      data: { gradingScaleId: parsed.gradingScaleId, legacyFields: parsed.legacyFields, includeAnnualSummary: parsed.includeAnnualSummary, includeAttendance: parsed.includeAttendance, includeRemarks: parsed.includeRemarks },
+      data: { gradingScaleId: parsed.gradingScaleId, legacyFields: parsed.legacyFields, includeAnnualSummary: parsed.includeAnnualSummary, includeAttendance: parsed.includeAttendance, includeRemarks: parsed.includeRemarks, hiddenStudentDetails: parsed.hiddenStudentDetails },
     });
 
     await replaceSections(tx, schoolId, version.id, version.sections, parsed.sections);
