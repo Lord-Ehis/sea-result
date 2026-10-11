@@ -38,7 +38,7 @@ export const ADMIN_CHAPTERS: HelpVideo[] = [
     title: "2. Set up your school",
     summary: "School profile, campuses, classes and students, including importing many students at once.",
     file: "/help/admin-2-set-up-your-school.mp4",
-    seconds: 246,
+    seconds: 254,
     steps: [
       "School profile: upload your logo, then type your address, phone and support email. These appear at the top of every result. The preview shows how.",
       "Scroll to the sign-off: the principal's name, signature, school stamp and when next term begins. Select Save. Results already published keep the details they were printed with.",
